@@ -1,0 +1,392 @@
+term,table,column,tier
+Slowly Changing Dimension,item,i_rec_start_date,full
+Slowly Changing Dimension,item,i_rec_end_date,full
+Slowly Changing Dimension,store,s_rec_start_date,full
+Slowly Changing Dimension,store,s_rec_end_date,full
+Slowly Changing Dimension,call_center,cc_rec_start_date,full
+Slowly Changing Dimension,call_center,cc_rec_end_date,full
+Slowly Changing Dimension,web_site,web_rec_start_date,full
+Slowly Changing Dimension,web_site,web_rec_end_date,full
+Slowly Changing Dimension,web_page,wp_rec_start_date,full
+Slowly Changing Dimension,web_page,wp_rec_end_date,full
+Customer,customer,c_customer_sk,seed
+Customer,customer,c_customer_id,seed
+Customer,store_sales,ss_customer_sk,seed
+Customer,catalog_sales,cs_customer_sk,seed
+Customer,web_sales,ws_customer_sk,seed
+Customer,store_returns,sr_customer_sk,seed
+Bill-To Customer,catalog_sales,cs_bill_customer_sk,full
+Bill-To Customer,web_sales,ws_bill_customer_sk,full
+Ship-To Customer,catalog_sales,cs_ship_customer_sk,full
+Ship-To Customer,web_sales,ws_ship_customer_sk,full
+Refunded Customer,catalog_returns,cr_refunded_customer_sk,full
+Refunded Customer,web_returns,wr_refunded_customer_sk,full
+Returning Customer,catalog_returns,cr_returning_customer_sk,full
+Returning Customer,web_returns,wr_returning_customer_sk,full
+Preferred Customer,customer,c_preferred_cust_flag,full
+Customer Name,customer,c_salutation,full
+Customer Name,customer,c_first_name,full
+Customer Name,customer,c_last_name,full
+Birth Date,customer,c_birth_day,full
+Birth Date,customer,c_birth_month,full
+Birth Date,customer,c_birth_year,full
+Birth Country,customer,c_birth_country,full
+Customer Email,customer,c_email_address,full
+Customer Login,customer,c_login,full
+First Sale Date,customer,c_first_sales_date_sk,full
+First Ship-To Date,customer,c_first_shipto_date_sk,full
+Last Review Date,customer,c_last_review_date_sk,full
+Customer Demographics,customer_demographics,cd_demo_sk,seed
+Customer Demographics,customer,c_current_cdemo_sk,seed
+Customer Demographics,store_sales,ss_cdemo_sk,seed
+Customer Demographics,catalog_sales,cs_cdemo_sk,seed
+Customer Demographics,web_sales,ws_cdemo_sk,seed
+Customer Demographics,store_returns,sr_cdemo_sk,seed
+Gender,customer_demographics,cd_gender,full
+Marital Status,customer_demographics,cd_marital_status,full
+Education Status,customer_demographics,cd_education_status,full
+Purchase Estimate,customer_demographics,cd_purchase_estimate,full
+Credit Rating,customer_demographics,cd_credit_rating,full
+Dependent Count,customer_demographics,cd_dep_count,full
+Dependent Count,household_demographics,hd_dep_count,full
+Employed Dependent Count,customer_demographics,cd_dep_employed_count,full
+College Dependent Count,customer_demographics,cd_dep_college_count,full
+Household Demographics,household_demographics,hd_demo_sk,seed
+Household Demographics,customer,c_current_hdemo_sk,seed
+Household Demographics,store_sales,ss_hdemo_sk,seed
+Household Demographics,catalog_sales,cs_hdemo_sk,seed
+Household Demographics,web_sales,ws_hdemo_sk,seed
+Household Demographics,store_returns,sr_hdemo_sk,seed
+Buy Potential,household_demographics,hd_buy_potential,full
+Vehicle Count,household_demographics,hd_vehicle_count,full
+Income Band,income_band,ib_income_band_sk,full
+Income Band,income_band,ib_lower_bound,full
+Income Band,income_band,ib_upper_bound,full
+Income Band,household_demographics,hd_income_band_sk,full
+Customer Address,customer_address,ca_address_sk,seed
+Customer Address,customer_address,ca_address_id,seed
+Customer Address,customer,c_current_addr_sk,seed
+Customer Address,store_sales,ss_addr_sk,seed
+Customer Address,catalog_sales,cs_bill_addr_sk,seed
+Customer Address,catalog_sales,cs_ship_addr_sk,seed
+Customer Address,web_sales,ws_bill_addr_sk,seed
+Customer Address,web_sales,ws_ship_addr_sk,seed
+Customer Address,store_returns,sr_addr_sk,seed
+Location Type,customer_address,ca_location_type,full
+Geography,customer_address,ca_city,full
+Geography,customer_address,ca_county,full
+Geography,customer_address,ca_state,full
+Geography,customer_address,ca_zip,full
+Geography,customer_address,ca_country,full
+Geography,store,s_city,full
+Geography,store,s_county,full
+Geography,store,s_state,full
+Geography,store,s_zip,full
+Geography,store,s_country,full
+Geography,warehouse,w_city,full
+Geography,warehouse,w_county,full
+Geography,warehouse,w_state,full
+Geography,warehouse,w_zip,full
+Geography,warehouse,w_country,full
+Geography,call_center,cc_city,full
+Geography,call_center,cc_county,full
+Geography,call_center,cc_state,full
+Geography,call_center,cc_zip,full
+Geography,call_center,cc_country,full
+Geography,web_site,web_city,full
+Geography,web_site,web_county,full
+Geography,web_site,web_state,full
+Geography,web_site,web_zip,full
+Geography,web_site,web_country,full
+GMT Offset,customer_address,ca_gmt_offset,full
+GMT Offset,store,s_gmt_offset,full
+GMT Offset,warehouse,w_gmt_offset,full
+GMT Offset,call_center,cc_gmt_offset,full
+GMT Offset,web_site,web_gmt_offset,full
+Item,item,i_item_sk,seed
+Item,item,i_item_id,seed
+Item,store_sales,ss_item_sk,seed
+Item,catalog_sales,cs_item_sk,seed
+Item,web_sales,ws_item_sk,seed
+Item,store_returns,sr_item_sk,seed
+Item,catalog_returns,cr_item_sk,seed
+Item,web_returns,wr_item_sk,seed
+Item,inventory,inv_item_sk,seed
+Item,promotion,p_item_sk,seed
+Product Name,item,i_product_name,full
+Product Name,item,i_item_desc,full
+Current Price,item,i_current_price,full
+Item Wholesale Cost,item,i_wholesale_cost,full
+Brand,item,i_brand,full
+Brand,item,i_brand_id,full
+Category,item,i_category,seed
+Category,item,i_category_id,seed
+Class,item,i_class,full
+Class,item,i_class_id,full
+Manufacturer,item,i_manufact,full
+Manufacturer,item,i_manufact_id,full
+Product Manager,item,i_manager_id,full
+Item Attributes,item,i_size,full
+Item Attributes,item,i_color,full
+Item Attributes,item,i_units,full
+Item Attributes,item,i_container,full
+Item Attributes,item,i_formulation,full
+Store,store,s_store_sk,seed
+Store,store,s_store_id,seed
+Store,store_sales,ss_store_sk,seed
+Store,store_returns,sr_store_sk,seed
+Store Name,store,s_store_name,full
+Store Manager,store,s_manager,full
+Store Size,store,s_floor_space,full
+Store Size,store,s_number_employees,full
+Store Hours,store,s_hours,full
+Store Closed Date,store,s_closed_date_sk,full
+Market,store,s_market_id,full
+Market,store,s_market_desc,full
+Market,store,s_market_manager,full
+Market,store,s_geography_class,full
+Market,call_center,cc_mkt_id,full
+Market,call_center,cc_mkt_class,full
+Market,call_center,cc_mkt_desc,full
+Market,call_center,cc_market_manager,full
+Market,web_site,web_mkt_id,full
+Market,web_site,web_mkt_class,full
+Market,web_site,web_mkt_desc,full
+Market,web_site,web_market_manager,full
+Division,store,s_division_id,full
+Division,store,s_division_name,full
+Division,call_center,cc_division,full
+Division,call_center,cc_division_name,full
+Company,store,s_company_id,full
+Company,store,s_company_name,full
+Company,call_center,cc_company,full
+Company,call_center,cc_company_name,full
+Company,web_site,web_company_id,full
+Company,web_site,web_company_name,full
+Tax Percentage,store,s_tax_precentage,full
+Tax Percentage,call_center,cc_tax_percentage,full
+Tax Percentage,web_site,web_tax_percentage,full
+Call Center,call_center,cc_call_center_sk,seed
+Call Center,call_center,cc_call_center_id,seed
+Call Center,catalog_sales,cs_call_center_sk,seed
+Call Center,catalog_returns,cr_call_center_sk,seed
+Call Center Attributes,call_center,cc_name,full
+Call Center Attributes,call_center,cc_class,full
+Call Center Attributes,call_center,cc_employees,full
+Call Center Attributes,call_center,cc_sq_ft,full
+Call Center Attributes,call_center,cc_hours,full
+Call Center Attributes,call_center,cc_manager,full
+Call Center Attributes,call_center,cc_open_date_sk,full
+Call Center Attributes,call_center,cc_closed_date_sk,full
+Catalog Page,catalog_page,cp_catalog_page_sk,seed
+Catalog Page,catalog_page,cp_catalog_page_id,seed
+Catalog Page,catalog_sales,cs_catalog_page_sk,seed
+Catalog Page,catalog_returns,cr_catalog_page_sk,seed
+Catalog Page Attributes,catalog_page,cp_catalog_number,full
+Catalog Page Attributes,catalog_page,cp_catalog_page_number,full
+Catalog Page Attributes,catalog_page,cp_department,full
+Catalog Page Attributes,catalog_page,cp_type,full
+Catalog Page Attributes,catalog_page,cp_description,full
+Catalog Page Attributes,catalog_page,cp_start_date_sk,full
+Catalog Page Attributes,catalog_page,cp_end_date_sk,full
+Web Site,web_site,web_site_sk,seed
+Web Site,web_site,web_site_id,seed
+Web Site,web_sales,ws_web_site_sk,seed
+Web Site Attributes,web_site,web_name,full
+Web Site Attributes,web_site,web_class,full
+Web Site Attributes,web_site,web_manager,full
+Web Site Attributes,web_site,web_open_date_sk,full
+Web Site Attributes,web_site,web_close_date_sk,full
+Web Page,web_page,wp_web_page_sk,full
+Web Page,web_page,wp_web_page_id,full
+Web Page,web_sales,ws_web_page_sk,full
+Web Page,web_returns,wr_web_page_sk,full
+Web Page Attributes,web_page,wp_url,full
+Web Page Attributes,web_page,wp_type,full
+Web Page Attributes,web_page,wp_char_count,full
+Web Page Attributes,web_page,wp_link_count,full
+Web Page Attributes,web_page,wp_image_count,full
+Web Page Attributes,web_page,wp_max_ad_count,full
+Web Page Attributes,web_page,wp_autogen_flag,full
+Web Page Attributes,web_page,wp_creation_date_sk,full
+Web Page Attributes,web_page,wp_access_date_sk,full
+Web Page Attributes,web_page,wp_customer_sk,full
+Warehouse,warehouse,w_warehouse_sk,seed
+Warehouse,warehouse,w_warehouse_id,seed
+Warehouse,warehouse,w_warehouse_name,seed
+Warehouse,warehouse,w_warehouse_sq_ft,seed
+Warehouse,catalog_sales,cs_warehouse_sk,seed
+Warehouse,web_sales,ws_warehouse_sk,seed
+Warehouse,catalog_returns,cr_warehouse_sk,seed
+Warehouse,inventory,inv_warehouse_sk,seed
+Ship Mode,ship_mode,sm_ship_mode_sk,full
+Ship Mode,ship_mode,sm_ship_mode_id,full
+Ship Mode,catalog_sales,cs_ship_mode_sk,full
+Ship Mode,web_sales,ws_ship_mode_sk,full
+Ship Mode,catalog_returns,cr_ship_mode_sk,full
+Ship Mode Type,ship_mode,sm_type,full
+Ship Mode Type,ship_mode,sm_code,full
+Carrier,ship_mode,sm_carrier,full
+Carrier,ship_mode,sm_contract,full
+Promotion,promotion,p_promo_sk,seed
+Promotion,promotion,p_promo_id,seed
+Promotion,promotion,p_promo_name,seed
+Promotion,store_sales,ss_promo_sk,seed
+Promotion,catalog_sales,cs_promo_sk,seed
+Promotion,web_sales,ws_promo_sk,seed
+Promotion Period,promotion,p_start_date_sk,full
+Promotion Period,promotion,p_end_date_sk,full
+Promotion Cost,promotion,p_cost,full
+Promotion Channel,promotion,p_channel_dmail,full
+Promotion Channel,promotion,p_channel_email,full
+Promotion Channel,promotion,p_channel_catalog,full
+Promotion Channel,promotion,p_channel_tv,full
+Promotion Channel,promotion,p_channel_radio,full
+Promotion Channel,promotion,p_channel_press,full
+Promotion Channel,promotion,p_channel_event,full
+Promotion Channel,promotion,p_channel_demo,full
+Promotion Channel,promotion,p_channel_details,full
+Promotion Purpose,promotion,p_purpose,full
+Promotion Purpose,promotion,p_response_target,full
+Discount Active,promotion,p_discount_active,full
+Return Reason,reason,r_reason_sk,seed
+Return Reason,reason,r_reason_id,seed
+Return Reason,reason,r_reason_desc,seed
+Return Reason,store_returns,sr_reason_sk,seed
+Return Reason,catalog_returns,cr_reason_sk,seed
+Return Reason,web_returns,wr_reason_sk,seed
+Calendar Date,date_dim,d_date_sk,seed
+Calendar Date,date_dim,d_date_id,seed
+Calendar Date,date_dim,d_date,seed
+Sold Date,store_sales,ss_sold_date_sk,full
+Sold Date,catalog_sales,cs_sold_date_sk,full
+Sold Date,web_sales,ws_sold_date_sk,full
+Ship Date,catalog_sales,cs_ship_date_sk,full
+Ship Date,web_sales,ws_ship_date_sk,full
+Returned Date,store_returns,sr_returned_date_sk,full
+Returned Date,catalog_returns,cr_returned_date_sk,full
+Returned Date,web_returns,wr_returned_date_sk,full
+Calendar Year,date_dim,d_year,full
+Fiscal Year,date_dim,d_fy_year,full
+Fiscal Year,date_dim,d_fy_quarter_seq,full
+Fiscal Year,date_dim,d_fy_week_seq,full
+Quarter,date_dim,d_qoy,full
+Quarter,date_dim,d_quarter_name,full
+Quarter,date_dim,d_quarter_seq,full
+Month,date_dim,d_moy,full
+Month,date_dim,d_month_seq,full
+Month,date_dim,d_first_dom,full
+Month,date_dim,d_last_dom,full
+Week,date_dim,d_week_seq,full
+Day of Week,date_dim,d_dow,full
+Day of Week,date_dim,d_day_name,full
+Day of Week,date_dim,d_dom,full
+Holiday,date_dim,d_holiday,full
+Holiday,date_dim,d_following_holiday,full
+Weekend,date_dim,d_weekend,full
+Same Day Last Year,date_dim,d_same_day_ly,full
+Same Day Last Year,date_dim,d_same_day_lq,full
+Current Period Flags,date_dim,d_current_day,full
+Current Period Flags,date_dim,d_current_week,full
+Current Period Flags,date_dim,d_current_month,full
+Current Period Flags,date_dim,d_current_quarter,full
+Current Period Flags,date_dim,d_current_year,full
+Time of Day,time_dim,t_time_sk,full
+Time of Day,time_dim,t_time_id,full
+Time of Day,time_dim,t_time,full
+Time of Day,time_dim,t_hour,full
+Time of Day,time_dim,t_minute,full
+Time of Day,time_dim,t_second,full
+Time of Day,time_dim,t_am_pm,full
+Time of Day,store_sales,ss_sold_time_sk,full
+Time of Day,catalog_sales,cs_sold_time_sk,full
+Time of Day,web_sales,ws_sold_time_sk,full
+Time of Day,store_returns,sr_return_time_sk,full
+Time of Day,catalog_returns,cr_returned_time_sk,full
+Time of Day,web_returns,wr_returned_time_sk,full
+Shift,time_dim,t_shift,full
+Shift,time_dim,t_sub_shift,full
+Meal Time,time_dim,t_meal_time,full
+Ticket Number,store_sales,ss_ticket_number,seed
+Ticket Number,store_returns,sr_ticket_number,seed
+Order Number,catalog_sales,cs_order_number,seed
+Order Number,web_sales,ws_order_number,seed
+Order Number,catalog_returns,cr_order_number,seed
+Order Number,web_returns,wr_order_number,seed
+Quantity Sold,store_sales,ss_quantity,seed
+Quantity Sold,catalog_sales,cs_quantity,seed
+Quantity Sold,web_sales,ws_quantity,seed
+Unit Wholesale Cost,store_sales,ss_wholesale_cost,full
+Unit Wholesale Cost,catalog_sales,cs_wholesale_cost,full
+Unit Wholesale Cost,web_sales,ws_wholesale_cost,full
+Unit List Price,store_sales,ss_list_price,full
+Unit List Price,catalog_sales,cs_list_price,full
+Unit List Price,web_sales,ws_list_price,full
+Unit Sales Price,store_sales,ss_sales_price,full
+Unit Sales Price,catalog_sales,cs_sales_price,full
+Unit Sales Price,web_sales,ws_sales_price,full
+Extended Wholesale Cost,store_sales,ss_ext_wholesale_cost,full
+Extended Wholesale Cost,catalog_sales,cs_ext_wholesale_cost,full
+Extended Wholesale Cost,web_sales,ws_ext_wholesale_cost,full
+Extended List Price,store_sales,ss_ext_list_price,full
+Extended List Price,catalog_sales,cs_ext_list_price,full
+Extended List Price,web_sales,ws_ext_list_price,full
+Extended Sales Price,store_sales,ss_ext_sales_price,seed
+Extended Sales Price,catalog_sales,cs_ext_sales_price,seed
+Extended Sales Price,web_sales,ws_ext_sales_price,seed
+Extended Discount Amount,store_sales,ss_ext_discount_amt,full
+Extended Discount Amount,catalog_sales,cs_ext_discount_amt,full
+Extended Discount Amount,web_sales,ws_ext_discount_amt,full
+Coupon Amount,store_sales,ss_coupon_amt,full
+Coupon Amount,catalog_sales,cs_coupon_amt,full
+Coupon Amount,web_sales,ws_coupon_amt,full
+Net Paid,store_sales,ss_net_paid,seed
+Net Paid,catalog_sales,cs_net_paid,seed
+Net Paid,web_sales,ws_net_paid,seed
+Extended Tax,store_sales,ss_ext_tax,full
+Extended Tax,catalog_sales,cs_ext_tax,full
+Extended Tax,web_sales,ws_ext_tax,full
+Net Paid Including Tax,store_sales,ss_net_paid_inc_tax,full
+Net Paid Including Tax,catalog_sales,cs_net_paid_inc_tax,full
+Net Paid Including Tax,web_sales,ws_net_paid_inc_tax,full
+Extended Ship Cost,catalog_sales,cs_ext_ship_cost,full
+Extended Ship Cost,web_sales,ws_ext_ship_cost,full
+Net Paid Including Ship,catalog_sales,cs_net_paid_inc_ship,full
+Net Paid Including Ship,web_sales,ws_net_paid_inc_ship,full
+Net Paid Including Ship and Tax,catalog_sales,cs_net_paid_inc_ship_tax,full
+Net Paid Including Ship and Tax,web_sales,ws_net_paid_inc_ship_tax,full
+Net Profit,store_sales,ss_net_profit,seed
+Net Profit,catalog_sales,cs_net_profit,seed
+Net Profit,web_sales,ws_net_profit,seed
+Return Quantity,store_returns,sr_return_quantity,seed
+Return Quantity,catalog_returns,cr_return_quantity,seed
+Return Quantity,web_returns,wr_return_quantity,seed
+Return Amount,store_returns,sr_return_amt,seed
+Return Amount,catalog_returns,cr_return_amount,seed
+Return Amount,web_returns,wr_return_amt,seed
+Return Tax,store_returns,sr_return_tax,full
+Return Tax,catalog_returns,cr_return_tax,full
+Return Tax,web_returns,wr_return_tax,full
+Return Amount Including Tax,store_returns,sr_return_amt_inc_tax,full
+Return Amount Including Tax,catalog_returns,cr_return_amt_inc_tax,full
+Return Amount Including Tax,web_returns,wr_return_amt_inc_tax,full
+Return Fee,store_returns,sr_fee,full
+Return Fee,catalog_returns,cr_fee,full
+Return Fee,web_returns,wr_fee,full
+Return Ship Cost,store_returns,sr_return_ship_cost,full
+Return Ship Cost,catalog_returns,cr_return_ship_cost,full
+Return Ship Cost,web_returns,wr_return_ship_cost,full
+Refunded Cash,store_returns,sr_refunded_cash,full
+Refunded Cash,catalog_returns,cr_refunded_cash,full
+Refunded Cash,web_returns,wr_refunded_cash,full
+Reversed Charge,store_returns,sr_reversed_charge,full
+Reversed Charge,catalog_returns,cr_reversed_charge,full
+Reversed Charge,web_returns,wr_reversed_charge,full
+Store Credit,store_returns,sr_store_credit,full
+Store Credit,catalog_returns,cr_store_credit,full
+Store Credit,web_returns,wr_account_credit,full
+Net Loss,store_returns,sr_net_loss,full
+Net Loss,catalog_returns,cr_net_loss,full
+Net Loss,web_returns,wr_net_loss,full
+Inventory,inventory,inv_date_sk,seed
+Quantity On Hand,inventory,inv_quantity_on_hand,seed
