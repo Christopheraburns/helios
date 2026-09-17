@@ -4,8 +4,8 @@ assign_terms.py
 2. Assigns each term to the hive/iceberg column entities listed in tpcds_term_columns.csv.
 
 Usage:
-  export ATLAS_BASE="https://<datalake-host>/<datalake-name>/cdp-proxy-api/atlas/api/atlas/v2"
-  export ATLAS_USER=<workload-username> ATLAS_PASS=<workload-password>
+  export ATLAS_BASE="https://applied-ai-aw-dl-gateway.applied.jmgjgh.a0.cloudera.site/applied-ai-aw-dl/cdp-proxy-api/atlas/api/atlas/v2"
+  export ATLAS_USER=cburns ATLAS_PASS=<workload-password>
   python assign_terms.py tpcds_glossary_full.csv          # or tpcds_glossary_seed.csv
 Optional: DB=tpcds  COLUMN_TYPES="hive_column,iceberg_column"
 """
@@ -53,16 +53,18 @@ with open(os.path.join(HERE, "tpcds_term_columns.csv")) as f:
         if row["term"] in terms_in_file:
             by_term.setdefault(row["term"], []).append((row["table"], row["column"]))
 
-missing, done = [], 0
+missing, done, skipped = [], 0, 0
 for term, cols in by_term.items():
+    already = {e["guid"] for e in S.get(f"{BASE}/glossary/terms/{guid_of[term]}/assignedEntities").json()}
     payload = []
     for tb, col in cols:
         guid, typ = find_column(tb, col)
-        if guid: payload.append({"guid": guid, "typeName": typ})
-        else:    missing.append(f"{tb}.{col}")
+        if not guid:       missing.append(f"{tb}.{col}")
+        elif guid in already: skipped += 1
+        else:              payload.append({"guid": guid, "typeName": typ})
     if payload:
         r = S.post(f"{BASE}/glossary/terms/{guid_of[term]}/assignedEntities", json=payload)
         if r.status_code in (200, 204): done += len(payload)
         else: print(f"assign failed for '{term}': {r.status_code} {r.text[:200]}")
-print(f"assigned {done} columns; {len(missing)} columns not found in Atlas")
+print(f"assigned {done} columns ({skipped} already assigned); {len(missing)} columns not found in Atlas")
 for m in missing[:20]: print("  missing:", m)

@@ -62,7 +62,7 @@ term("Slowly Changing Dimension", "A dimension that keeps history: each version 
 term("Customer", "A person who has purchased from any channel.",
      "One row per customer. Links to current demographics and address; historical demographics at time of sale are on the fact rows.",
      syn="Shopper|Buyer", isa="Dimension", tier="seed",
-     cols=["customer.c_customer_sk","customer.c_customer_id"]+sales("customer_sk")+["store_returns.sr_customer_sk"])
+     cols=["customer.c_customer_sk","customer.c_customer_id","store_sales.ss_customer_sk","store_returns.sr_customer_sk"])
 term("Bill-To Customer", "On catalog and web orders, the customer who was billed for the order.",
      "May differ from the Ship-To Customer (gifts, business orders).", see="Ship-To Customer",
      cols=["catalog_sales.cs_bill_customer_sk","web_sales.ws_bill_customer_sk"])
@@ -87,7 +87,9 @@ term("Last Review Date", "Date the customer record was last reviewed.", cols=["c
 term("Customer Demographics", "Personal demographic profile: gender, marital status, education, credit rating, dependents.",
      "A shared lookup; many customers map to the same demographic row. Fact rows carry the demographics in effect at time of sale.",
      abbr="CDEMO", isa="Dimension", tier="seed",
-     cols=["customer_demographics.cd_demo_sk","customer.c_current_cdemo_sk"]+sales("cdemo_sk")+["store_returns.sr_cdemo_sk"])
+     cols=["customer_demographics.cd_demo_sk","customer.c_current_cdemo_sk","store_sales.ss_cdemo_sk",
+           "catalog_sales.cs_bill_cdemo_sk","catalog_sales.cs_ship_cdemo_sk","web_sales.ws_bill_cdemo_sk",
+           "web_sales.ws_ship_cdemo_sk","store_returns.sr_cdemo_sk"])
 term("Gender", "Customer gender.", examples="M; F", cols=["customer_demographics.cd_gender"])
 term("Marital Status", "Customer marital status code.", examples="M married; S single; D divorced; W widowed; U unknown",
      cols=["customer_demographics.cd_marital_status"])
@@ -104,7 +106,9 @@ term("Employed Dependent Count", "Number of dependents who are employed.", cols=
 term("College Dependent Count", "Number of dependents attending college.", cols=["customer_demographics.cd_dep_college_count"])
 term("Household Demographics", "Household-level profile: income band, buying potential, dependents, vehicles.",
      abbr="HDEMO", isa="Dimension", tier="seed",
-     cols=["household_demographics.hd_demo_sk","customer.c_current_hdemo_sk"]+sales("hdemo_sk")+["store_returns.sr_hdemo_sk"])
+     cols=["household_demographics.hd_demo_sk","customer.c_current_hdemo_sk","store_sales.ss_hdemo_sk",
+           "catalog_sales.cs_bill_hdemo_sk","catalog_sales.cs_ship_hdemo_sk","web_sales.ws_bill_hdemo_sk",
+           "web_sales.ws_ship_hdemo_sk","store_returns.sr_hdemo_sk"])
 term("Buy Potential", "Estimated household annual spending band.",
      examples="0-500; 501-1000; 1001-5000; 5001-10000; >10000; Unknown", cols=["household_demographics.hd_buy_potential"])
 term("Vehicle Count", "Number of vehicles in the household.", cols=["household_demographics.hd_vehicle_count"])
@@ -166,7 +170,7 @@ term("Company", "Legal company an operating unit belongs to.",
      cols=["store.s_company_id","store.s_company_name","call_center.cc_company","call_center.cc_company_name",
            "web_site.web_company_id","web_site.web_company_name"])
 term("Tax Percentage", "Sales tax rate applied at a store, call center or web site.",
-     cols=["store.s_tax_precentage","call_center.cc_tax_percentage","web_site.web_tax_percentage"])
+     cols=["store.s_tax_percentage","call_center.cc_tax_percentage","web_site.web_tax_percentage"])
 term("Call Center", "A facility that takes catalog orders and returns by phone. Type-2.",
      isa="Dimension|Slowly Changing Dimension", tier="seed",
      cols=["call_center.cc_call_center_sk","call_center.cc_call_center_id","catalog_sales.cs_call_center_sk",

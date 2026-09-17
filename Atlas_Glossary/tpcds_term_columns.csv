@@ -12,8 +12,6 @@ Slowly Changing Dimension,web_page,wp_rec_end_date,full
 Customer,customer,c_customer_sk,seed
 Customer,customer,c_customer_id,seed
 Customer,store_sales,ss_customer_sk,seed
-Customer,catalog_sales,cs_customer_sk,seed
-Customer,web_sales,ws_customer_sk,seed
 Customer,store_returns,sr_customer_sk,seed
 Bill-To Customer,catalog_sales,cs_bill_customer_sk,full
 Bill-To Customer,web_sales,ws_bill_customer_sk,full
@@ -39,8 +37,10 @@ Last Review Date,customer,c_last_review_date_sk,full
 Customer Demographics,customer_demographics,cd_demo_sk,seed
 Customer Demographics,customer,c_current_cdemo_sk,seed
 Customer Demographics,store_sales,ss_cdemo_sk,seed
-Customer Demographics,catalog_sales,cs_cdemo_sk,seed
-Customer Demographics,web_sales,ws_cdemo_sk,seed
+Customer Demographics,catalog_sales,cs_bill_cdemo_sk,seed
+Customer Demographics,catalog_sales,cs_ship_cdemo_sk,seed
+Customer Demographics,web_sales,ws_bill_cdemo_sk,seed
+Customer Demographics,web_sales,ws_ship_cdemo_sk,seed
 Customer Demographics,store_returns,sr_cdemo_sk,seed
 Gender,customer_demographics,cd_gender,full
 Marital Status,customer_demographics,cd_marital_status,full
@@ -54,8 +54,10 @@ College Dependent Count,customer_demographics,cd_dep_college_count,full
 Household Demographics,household_demographics,hd_demo_sk,seed
 Household Demographics,customer,c_current_hdemo_sk,seed
 Household Demographics,store_sales,ss_hdemo_sk,seed
-Household Demographics,catalog_sales,cs_hdemo_sk,seed
-Household Demographics,web_sales,ws_hdemo_sk,seed
+Household Demographics,catalog_sales,cs_bill_hdemo_sk,seed
+Household Demographics,catalog_sales,cs_ship_hdemo_sk,seed
+Household Demographics,web_sales,ws_bill_hdemo_sk,seed
+Household Demographics,web_sales,ws_ship_hdemo_sk,seed
 Household Demographics,store_returns,sr_hdemo_sk,seed
 Buy Potential,household_demographics,hd_buy_potential,full
 Vehicle Count,household_demographics,hd_vehicle_count,full
@@ -163,7 +165,7 @@ Company,call_center,cc_company,full
 Company,call_center,cc_company_name,full
 Company,web_site,web_company_id,full
 Company,web_site,web_company_name,full
-Tax Percentage,store,s_tax_precentage,full
+Tax Percentage,store,s_tax_percentage,full
 Tax Percentage,call_center,cc_tax_percentage,full
 Tax Percentage,web_site,web_tax_percentage,full
 Call Center,call_center,cc_call_center_sk,seed
