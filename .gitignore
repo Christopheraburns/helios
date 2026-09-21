@@ -1,0 +1,6 @@
+tpcds/
+*.parquet
+__pycache__/
+.env
+.env.sh
+requirements.lock
