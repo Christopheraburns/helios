@@ -12,7 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from helios_core import __version__
 from helios_core.atlas import AtlasClient, AtlasError
-from helios_core.config import atlas_config, impala_config, inference_config
+from helios_core.config import atlas_config, impala_config
 from helios_core.engines import ImpalaEngine
 from helios_core import runs as runstore
 from fastapi import HTTPException
@@ -57,13 +57,13 @@ def health(request: Request):
     checks.append(("Atlas", a.base_url if a else "not configured", *(_check(lambda: AtlasClient(a).ping()) if a else ("skipped", "set ATLAS_BASE, ATLAS_USER, ATLAS_PASS"))))
     i = impala_config()
     checks.append(("Impala", f"{i.host}:{i.port}" if i else "not configured", *(_check(lambda: ImpalaEngine(i).ping()) if i else ("skipped", "set IMPALA_HOST (and IMPALA_USER / IMPALA_PASS if different from Atlas)"))))
-    inf = inference_config()
-    if inf.base_url:
-        import httpx
-        checks.append(("AI Inference", inf.base_url, *_check(lambda: httpx.get(f"{inf.base_url.rstrip('/')}/models",
-                      headers={"Authorization": f"Bearer {inf.api_key}"} if inf.api_key else {}, timeout=15).raise_for_status())))
+    from helios_core.llm import llm_from_env
+    llm = llm_from_env()
+    if llm:
+        checks.append(("LLM", f"{llm.provider}: {llm.model}", *_check(llm.ping)))
     else:
-        checks.append(("AI Inference", "not configured", "skipped", "set INFERENCE_BASE_URL, INFERENCE_API_KEY, INFERENCE_MODEL"))
+        checks.append(("LLM", "not configured", "skipped",
+                       "set ANTHROPIC_API_KEY (+ ANTHROPIC_MODEL) or INFERENCE_BASE_URL / INFERENCE_MODEL"))
     return render(request, "health.html", checks=checks, active="health")
 
 
@@ -215,6 +215,16 @@ def run_table(request: Request, run_id: str, key: str):
     terms = {}
     for term in harvest.get("glossary_terms", []):
         for c in term["columns"]:
-            terms.setdefault(c.split("@")[0], []).append(term["name"])
+            qn = c.split("@")[0]
+            terms.setdefault(qn, []).append(term["name"])
+            terms.setdefault(qn.split(".")[-1], []).append(term["name"])
     rels = [r for r in profile.get("relationships", []) if r["from"] == key or r["to"] == key]
     return render(request, "run_table.html", run_id=run_id, key=key, prof=prof, terms=terms, rels=rels, active="runs")
+
+
+@app.get("/runs/{run_id}/propose", response_class=HTMLResponse)
+def run_propose(request: Request, run_id: str):
+    prop = runstore.load(run_id, "propose")
+    if not prop:
+        raise HTTPException(404, f"run {run_id} has no propose output yet")
+    return render(request, "propose.html", run_id=run_id, p=prop, active="runs")

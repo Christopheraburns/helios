@@ -3,7 +3,7 @@
 {% block content %}
 <p class="meta"><a href="/runs">Runs</a> / {{ s.id }}</p>
 <h1>Run {{ s.id }}</h1>
-
+{% if s.propose %}<p><a class="btn" href="/runs/{{ s.id }}/propose">View proposal</a></p>{% endif %}
 {% if s.harvest %}
 <p class="sub">Harvested {{ s.harvest.databases | join(", ") }} via {{ s.harvest.engine }}:
 {{ s.harvest.tables }} tables, {{ s.harvest.columns }} columns, {{ s.harvest.glossary_terms }} glossary terms,

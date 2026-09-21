@@ -31,3 +31,5 @@ form.inline{display:inline}
 .meta{color:var(--muted);font-size:13px}
 .empty{color:var(--muted);padding:32px 0}
 @media (max-width:720px){body{grid-template-columns:1fr}nav{border-right:0;border-bottom:1px solid var(--rule)}main{padding:20px}}
+details{margin:8px 0;border-bottom:1px solid var(--rule);padding-bottom:8px}
+summary{cursor:pointer;padding:6px 0;font-weight:500}

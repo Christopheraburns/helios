@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Proposal {{ run_id }} · helios{% endblock %}
+{% block content %}
+<p class="meta"><a href="/runs">Runs</a> / <a href="/runs/{{ run_id }}">{{ run_id }}</a> / proposal</p>
+<h1>Proposal</h1>
+<p class="sub">Drafted by {{ p.llm.provider }} / {{ p.llm.model }} in {{ p.llm.calls }} calls. Nothing here is published; review comes next.</p>
+
+<h2>Datasets</h2>
+{% for d in p.datasets %}
+<details>
+<summary><span class="mono">{{ d.table }}</span> — {{ d.name }} <span class="meta">({{ d.kind }}, confidence {{ "%.2f" | format(d.confidence) }})</span></summary>
+<p>{{ d.description }}</p>
+<table>
+<tr><th>Column</th><th>Business name</th><th>Role</th><th>Description</th><th>Refers to</th><th>Glossary</th></tr>
+{% for f in d.fields %}
+<tr>
+  <td class="mono">{{ f.column }}</td><td>{{ f.name }}</td><td class="meta">{{ f.role }}</td><td>{{ f.description }}</td>
+  <td class="mono meta">{{ f.refers_to or "" }}</td>
+  <td>{% if f.glossary_terms %}{{ f.glossary_terms | join(", ") }}{% elif f.proposed_term %}<span class="meta">proposed:</span> {{ f.proposed_term.name }}{% endif %}</td>
+</tr>
+{% endfor %}
+</table>
+</details>
+{% endfor %}
+
+<h2>Relationships</h2>
+<table>
+<tr><th>From</th><th>To</th><th>Source</th><th>Accepted</th><th>Confidence</th><th>Reason</th></tr>
+{% for r in p.relationships | sort(attribute='from') %}
+<tr><td class="mono">{{ r.from }}.{{ r.from_column }}</td><td class="mono">{{ r.to }}.{{ r.to_column }}</td>
+<td class="meta">{{ r.source }}</td><td><span class="status {{ 'ok' if r.accepted else 'failed' }}">{{ 'yes' if r.accepted else 'no' }}</span></td>
+<td>{{ "%.2f" | format(r.confidence) }}</td><td class="meta">{{ r.reason or "" }}</td></tr>
+{% endfor %}
+</table>
+
+<h2>Metrics</h2>
+{% if p.metrics %}
+<table>
+<tr><th>Metric</th><th>Dataset</th><th>Expression</th><th>Source</th><th>Confidence</th></tr>
+{% for m in p.metrics %}
+<tr><td><strong>{{ m.name }}</strong><br><span class="meta">{{ m.description }}</span></td><td class="mono">{{ m.dataset }}</td>
+<td class="mono">{{ m.expression }}</td><td class="meta">{{ m.source }}</td><td>{{ "%.2f" | format(m.confidence) }}</td></tr>
+{% endfor %}
+</table>
+{% else %}<p class="empty">No metrics proposed.</p>{% endif %}
+
+<h2>Proposed glossary terms</h2>
+<p class="meta">Columns that have no glossary term today, with the term the model suggests. Same concept across tables is merged into one term.</p>
+{% if p.glossary_terms %}
+<table>
+<tr><th>Term</th><th>Definition</th><th>Columns</th><th>Confidence</th></tr>
+{% for t in p.glossary_terms %}
+<tr><td>{{ t.name }}</td><td>{{ t.definition }}</td><td class="mono">{{ t.columns | join("<br>") | safe }}</td><td>{{ "%.2f" | format(t.confidence) }}</td></tr>
+{% endfor %}
+</table>
+{% else %}<p class="empty">No new terms proposed.</p>{% endif %}
+{% endblock %}
