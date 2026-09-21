@@ -148,7 +148,16 @@ flowchart TB
 
 ### Runtime
 
-A single custom runtime image built from `runtime/Dockerfile` on Cloudera's PBJ Workbench Python 3.11 base. It contains dependencies only (Ossie tooling, SQLGlot, impyla/pyhive, MCP SDK, FastAPI, requests); the code comes from the project's git checkout. A code change is a `git pull`; a dependency change is a rebuild. The image is built by CI, pushed to a registry the Workbench can reach, and registered in the Runtime Catalog.
+A single custom runtime image built from `runtime/Dockerfile` on Cloudera's PBJ Workbench Python 3.12 base (`ml-runtime-pbj-workbench-python3.12-standard:2026.08.1-b5`). It contains dependencies only (Ossie tooling, SQLGlot, impyla/pyhive, MCP SDK, FastAPI, requests); the code comes from the project's git checkout. A code change is a `git pull`; a dependency change is a rebuild. The image is published to Docker Hub as `docker.io/christopheraburns/helios-runtime:<version>` (current: `docker.io/christopheraburns/helios-runtime:0.1.1`) and registered in Cloudera AI via Runtime Catalog → Add Runtime.
+
+To build and push a new version from `runtime/` (Docker Desktop; WSL2 or PowerShell):
+
+```bash
+./build.sh christopheraburns 0.1.2        # WSL2
+.\build.ps1 -User christopheraburns -Version 0.1.2   # PowerShell
+```
+
+Each re-registered version must bump `ML_RUNTIME_MAINTENANCE_VERSION` and `ML_RUNTIME_FULL_VERSION` in the Dockerfile to match the image tag.
 
 ### Identity and governance
 

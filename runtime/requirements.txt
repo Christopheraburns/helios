@@ -1,0 +1,33 @@
+# helios runtime dependencies. Keep this list minimal; app code comes from the git checkout.
+# After a successful build, freeze the resolved versions into requirements.lock for reproducibility.
+
+# Engine clients
+impyla>=0.20.0
+thrift>=0.20.0
+thrift-sasl>=0.4.3
+pure-sasl>=0.6.2
+pyhive>=0.7.0
+
+# SQL generation and local testing
+sqlglot>=27.0.0
+duckdb>=1.3.0
+
+# Semantic model tooling
+jsonschema>=4.23.0
+pyyaml>=6.0.0
+pydantic>=2.9.0
+
+# Services
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+mcp>=1.10.0
+python-multipart>=0.0.9
+
+# Clients
+requests>=2.32.0
+httpx>=0.27.0
+openai>=1.50.0
+
+# Data handling
+pandas>=2.2.0
+pyarrow>=17.0.0
