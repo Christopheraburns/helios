@@ -16,4 +16,3 @@ docker buildx build \
 
 echo "pushed ${IMAGE}"
 echo "register this URL in Cloudera AI: Site Administration -> Runtime Catalog -> Add Runtime"
-./build

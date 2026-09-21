@@ -31,8 +31,8 @@ USER cdsw
 # ---- Cloudera ML Runtime metadata (required for registration) ----
 ENV ML_RUNTIME_EDITION="helios" \
     ML_RUNTIME_SHORT_VERSION="0.1" \
-    ML_RUNTIME_MAINTENANCE_VERSION="1" \
-    ML_RUNTIME_FULL_VERSION="0.1.1" \
+    ML_RUNTIME_MAINTENANCE_VERSION="2" \
+    ML_RUNTIME_FULL_VERSION="0.1.2" \
     ML_RUNTIME_DESCRIPTION="helios: semantic layer engine (Impala/Hive clients, SQLGlot, Ossie, MCP, FastAPI)"
 
 LABEL com.cloudera.ml.runtime.edition=$ML_RUNTIME_EDITION \

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ term.name }} · helios{% endblock %}
+{% block content %}
+<p class="meta"><a href="/glossary">Glossaries</a> / <a href="/glossary/{{ term.anchor.glossaryGuid }}">{{ term.anchor.displayText }}</a> / {{ term.name }}</p>
+<h1>{{ term.name }}{% if term.abbreviation %} <span class="meta">({{ term.abbreviation }})</span>{% endif %}</h1>
+<p class="sub">{{ term.shortDescription or "No definition yet." }}</p>
+{% if term.longDescription %}<p>{{ term.longDescription }}</p>{% endif %}
+{% if term.examples %}<p class="meta">Examples: {{ term.examples | join("; ") }}</p>{% endif %}
+<div class="row">
+  <a class="btn" href="/term/{{ term.guid }}/edit">Edit</a>
+  <form class="inline" method="post" action="/term/{{ term.guid }}/delete" onsubmit="return confirm('Delete term {{ term.name }}?')"><button class="danger">Delete</button></form>
+</div>
+
+<h2>Linked columns</h2>
+{% if assigned %}
+<table>
+<tr><th>Column</th><th>Type</th><th></th></tr>
+{% for e in assigned %}
+<tr>
+  <td class="mono">{{ e.displayText or e.guid }}</td>
+  <td class="meta">{{ e.typeName }}</td>
+  <td><form class="inline" method="post" action="/term/{{ term.guid }}/unassign/{{ e.guid }}"><button>Unlink</button></form></td>
+</tr>
+{% endfor %}
+</table>
+{% else %}
+<p class="empty">This term is not linked to any columns.</p>
+{% endif %}
+<form method="post" action="/term/{{ term.guid }}/assign" class="row">
+  <input type="text" name="column" placeholder="database.table.column" class="mono" style="max-width:360px" required>
+  <button>Link column</button>
+</form>
+{% endblock %}

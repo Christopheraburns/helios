@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if term else "New" }} term · helios{% endblock %}
+{% block content %}
+<h1>{{ "Edit term" if term else "New term" }}</h1>
+<p class="sub">{{ glossary.name if glossary.name else glossary.displayText }}</p>
+<form method="post" action="{{ '/term/' ~ term.guid if term else '/glossary/' ~ glossary.guid ~ '/term' }}" style="max-width:640px">
+  <label>Name</label><input type="text" name="name" value="{{ term.name if term else '' }}" required>
+  <label>Definition (short description)</label><input type="text" name="short_description" value="{{ term.shortDescription if term else '' }}">
+  <label>Long description</label><textarea name="long_description">{{ term.longDescription if term else '' }}</textarea>
+  <label>Abbreviation</label><input type="text" name="abbreviation" value="{{ term.abbreviation if term else '' }}" style="max-width:200px">
+  <label>Examples (separate with ;)</label><input type="text" name="examples" value="{{ term.examples | join('; ') if term and term.examples else '' }}">
+  <div class="row">
+    <button class="primary">{{ "Save changes" if term else "Create term" }}</button>
+    <a class="btn" href="{{ '/term/' ~ term.guid if term else '/glossary/' ~ glossary.guid }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

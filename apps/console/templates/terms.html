@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ glossary.name }} · helios{% endblock %}
+{% block content %}
+<p class="meta"><a href="/glossary">Glossaries</a> / {{ glossary.name }}</p>
+<h1>{{ glossary.name }}</h1>
+<p class="sub">{{ glossary.shortDescription or "" }} {{ terms | length }} terms{% if q %} matching “{{ q }}”{% endif %}.</p>
+<form method="get" class="row">
+  <input type="search" name="q" value="{{ q }}" placeholder="Filter by name or definition" style="max-width:360px">
+  <button>Filter</button>
+  <a class="btn" href="/glossary/{{ glossary.guid }}/term/new">New term</a>
+</form>
+{% if terms %}
+<table>
+<tr><th>Term</th><th>Definition</th><th>Abbreviation</th></tr>
+{% for t in terms %}
+<tr><td><a href="/term/{{ t.guid }}">{{ t.name }}</a></td><td>{{ t.shortDescription or "" }}</td><td>{{ t.abbreviation or "" }}</td></tr>
+{% endfor %}
+</table>
+{% else %}
+<p class="empty">No terms{% if q %} match{% else %} yet. Add one, or import a CSV below{% endif %}.</p>
+{% endif %}
+<h2>Import terms from CSV</h2>
+<p class="meta">Atlas bulk-import format (the same columns as <code>tpcds_glossary_full.csv</code>). The GlossaryName column must equal “{{ glossary.name }}”.</p>
+<form method="post" action="/glossary/{{ glossary.guid }}/import" enctype="multipart/form-data" class="row">
+  <input type="file" name="file" accept=".csv" required>
+  <button>Import</button>
+</form>
+{% endblock %}

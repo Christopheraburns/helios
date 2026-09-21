@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Glossaries · helios{% endblock %}
+{% block content %}
+<h1>Glossaries</h1>
+<p class="sub">Business glossaries in Atlas. Terms describe what the data means and link to the columns that hold it.</p>
+{% if glossaries %}
+<table>
+<tr><th>Name</th><th>Description</th><th>Terms</th><th></th></tr>
+{% for g in glossaries %}
+<tr>
+  <td><a href="/glossary/{{ g.guid }}">{{ g.name }}</a></td>
+  <td>{{ g.shortDescription or "" }}</td>
+  <td>{{ g.terms | length if g.terms else 0 }}</td>
+  <td><form class="inline" method="post" action="/glossary/{{ g.guid }}/delete" onsubmit="return confirm('Delete glossary {{ g.name }} and all its terms?')"><button class="danger">Delete</button></form></td>
+</tr>
+{% endfor %}
+</table>
+{% else %}
+<p class="empty">No glossaries yet. Create one below.</p>
+{% endif %}
+<h2>Create a glossary</h2>
+<form method="post" action="/glossary">
+  <label>Name</label><input type="text" name="name" required>
+  <label>Description</label><input type="text" name="short_description">
+  <div class="row"><button class="primary">Create glossary</button></div>
+</form>
+{% endblock %}

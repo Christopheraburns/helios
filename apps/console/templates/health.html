@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Health · helios{% endblock %}
+{% block content %}
+<h1>Health</h1>
+<p class="sub">Connectivity from this application to the services helios depends on.</p>
+<table>
+<tr><th>Service</th><th>Endpoint</th><th>Status</th><th>Detail</th></tr>
+{% for name, endpoint, status, detail in checks %}
+<tr><td>{{ name }}</td><td class="mono">{{ endpoint }}</td><td><span class="status {{ status }}">{{ status }}</span></td><td class="meta">{{ detail }}</td></tr>
+{% endfor %}
+</table>
+{% endblock %}
