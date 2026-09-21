@@ -1,0 +1,4941 @@
+{
+    "profiled_at": "2026-09-21T19:43:40.219076+00:00",
+    "engine": "impala",
+    "tables": {
+      "tpcds.call_center": {
+        "stats": {
+          "row_count": 6,
+          "columns": {
+            "cc_call_center_sk": {
+              "type": "bigint",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 6,
+              "min": 1,
+              "max": 6,
+              "ndv_exact": 6
+            },
+            "cc_call_center_id": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 3,
+              "min": "AAAAAAAABAAAAAAA",
+              "max": "AAAAAAAAEAAAAAAA"
+            },
+            "cc_rec_start_date": {
+              "type": "date",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": "1998-01-01",
+              "max": "2002-01-01"
+            },
+            "cc_rec_end_date": {
+              "type": "date",
+              "non_null": 3,
+              "null_rate": 0.5,
+              "ndv": 3,
+              "min": "2000-01-01",
+              "max": "2001-12-31"
+            },
+            "cc_closed_date_sk": {
+              "type": "bigint",
+              "non_null": 0,
+              "null_rate": 1.0,
+              "ndv": 0,
+              "min": null,
+              "max": null
+            },
+            "cc_open_date_sk": {
+              "type": "bigint",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 3,
+              "min": 2450952,
+              "max": 2451136
+            },
+            "cc_name": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 3,
+              "min": "Mid Atlantic",
+              "max": "North Midwest"
+            },
+            "cc_class": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "large",
+              "max": "medium"
+            },
+            "cc_employees": {
+              "type": "bigint",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 5,
+              "min": 1,
+              "max": 7
+            },
+            "cc_sq_ft": {
+              "type": "bigint",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 6,
+              "min": 649,
+              "max": 4134
+            },
+            "cc_hours": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "8AM-4PM",
+              "max": "8AM-8AM"
+            },
+            "cc_manager": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": "Bob Belcher",
+              "max": "Mark Hightower"
+            },
+            "cc_mkt_id": {
+              "type": "bigint",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 3,
+              "min": 2,
+              "max": 6
+            },
+            "cc_mkt_class": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 5,
+              "min": "Instead male prospects would make old images. M",
+              "max": "Rational ways will cultivate significant a"
+            },
+            "cc_mkt_desc": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": "Nowhere certain tourists cannot help only. Retail terms wake at a panels; largely blank years put s",
+              "max": "Wrong members must get compatibl"
+            },
+            "cc_market_manager": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": "Gary Colburn",
+              "max": "Matthew Clifton"
+            },
+            "cc_division": {
+              "type": "bigint",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": 1,
+              "max": 5
+            },
+            "cc_division_name": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": "anti",
+              "max": "pri"
+            },
+            "cc_company": {
+              "type": "bigint",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": 1,
+              "max": 6
+            },
+            "cc_company_name": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": "able",
+              "max": "pri"
+            },
+            "cc_street_number": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 3,
+              "min": "121",
+              "max": "730"
+            },
+            "cc_street_name": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 3,
+              "min": "14th ",
+              "max": "Franklin "
+            },
+            "cc_street_type": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 3,
+              "min": "Boulevard",
+              "max": "Wy"
+            },
+            "cc_suite_number": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 3,
+              "min": "Suite 0",
+              "max": "Suite 60"
+            },
+            "cc_city": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "Fairview",
+              "max": "Midway"
+            },
+            "cc_county": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "Williamson County",
+              "max": "Williamson County"
+            },
+            "cc_state": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "TN",
+              "max": "TN"
+            },
+            "cc_zip": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "31904",
+              "max": "35709"
+            },
+            "cc_country": {
+              "type": "string",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "United States",
+              "max": "United States"
+            },
+            "cc_gmt_offset": {
+              "type": "decimal(5,2)",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "-5.00",
+              "max": "-5.00"
+            },
+            "cc_tax_percentage": {
+              "type": "decimal(5,2)",
+              "non_null": 6,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": "0.01",
+              "max": "0.12"
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "cc_call_center_sk",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.catalog_page": {
+        "stats": {
+          "row_count": 11718,
+          "columns": {
+            "cp_catalog_page_sk": {
+              "type": "bigint",
+              "non_null": 11718,
+              "null_rate": 0.0,
+              "ndv": 11670,
+              "min": 1,
+              "max": 11718,
+              "ndv_exact": 11718
+            },
+            "cp_catalog_page_id": {
+              "type": "string",
+              "non_null": 11718,
+              "null_rate": 0.0,
+              "ndv": 11539,
+              "min": "AAAAAAAAAAABAAAA",
+              "max": "AAAAAAAAPPPBAAAA",
+              "ndv_exact": 11718
+            },
+            "cp_start_date_sk": {
+              "type": "bigint",
+              "non_null": 11617,
+              "null_rate": 0.0086,
+              "ndv": 92,
+              "min": 2450815,
+              "max": 2453005
+            },
+            "cp_end_date_sk": {
+              "type": "bigint",
+              "non_null": 11610,
+              "null_rate": 0.0092,
+              "ndv": 95,
+              "min": 2450844,
+              "max": 2453186
+            },
+            "cp_department": {
+              "type": "string",
+              "non_null": 11616,
+              "null_rate": 0.0087,
+              "ndv": 1,
+              "min": "DEPARTMENT",
+              "max": "DEPARTMENT"
+            },
+            "cp_catalog_number": {
+              "type": "bigint",
+              "non_null": 11598,
+              "null_rate": 0.0102,
+              "ndv": 108,
+              "min": 1,
+              "max": 109
+            },
+            "cp_catalog_page_number": {
+              "type": "bigint",
+              "non_null": 11614,
+              "null_rate": 0.0089,
+              "ndv": 107,
+              "min": 1,
+              "max": 108
+            },
+            "cp_description": {
+              "type": "string",
+              "non_null": 11602,
+              "null_rate": 0.0099,
+              "ndv": 12158,
+              "min": "A bit important centres obtain so letters. Very, thin musicians require ",
+              "max": "Youngsters must provide other, intermediate clouds. Yesterday whole cars h"
+            },
+            "cp_type": {
+              "type": "string",
+              "non_null": 11609,
+              "null_rate": 0.0093,
+              "ndv": 3,
+              "min": "bi-annual",
+              "max": "quarterly"
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "cp_catalog_page_sk",
+            "confidence": 0.95
+          },
+          {
+            "column": "cp_catalog_page_id",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.catalog_returns": {
+        "stats": {
+          "row_count": 144067,
+          "columns": {
+            "cr_returned_date_sk": {
+              "type": "bigint",
+              "non_null": 144067,
+              "null_rate": 0.0,
+              "ndv": 2071,
+              "min": 2450834,
+              "max": 2452905
+            },
+            "cr_returned_time_sk": {
+              "type": "bigint",
+              "non_null": 144067,
+              "null_rate": 0.0,
+              "ndv": 66779,
+              "min": 1,
+              "max": 86392
+            },
+            "cr_item_sk": {
+              "type": "bigint",
+              "non_null": 144067,
+              "null_rate": 0.0,
+              "ndv": 17869,
+              "min": 1,
+              "max": 18000
+            },
+            "cr_refunded_customer_sk": {
+              "type": "bigint",
+              "non_null": 141184,
+              "null_rate": 0.02,
+              "ndv": 61197,
+              "min": 1,
+              "max": 100000
+            },
+            "cr_refunded_cdemo_sk": {
+              "type": "bigint",
+              "non_null": 141145,
+              "null_rate": 0.0203,
+              "ndv": 92171,
+              "min": 5,
+              "max": 1920765
+            },
+            "cr_refunded_hdemo_sk": {
+              "type": "bigint",
+              "non_null": 141159,
+              "null_rate": 0.0202,
+              "ndv": 6968,
+              "min": 1,
+              "max": 7200
+            },
+            "cr_refunded_addr_sk": {
+              "type": "bigint",
+              "non_null": 141172,
+              "null_rate": 0.0201,
+              "ndv": 43276,
+              "min": 1,
+              "max": 50000
+            },
+            "cr_returning_customer_sk": {
+              "type": "bigint",
+              "non_null": 141172,
+              "null_rate": 0.0201,
+              "ndv": 74046,
+              "min": 2,
+              "max": 99998
+            },
+            "cr_returning_cdemo_sk": {
+              "type": "bigint",
+              "non_null": 141117,
+              "null_rate": 0.0205,
+              "ndv": 136820,
+              "min": 9,
+              "max": 1920793
+            },
+            "cr_returning_hdemo_sk": {
+              "type": "bigint",
+              "non_null": 141223,
+              "null_rate": 0.0197,
+              "ndv": 6968,
+              "min": 1,
+              "max": 7200
+            },
+            "cr_returning_addr_sk": {
+              "type": "bigint",
+              "non_null": 141154,
+              "null_rate": 0.0202,
+              "ndv": 47743,
+              "min": 1,
+              "max": 50000
+            },
+            "cr_call_center_sk": {
+              "type": "bigint",
+              "non_null": 141152,
+              "null_rate": 0.0202,
+              "ndv": 6,
+              "min": 1,
+              "max": 6
+            },
+            "cr_catalog_page_sk": {
+              "type": "bigint",
+              "non_null": 141118,
+              "null_rate": 0.0205,
+              "ndv": 6297,
+              "min": 1,
+              "max": 9828
+            },
+            "cr_ship_mode_sk": {
+              "type": "bigint",
+              "non_null": 141178,
+              "null_rate": 0.0201,
+              "ndv": 20,
+              "min": 1,
+              "max": 20
+            },
+            "cr_warehouse_sk": {
+              "type": "bigint",
+              "non_null": 141132,
+              "null_rate": 0.0204,
+              "ndv": 5,
+              "min": 1,
+              "max": 5
+            },
+            "cr_reason_sk": {
+              "type": "bigint",
+              "non_null": 141206,
+              "null_rate": 0.0199,
+              "ndv": 34,
+              "min": 1,
+              "max": 35
+            },
+            "cr_order_number": {
+              "type": "bigint",
+              "non_null": 144067,
+              "null_rate": 0.0,
+              "ndv": 94304,
+              "min": 2,
+              "max": 160000
+            },
+            "cr_return_quantity": {
+              "type": "bigint",
+              "non_null": 141162,
+              "null_rate": 0.0202,
+              "ndv": 98,
+              "min": 1,
+              "max": 100
+            },
+            "cr_return_amount": {
+              "type": "decimal(7,2)",
+              "non_null": 141139,
+              "null_rate": 0.0203,
+              "ndv": 81540,
+              "min": "0.00",
+              "max": "24214.19"
+            },
+            "cr_return_tax": {
+              "type": "decimal(7,2)",
+              "non_null": 141127,
+              "null_rate": 0.0204,
+              "ndv": 25600,
+              "min": "0.00",
+              "max": "2179.27"
+            },
+            "cr_return_amt_inc_tax": {
+              "type": "decimal(7,2)",
+              "non_null": 141180,
+              "null_rate": 0.02,
+              "ndv": 93536,
+              "min": "0.00",
+              "max": "26393.46"
+            },
+            "cr_fee": {
+              "type": "decimal(7,2)",
+              "non_null": 141076,
+              "null_rate": 0.0208,
+              "ndv": 10256,
+              "min": "0.50",
+              "max": "100.00"
+            },
+            "cr_return_ship_cost": {
+              "type": "decimal(7,2)",
+              "non_null": 141165,
+              "null_rate": 0.0201,
+              "ndv": 64444,
+              "min": "0.00",
+              "max": "12448.43"
+            },
+            "cr_refunded_cash": {
+              "type": "decimal(7,2)",
+              "non_null": 141109,
+              "null_rate": 0.0205,
+              "ndv": 75424,
+              "min": "0.00",
+              "max": "20097.77"
+            },
+            "cr_reversed_charge": {
+              "type": "decimal(7,2)",
+              "non_null": 141209,
+              "null_rate": 0.0198,
+              "ndv": 55403,
+              "min": "0.00",
+              "max": "16943.08"
+            },
+            "cr_store_credit": {
+              "type": "decimal(7,2)",
+              "non_null": 141130,
+              "null_rate": 0.0204,
+              "ndv": 53691,
+              "min": "0.00",
+              "max": "14796.72"
+            },
+            "cr_net_loss": {
+              "type": "decimal(7,2)",
+              "non_null": 141151,
+              "null_rate": 0.0202,
+              "ndv": 87793,
+              "min": "0.50",
+              "max": "12998.06"
+            }
+          }
+        },
+        "primary_keys": []
+      },
+      "tpcds.catalog_sales": {
+        "stats": {
+          "row_count": 1441548,
+          "columns": {
+            "cs_sold_date_sk": {
+              "type": "bigint",
+              "non_null": 1434357,
+              "null_rate": 0.005,
+              "ndv": 1783,
+              "min": 2450815,
+              "max": 2452648
+            },
+            "cs_sold_time_sk": {
+              "type": "bigint",
+              "non_null": 1434355,
+              "null_rate": 0.005,
+              "ndv": 66023,
+              "min": 4,
+              "max": 86399
+            },
+            "cs_ship_date_sk": {
+              "type": "bigint",
+              "non_null": 1434426,
+              "null_rate": 0.0049,
+              "ndv": 1911,
+              "min": 2450817,
+              "max": 2452737
+            },
+            "cs_bill_customer_sk": {
+              "type": "bigint",
+              "non_null": 1434418,
+              "null_rate": 0.0049,
+              "ndv": 77266,
+              "min": 1,
+              "max": 100000
+            },
+            "cs_bill_cdemo_sk": {
+              "type": "bigint",
+              "non_null": 1434365,
+              "null_rate": 0.005,
+              "ndv": 148079,
+              "min": 5,
+              "max": 1920765
+            },
+            "cs_bill_hdemo_sk": {
+              "type": "bigint",
+              "non_null": 1434483,
+              "null_rate": 0.0049,
+              "ndv": 6968,
+              "min": 1,
+              "max": 7200
+            },
+            "cs_bill_addr_sk": {
+              "type": "bigint",
+              "non_null": 1434367,
+              "null_rate": 0.005,
+              "ndv": 49711,
+              "min": 1,
+              "max": 50000
+            },
+            "cs_ship_customer_sk": {
+              "type": "bigint",
+              "non_null": 1434267,
+              "null_rate": 0.0051,
+              "ndv": 78332,
+              "min": 1,
+              "max": 100000
+            },
+            "cs_ship_cdemo_sk": {
+              "type": "bigint",
+              "non_null": 1434399,
+              "null_rate": 0.005,
+              "ndv": 153319,
+              "min": 4,
+              "max": 1920765
+            },
+            "cs_ship_hdemo_sk": {
+              "type": "bigint",
+              "non_null": 1434424,
+              "null_rate": 0.0049,
+              "ndv": 6968,
+              "min": 1,
+              "max": 7200
+            },
+            "cs_ship_addr_sk": {
+              "type": "bigint",
+              "non_null": 1434426,
+              "null_rate": 0.0049,
+              "ndv": 49543,
+              "min": 1,
+              "max": 50000
+            },
+            "cs_call_center_sk": {
+              "type": "bigint",
+              "non_null": 1434469,
+              "null_rate": 0.0049,
+              "ndv": 6,
+              "min": 1,
+              "max": 6
+            },
+            "cs_catalog_page_sk": {
+              "type": "bigint",
+              "non_null": 1434363,
+              "null_rate": 0.005,
+              "ndv": 6391,
+              "min": 1,
+              "max": 9828
+            },
+            "cs_ship_mode_sk": {
+              "type": "bigint",
+              "non_null": 1434384,
+              "null_rate": 0.005,
+              "ndv": 20,
+              "min": 1,
+              "max": 20
+            },
+            "cs_warehouse_sk": {
+              "type": "bigint",
+              "non_null": 1434459,
+              "null_rate": 0.0049,
+              "ndv": 5,
+              "min": 1,
+              "max": 5
+            },
+            "cs_item_sk": {
+              "type": "bigint",
+              "non_null": 1441548,
+              "null_rate": 0.0,
+              "ndv": 17975,
+              "min": 1,
+              "max": 18000
+            },
+            "cs_promo_sk": {
+              "type": "bigint",
+              "non_null": 1434413,
+              "null_rate": 0.0049,
+              "ndv": 298,
+              "min": 1,
+              "max": 300
+            },
+            "cs_order_number": {
+              "type": "bigint",
+              "non_null": 1441548,
+              "null_rate": 0.0,
+              "ndv": 160025,
+              "min": 1,
+              "max": 160000
+            },
+            "cs_quantity": {
+              "type": "bigint",
+              "non_null": 1434466,
+              "null_rate": 0.0049,
+              "ndv": 98,
+              "min": 1,
+              "max": 100
+            },
+            "cs_wholesale_cost": {
+              "type": "decimal(7,2)",
+              "non_null": 1434397,
+              "null_rate": 0.005,
+              "ndv": 10196,
+              "min": "1.00",
+              "max": "100.00"
+            },
+            "cs_list_price": {
+              "type": "decimal(7,2)",
+              "non_null": 1434381,
+              "null_rate": 0.005,
+              "ndv": 29189,
+              "min": "1.01",
+              "max": "300.00"
+            },
+            "cs_sales_price": {
+              "type": "decimal(7,2)",
+              "non_null": 1434376,
+              "null_rate": 0.005,
+              "ndv": 25800,
+              "min": "0.00",
+              "max": "297.83"
+            },
+            "cs_ext_discount_amt": {
+              "type": "decimal(7,2)",
+              "non_null": 1434386,
+              "null_rate": 0.005,
+              "ndv": 399205,
+              "min": "0.00",
+              "max": "28300.44"
+            },
+            "cs_ext_sales_price": {
+              "type": "decimal(7,2)",
+              "non_null": 1434324,
+              "null_rate": 0.005,
+              "ndv": 388127,
+              "min": "0.00",
+              "max": "28767.00"
+            },
+            "cs_ext_wholesale_cost": {
+              "type": "decimal(7,2)",
+              "non_null": 1434355,
+              "null_rate": 0.005,
+              "ndv": 338186,
+              "min": "1.01",
+              "max": "9999.00"
+            },
+            "cs_ext_list_price": {
+              "type": "decimal(7,2)",
+              "non_null": 1434385,
+              "null_rate": 0.005,
+              "ndv": 532230,
+              "min": "1.27",
+              "max": "29976.00"
+            },
+            "cs_ext_tax": {
+              "type": "decimal(7,2)",
+              "non_null": 1434433,
+              "null_rate": 0.0049,
+              "ndv": 83306,
+              "min": "0.00",
+              "max": "2416.94"
+            },
+            "cs_coupon_amt": {
+              "type": "decimal(7,2)",
+              "non_null": 1434504,
+              "null_rate": 0.0049,
+              "ndv": 153007,
+              "min": "0.00",
+              "max": "26641.48"
+            },
+            "cs_ext_ship_cost": {
+              "type": "decimal(7,2)",
+              "non_null": 1434279,
+              "null_rate": 0.005,
+              "ndv": 253120,
+              "min": "0.00",
+              "max": "14416.00"
+            },
+            "cs_net_paid": {
+              "type": "decimal(7,2)",
+              "non_null": 1434383,
+              "null_rate": 0.005,
+              "ndv": 425449,
+              "min": "0.00",
+              "max": "28767.00"
+            },
+            "cs_net_paid_inc_tax": {
+              "type": "decimal(7,2)",
+              "non_null": 1434472,
+              "null_rate": 0.0049,
+              "ndv": 537886,
+              "min": "0.00",
+              "max": "30261.56"
+            },
+            "cs_net_paid_inc_ship": {
+              "type": "decimal(7,2)",
+              "non_null": 1441548,
+              "null_rate": 0.0,
+              "ndv": 541295,
+              "min": "0.00",
+              "max": "40364.00"
+            },
+            "cs_net_paid_inc_ship_tax": {
+              "type": "decimal(7,2)",
+              "non_null": 1441548,
+              "null_rate": 0.0,
+              "ndv": 704802,
+              "min": "0.00",
+              "max": "41670.68"
+            },
+            "cs_net_profit": {
+              "type": "decimal(7,2)",
+              "non_null": 1441548,
+              "null_rate": 0.0,
+              "ndv": 502923,
+              "min": "-9897.03",
+              "max": "18950.00"
+            }
+          }
+        },
+        "primary_keys": []
+      },
+      "tpcds.customer": {
+        "stats": {
+          "row_count": 100000,
+          "columns": {
+            "c_customer_sk": {
+              "type": "bigint",
+              "non_null": 100000,
+              "null_rate": 0.0,
+              "ndv": 98850,
+              "min": 1,
+              "max": 100000,
+              "ndv_exact": 100000
+            },
+            "c_customer_id": {
+              "type": "string",
+              "non_null": 100000,
+              "null_rate": 0.0,
+              "ndv": 100107,
+              "min": "AAAAAAAAAAAABAAA",
+              "max": "AAAAAAAAPPPPAAAA",
+              "ndv_exact": 100000
+            },
+            "c_current_cdemo_sk": {
+              "type": "bigint",
+              "non_null": 96562,
+              "null_rate": 0.0344,
+              "ndv": 99975,
+              "min": 17,
+              "max": 1920788
+            },
+            "c_current_hdemo_sk": {
+              "type": "bigint",
+              "non_null": 96569,
+              "null_rate": 0.0343,
+              "ndv": 6968,
+              "min": 1,
+              "max": 7200
+            },
+            "c_current_addr_sk": {
+              "type": "bigint",
+              "non_null": 100000,
+              "null_rate": 0.0,
+              "ndv": 45439,
+              "min": 1,
+              "max": 50000
+            },
+            "c_first_shipto_date_sk": {
+              "type": "bigint",
+              "non_null": 96557,
+              "null_rate": 0.0344,
+              "ndv": 3652,
+              "min": 2449028,
+              "max": 2452678
+            },
+            "c_first_sales_date_sk": {
+              "type": "bigint",
+              "non_null": 96482,
+              "null_rate": 0.0352,
+              "ndv": 3659,
+              "min": 2448998,
+              "max": 2452648
+            },
+            "c_salutation": {
+              "type": "string",
+              "non_null": 96590,
+              "null_rate": 0.0341,
+              "ndv": 6,
+              "min": "Dr.",
+              "max": "Sir"
+            },
+            "c_first_name": {
+              "type": "string",
+              "non_null": 96508,
+              "null_rate": 0.0349,
+              "ndv": 4013,
+              "min": "Aaron",
+              "max": "Zulma"
+            },
+            "c_last_name": {
+              "type": "string",
+              "non_null": 96503,
+              "null_rate": 0.035,
+              "ndv": 4951,
+              "min": "Aaron",
+              "max": "Zuniga"
+            },
+            "c_preferred_cust_flag": {
+              "type": "string",
+              "non_null": 96574,
+              "null_rate": 0.0343,
+              "ndv": 2,
+              "min": "N",
+              "max": "Y"
+            },
+            "c_birth_day": {
+              "type": "bigint",
+              "non_null": 96539,
+              "null_rate": 0.0346,
+              "ndv": 30,
+              "min": 1,
+              "max": 31
+            },
+            "c_birth_month": {
+              "type": "bigint",
+              "non_null": 96551,
+              "null_rate": 0.0345,
+              "ndv": 12,
+              "min": 1,
+              "max": 12
+            },
+            "c_birth_year": {
+              "type": "bigint",
+              "non_null": 96547,
+              "null_rate": 0.0345,
+              "ndv": 69,
+              "min": 1924,
+              "max": 1992
+            },
+            "c_birth_country": {
+              "type": "string",
+              "non_null": 96561,
+              "null_rate": 0.0344,
+              "ndv": 207,
+              "min": "AFGHANISTAN",
+              "max": "ZIMBABWE"
+            },
+            "c_login": {
+              "type": "string",
+              "non_null": 96525,
+              "null_rate": 0.0347,
+              "ndv": 1,
+              "min": "",
+              "max": ""
+            },
+            "c_email_address": {
+              "type": "string",
+              "non_null": 96479,
+              "null_rate": 0.0352,
+              "ndv": 104710,
+              "min": "Aaron.Anderson@0CQ4QUkBY2Q.edu",
+              "max": "Zulma.Carter@MfvjVN43Udd95KeZ.com"
+            },
+            "c_last_review_date_sk": {
+              "type": "int",
+              "non_null": 96516,
+              "null_rate": 0.0348,
+              "ndv": 350,
+              "min": 2452283,
+              "max": 2452648
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "c_customer_sk",
+            "confidence": 0.95
+          },
+          {
+            "column": "c_customer_id",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.customer_address": {
+        "stats": {
+          "row_count": 50000,
+          "columns": {
+            "ca_address_sk": {
+              "type": "bigint",
+              "non_null": 50000,
+              "null_rate": 0.0,
+              "ndv": 51472,
+              "min": 1,
+              "max": 50000,
+              "ndv_exact": 50000
+            },
+            "ca_address_id": {
+              "type": "string",
+              "non_null": 50000,
+              "null_rate": 0.0,
+              "ndv": 51732,
+              "min": "AAAAAAAAAAABAAAA",
+              "max": "AAAAAAAAPPPLAAAA",
+              "ndv_exact": 50000
+            },
+            "ca_street_number": {
+              "type": "string",
+              "non_null": 48468,
+              "null_rate": 0.0306,
+              "ndv": 964,
+              "min": "1",
+              "max": "999"
+            },
+            "ca_street_name": {
+              "type": "string",
+              "non_null": 48521,
+              "null_rate": 0.0296,
+              "ndv": 6865,
+              "min": "10th ",
+              "max": "Woodland Woodland"
+            },
+            "ca_street_type": {
+              "type": "string",
+              "non_null": 48499,
+              "null_rate": 0.03,
+              "ndv": 20,
+              "min": "Ave",
+              "max": "Wy"
+            },
+            "ca_suite_number": {
+              "type": "string",
+              "non_null": 48515,
+              "null_rate": 0.0297,
+              "ndv": 75,
+              "min": "Suite 0",
+              "max": "Suite Y"
+            },
+            "ca_city": {
+              "type": "string",
+              "non_null": 48481,
+              "null_rate": 0.0304,
+              "ndv": 662,
+              "min": "Aberdeen",
+              "max": "Youngstown"
+            },
+            "ca_county": {
+              "type": "string",
+              "non_null": 48536,
+              "null_rate": 0.0293,
+              "ndv": 1825,
+              "min": "Abbeville County",
+              "max": "Ziebach County"
+            },
+            "ca_state": {
+              "type": "string",
+              "non_null": 48450,
+              "null_rate": 0.031,
+              "ndv": 51,
+              "min": "AK",
+              "max": "WY"
+            },
+            "ca_zip": {
+              "type": "string",
+              "non_null": 48461,
+              "null_rate": 0.0308,
+              "ndv": 3984,
+              "min": "00601",
+              "max": "99981"
+            },
+            "ca_country": {
+              "type": "string",
+              "non_null": 48475,
+              "null_rate": 0.0305,
+              "ndv": 1,
+              "min": "United States",
+              "max": "United States"
+            },
+            "ca_gmt_offset": {
+              "type": "decimal(5,2)",
+              "non_null": 48444,
+              "null_rate": 0.0311,
+              "ndv": 6,
+              "min": "-10.00",
+              "max": "-5.00"
+            },
+            "ca_location_type": {
+              "type": "string",
+              "non_null": 48508,
+              "null_rate": 0.0298,
+              "ndv": 3,
+              "min": "apartment",
+              "max": "single family"
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "ca_address_sk",
+            "confidence": 0.95
+          },
+          {
+            "column": "ca_address_id",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.customer_demographics": {
+        "stats": {
+          "row_count": 1920800,
+          "columns": {
+            "cd_demo_sk": {
+              "type": "bigint",
+              "non_null": 1920800,
+              "null_rate": 0.0,
+              "ndv": 1943016,
+              "min": 1,
+              "max": 1920800,
+              "ndv_exact": 1920800
+            },
+            "cd_gender": {
+              "type": "string",
+              "non_null": 1920800,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "F",
+              "max": "M"
+            },
+            "cd_marital_status": {
+              "type": "string",
+              "non_null": 1920800,
+              "null_rate": 0.0,
+              "ndv": 5,
+              "min": "D",
+              "max": "W"
+            },
+            "cd_education_status": {
+              "type": "string",
+              "non_null": 1920800,
+              "null_rate": 0.0,
+              "ndv": 7,
+              "min": "2 yr Degree",
+              "max": "Unknown"
+            },
+            "cd_purchase_estimate": {
+              "type": "bigint",
+              "non_null": 1920800,
+              "null_rate": 0.0,
+              "ndv": 19,
+              "min": 500,
+              "max": 10000
+            },
+            "cd_credit_rating": {
+              "type": "string",
+              "non_null": 1920800,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": "Good",
+              "max": "Unknown"
+            },
+            "cd_dep_count": {
+              "type": "bigint",
+              "non_null": 1920800,
+              "null_rate": 0.0,
+              "ndv": 7,
+              "min": 0,
+              "max": 6
+            },
+            "cd_dep_employed_count": {
+              "type": "bigint",
+              "non_null": 1920800,
+              "null_rate": 0.0,
+              "ndv": 7,
+              "min": 0,
+              "max": 6
+            },
+            "cd_dep_college_count": {
+              "type": "int",
+              "non_null": 1920800,
+              "null_rate": 0.0,
+              "ndv": 7,
+              "min": 0,
+              "max": 6
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "cd_demo_sk",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.date_dim": {
+        "stats": {
+          "row_count": 73049,
+          "columns": {
+            "d_date_sk": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 71277,
+              "min": 2415022,
+              "max": 2488070,
+              "ndv_exact": 73049
+            },
+            "d_date_id": {
+              "type": "string",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 72837,
+              "min": "AAAAAAAAAAAAFCAA",
+              "max": "AAAAAAAAPPPPECAA",
+              "ndv_exact": 73049
+            },
+            "d_date": {
+              "type": "date",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 67399,
+              "min": "1900-01-02",
+              "max": "2100-01-01"
+            },
+            "d_month_seq": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 2447,
+              "min": 0,
+              "max": 2400
+            },
+            "d_week_seq": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 10098,
+              "min": 1,
+              "max": 10436
+            },
+            "d_quarter_seq": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 832,
+              "min": 1,
+              "max": 801
+            },
+            "d_year": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 201,
+              "min": 1900,
+              "max": 2100
+            },
+            "d_dow": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 7,
+              "min": 0,
+              "max": 6
+            },
+            "d_moy": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 12,
+              "min": 1,
+              "max": 12
+            },
+            "d_dom": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 30,
+              "min": 1,
+              "max": 31
+            },
+            "d_qoy": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": 1,
+              "max": 4
+            },
+            "d_fy_year": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 201,
+              "min": 1900,
+              "max": 2100
+            },
+            "d_fy_quarter_seq": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 832,
+              "min": 1,
+              "max": 801
+            },
+            "d_fy_week_seq": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 10098,
+              "min": 1,
+              "max": 10436
+            },
+            "d_day_name": {
+              "type": "string",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 7,
+              "min": "Friday",
+              "max": "Wednesday"
+            },
+            "d_quarter_name": {
+              "type": "string",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 803,
+              "min": "1900Q1",
+              "max": "2100Q1"
+            },
+            "d_holiday": {
+              "type": "string",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "N",
+              "max": "Y"
+            },
+            "d_weekend": {
+              "type": "string",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "N",
+              "max": "Y"
+            },
+            "d_following_holiday": {
+              "type": "string",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "N",
+              "max": "Y"
+            },
+            "d_first_dom": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 2338,
+              "min": 2415021,
+              "max": 2488070
+            },
+            "d_last_dom": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 2337,
+              "min": 2415020,
+              "max": 2488372
+            },
+            "d_same_day_ly": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 71170,
+              "min": 2414657,
+              "max": 2487705
+            },
+            "d_same_day_lq": {
+              "type": "bigint",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 70885,
+              "min": 2414930,
+              "max": 2487978
+            },
+            "d_current_day": {
+              "type": "string",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "N",
+              "max": "N"
+            },
+            "d_current_week": {
+              "type": "string",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "N",
+              "max": "N"
+            },
+            "d_current_month": {
+              "type": "string",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "N",
+              "max": "Y"
+            },
+            "d_current_quarter": {
+              "type": "string",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "N",
+              "max": "Y"
+            },
+            "d_current_year": {
+              "type": "string",
+              "non_null": 73049,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "N",
+              "max": "Y"
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "d_date_sk",
+            "confidence": 0.95
+          },
+          {
+            "column": "d_date_id",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.household_demographics": {
+        "stats": {
+          "row_count": 7200,
+          "columns": {
+            "hd_demo_sk": {
+              "type": "bigint",
+              "non_null": 7200,
+              "null_rate": 0.0,
+              "ndv": 6968,
+              "min": 1,
+              "max": 7200,
+              "ndv_exact": 7200
+            },
+            "hd_income_band_sk": {
+              "type": "bigint",
+              "non_null": 7200,
+              "null_rate": 0.0,
+              "ndv": 20,
+              "min": 1,
+              "max": 20
+            },
+            "hd_buy_potential": {
+              "type": "string",
+              "non_null": 7200,
+              "null_rate": 0.0,
+              "ndv": 6,
+              "min": "0-500",
+              "max": "Unknown"
+            },
+            "hd_dep_count": {
+              "type": "bigint",
+              "non_null": 7200,
+              "null_rate": 0.0,
+              "ndv": 10,
+              "min": 0,
+              "max": 9
+            },
+            "hd_vehicle_count": {
+              "type": "int",
+              "non_null": 7200,
+              "null_rate": 0.0,
+              "ndv": 6,
+              "min": -1,
+              "max": 4
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "hd_demo_sk",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.income_band": {
+        "stats": {
+          "row_count": 20,
+          "columns": {
+            "ib_income_band_sk": {
+              "type": "bigint",
+              "non_null": 20,
+              "null_rate": 0.0,
+              "ndv": 20,
+              "min": 1,
+              "max": 20,
+              "ndv_exact": 20
+            },
+            "ib_lower_bound": {
+              "type": "bigint",
+              "non_null": 20,
+              "null_rate": 0.0,
+              "ndv": 20,
+              "min": 0,
+              "max": 190001
+            },
+            "ib_upper_bound": {
+              "type": "int",
+              "non_null": 20,
+              "null_rate": 0.0,
+              "ndv": 19,
+              "min": 10000,
+              "max": 200000
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "ib_income_band_sk",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.inventory": {
+        "stats": {
+          "row_count": 11745000,
+          "columns": {
+            "inv_date_sk": {
+              "type": "bigint",
+              "non_null": 11745000,
+              "null_rate": 0.0,
+              "ndv": 261,
+              "min": 2450815,
+              "max": 2452635
+            },
+            "inv_item_sk": {
+              "type": "bigint",
+              "non_null": 11745000,
+              "null_rate": 0.0,
+              "ndv": 17975,
+              "min": 1,
+              "max": 18000
+            },
+            "inv_warehouse_sk": {
+              "type": "bigint",
+              "non_null": 11745000,
+              "null_rate": 0.0,
+              "ndv": 5,
+              "min": 1,
+              "max": 5
+            },
+            "inv_quantity_on_hand": {
+              "type": "int",
+              "non_null": 11158087,
+              "null_rate": 0.05,
+              "ndv": 957,
+              "min": 0,
+              "max": 1000
+            }
+          }
+        },
+        "primary_keys": []
+      },
+      "tpcds.item": {
+        "stats": {
+          "row_count": 18000,
+          "columns": {
+            "i_item_sk": {
+              "type": "bigint",
+              "non_null": 18000,
+              "null_rate": 0.0,
+              "ndv": 17975,
+              "min": 1,
+              "max": 18000,
+              "ndv_exact": 18000
+            },
+            "i_item_id": {
+              "type": "string",
+              "non_null": 18000,
+              "null_rate": 0.0,
+              "ndv": 8854,
+              "min": "AAAAAAAAAAABAAAA",
+              "max": "AAAAAAAAPPPBAAAA"
+            },
+            "i_rec_start_date": {
+              "type": "date",
+              "non_null": 17954,
+              "null_rate": 0.0026,
+              "ndv": 4,
+              "min": "1997-10-27",
+              "max": "2001-10-27"
+            },
+            "i_rec_end_date": {
+              "type": "date",
+              "non_null": 9000,
+              "null_rate": 0.5,
+              "ndv": 3,
+              "min": "1999-10-27",
+              "max": "2001-10-26"
+            },
+            "i_item_desc": {
+              "type": "string",
+              "non_null": 17949,
+              "null_rate": 0.0028,
+              "ndv": 12763,
+              "min": "A",
+              "max": "Youngsters decide well numbers. Just cold countries eat other, young eyes. Special "
+            },
+            "i_current_price": {
+              "type": "decimal(7,2)",
+              "non_null": 17955,
+              "null_rate": 0.0025,
+              "ndv": 2712,
+              "min": "0.09",
+              "max": "99.99"
+            },
+            "i_wholesale_cost": {
+              "type": "decimal(7,2)",
+              "non_null": 17954,
+              "null_rate": 0.0026,
+              "ndv": 1933,
+              "min": "0.02",
+              "max": "87.36"
+            },
+            "i_brand_id": {
+              "type": "bigint",
+              "non_null": 17956,
+              "null_rate": 0.0024,
+              "ndv": 930,
+              "min": 1001001,
+              "max": 10016017
+            },
+            "i_brand": {
+              "type": "string",
+              "non_null": 17960,
+              "null_rate": 0.0022,
+              "ndv": 691,
+              "min": "amalgamalg #1",
+              "max": "univunivamalg #9"
+            },
+            "i_class_id": {
+              "type": "bigint",
+              "non_null": 17965,
+              "null_rate": 0.0019,
+              "ndv": 16,
+              "min": 1,
+              "max": 16
+            },
+            "i_class": {
+              "type": "string",
+              "non_null": 17957,
+              "null_rate": 0.0024,
+              "ndv": 99,
+              "min": "accent",
+              "max": "womens watch"
+            },
+            "i_category_id": {
+              "type": "bigint",
+              "non_null": 17958,
+              "null_rate": 0.0023,
+              "ndv": 10,
+              "min": 1,
+              "max": 10
+            },
+            "i_category": {
+              "type": "string",
+              "non_null": 17957,
+              "null_rate": 0.0024,
+              "ndv": 10,
+              "min": "Books",
+              "max": "Women"
+            },
+            "i_manufact_id": {
+              "type": "bigint",
+              "non_null": 17962,
+              "null_rate": 0.0021,
+              "ndv": 1032,
+              "min": 1,
+              "max": 1000
+            },
+            "i_manufact": {
+              "type": "string",
+              "non_null": 17957,
+              "null_rate": 0.0024,
+              "ndv": 1013,
+              "min": "able",
+              "max": "pripripri"
+            },
+            "i_size": {
+              "type": "string",
+              "non_null": 17959,
+              "null_rate": 0.0023,
+              "ndv": 7,
+              "min": "N/A",
+              "max": "small"
+            },
+            "i_formulation": {
+              "type": "string",
+              "non_null": 17957,
+              "null_rate": 0.0024,
+              "ndv": 13420,
+              "min": "00008255peru72877494",
+              "max": "yellow98525476168526"
+            },
+            "i_color": {
+              "type": "string",
+              "non_null": 17955,
+              "null_rate": 0.0025,
+              "ndv": 92,
+              "min": "almond",
+              "max": "yellow"
+            },
+            "i_units": {
+              "type": "string",
+              "non_null": 17957,
+              "null_rate": 0.0024,
+              "ndv": 20,
+              "min": "Box",
+              "max": "Unknown"
+            },
+            "i_container": {
+              "type": "string",
+              "non_null": 17961,
+              "null_rate": 0.0022,
+              "ndv": 1,
+              "min": "Unknown",
+              "max": "Unknown"
+            },
+            "i_manager_id": {
+              "type": "bigint",
+              "non_null": 17959,
+              "null_rate": 0.0023,
+              "ndv": 98,
+              "min": 1,
+              "max": 100
+            },
+            "i_product_name": {
+              "type": "string",
+              "non_null": 17964,
+              "null_rate": 0.002,
+              "ndv": 18046,
+              "min": "able",
+              "max": "pripripripriought"
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "i_item_sk",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.promotion": {
+        "stats": {
+          "row_count": 300,
+          "columns": {
+            "p_promo_sk": {
+              "type": "bigint",
+              "non_null": 300,
+              "null_rate": 0.0,
+              "ndv": 298,
+              "min": 1,
+              "max": 300,
+              "ndv_exact": 300
+            },
+            "p_promo_id": {
+              "type": "string",
+              "non_null": 300,
+              "null_rate": 0.0,
+              "ndv": 310,
+              "min": "AAAAAAAAAABAAAAA",
+              "max": "AAAAAAAAPPAAAAAA",
+              "ndv_exact": 300
+            },
+            "p_start_date_sk": {
+              "type": "bigint",
+              "non_null": 294,
+              "null_rate": 0.02,
+              "ndv": 256,
+              "min": 2450100,
+              "max": 2450913
+            },
+            "p_end_date_sk": {
+              "type": "bigint",
+              "non_null": 294,
+              "null_rate": 0.02,
+              "ndv": 247,
+              "min": 2450132,
+              "max": 2450955
+            },
+            "p_item_sk": {
+              "type": "bigint",
+              "non_null": 293,
+              "null_rate": 0.0233,
+              "ndv": 294,
+              "min": 28,
+              "max": 17926
+            },
+            "p_cost": {
+              "type": "decimal(15,2)",
+              "non_null": 294,
+              "null_rate": 0.02,
+              "ndv": 1,
+              "min": "1000.00",
+              "max": "1000.00"
+            },
+            "p_response_target": {
+              "type": "bigint",
+              "non_null": 293,
+              "null_rate": 0.0233,
+              "ndv": 1,
+              "min": 1,
+              "max": 1
+            },
+            "p_promo_name": {
+              "type": "string",
+              "non_null": 293,
+              "null_rate": 0.0233,
+              "ndv": 10,
+              "min": "able",
+              "max": "pri"
+            },
+            "p_channel_dmail": {
+              "type": "string",
+              "non_null": 295,
+              "null_rate": 0.0167,
+              "ndv": 2,
+              "min": "N",
+              "max": "Y"
+            },
+            "p_channel_email": {
+              "type": "string",
+              "non_null": 295,
+              "null_rate": 0.0167,
+              "ndv": 1,
+              "min": "N",
+              "max": "N"
+            },
+            "p_channel_catalog": {
+              "type": "string",
+              "non_null": 296,
+              "null_rate": 0.0133,
+              "ndv": 1,
+              "min": "N",
+              "max": "N"
+            },
+            "p_channel_tv": {
+              "type": "string",
+              "non_null": 294,
+              "null_rate": 0.02,
+              "ndv": 1,
+              "min": "N",
+              "max": "N"
+            },
+            "p_channel_radio": {
+              "type": "string",
+              "non_null": 294,
+              "null_rate": 0.02,
+              "ndv": 1,
+              "min": "N",
+              "max": "N"
+            },
+            "p_channel_press": {
+              "type": "string",
+              "non_null": 293,
+              "null_rate": 0.0233,
+              "ndv": 1,
+              "min": "N",
+              "max": "N"
+            },
+            "p_channel_event": {
+              "type": "string",
+              "non_null": 296,
+              "null_rate": 0.0133,
+              "ndv": 1,
+              "min": "N",
+              "max": "N"
+            },
+            "p_channel_demo": {
+              "type": "string",
+              "non_null": 297,
+              "null_rate": 0.01,
+              "ndv": 1,
+              "min": "N",
+              "max": "N"
+            },
+            "p_channel_details": {
+              "type": "string",
+              "non_null": 298,
+              "null_rate": 0.0067,
+              "ndv": 299,
+              "min": "About final properties receive. Ach",
+              "max": "Young families act. Most full prizes avert eastern glasses"
+            },
+            "p_purpose": {
+              "type": "string",
+              "non_null": 296,
+              "null_rate": 0.0133,
+              "ndv": 1,
+              "min": "Unknown",
+              "max": "Unknown"
+            },
+            "p_discount_active": {
+              "type": "string",
+              "non_null": 293,
+              "null_rate": 0.0233,
+              "ndv": 1,
+              "min": "N",
+              "max": "N"
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "p_promo_sk",
+            "confidence": 0.95
+          },
+          {
+            "column": "p_promo_id",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.reason": {
+        "stats": {
+          "row_count": 35,
+          "columns": {
+            "r_reason_sk": {
+              "type": "bigint",
+              "non_null": 35,
+              "null_rate": 0.0,
+              "ndv": 34,
+              "min": 1,
+              "max": 35,
+              "ndv_exact": 35
+            },
+            "r_reason_id": {
+              "type": "string",
+              "non_null": 35,
+              "null_rate": 0.0,
+              "ndv": 35,
+              "min": "AAAAAAAAABAAAAAA",
+              "max": "AAAAAAAAPBAAAAAA",
+              "ndv_exact": 35
+            },
+            "r_reason_desc": {
+              "type": "string",
+              "non_null": 35,
+              "null_rate": 0.0,
+              "ndv": 33,
+              "min": "Did not fit",
+              "max": "unauthoized purchase"
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "r_reason_sk",
+            "confidence": 0.95
+          },
+          {
+            "column": "r_reason_id",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.ship_mode": {
+        "stats": {
+          "row_count": 20,
+          "columns": {
+            "sm_ship_mode_sk": {
+              "type": "bigint",
+              "non_null": 20,
+              "null_rate": 0.0,
+              "ndv": 20,
+              "min": 1,
+              "max": 20,
+              "ndv_exact": 20
+            },
+            "sm_ship_mode_id": {
+              "type": "string",
+              "non_null": 20,
+              "null_rate": 0.0,
+              "ndv": 20,
+              "min": "AAAAAAAAABAAAAAA",
+              "max": "AAAAAAAAPAAAAAAA",
+              "ndv_exact": 20
+            },
+            "sm_type": {
+              "type": "string",
+              "non_null": 20,
+              "null_rate": 0.0,
+              "ndv": 6,
+              "min": "EXPRESS",
+              "max": "TWO DAY"
+            },
+            "sm_code": {
+              "type": "string",
+              "non_null": 20,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": "AIR",
+              "max": "SURFACE"
+            },
+            "sm_carrier": {
+              "type": "string",
+              "non_null": 20,
+              "null_rate": 0.0,
+              "ndv": 20,
+              "min": "AIRBORNE",
+              "max": "ZOUROS"
+            },
+            "sm_contract": {
+              "type": "string",
+              "non_null": 20,
+              "null_rate": 0.0,
+              "ndv": 20,
+              "min": "2mM8l",
+              "max": "yVfotg7Tio3MVhBg6Bkn"
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "sm_ship_mode_sk",
+            "confidence": 0.95
+          },
+          {
+            "column": "sm_ship_mode_id",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.store": {
+        "stats": {
+          "row_count": 12,
+          "columns": {
+            "s_store_sk": {
+              "type": "bigint",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 12,
+              "min": 1,
+              "max": 12,
+              "ndv_exact": 12
+            },
+            "s_store_id": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 6,
+              "min": "AAAAAAAABAAAAAAA",
+              "max": "AAAAAAAAKAAAAAAA"
+            },
+            "s_rec_start_date": {
+              "type": "date",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": "1997-03-13",
+              "max": "2001-03-13"
+            },
+            "s_rec_end_date": {
+              "type": "date",
+              "non_null": 6,
+              "null_rate": 0.5,
+              "ndv": 3,
+              "min": "1999-03-13",
+              "max": "2001-03-12"
+            },
+            "s_closed_date_sk": {
+              "type": "bigint",
+              "non_null": 3,
+              "null_rate": 0.75,
+              "ndv": 3,
+              "min": 2450910,
+              "max": 2451189
+            },
+            "s_store_name": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 8,
+              "min": "able",
+              "max": "ought"
+            },
+            "s_number_employees": {
+              "type": "bigint",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 9,
+              "min": 218,
+              "max": 297
+            },
+            "s_floor_space": {
+              "type": "bigint",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 10,
+              "min": 5219562,
+              "max": 9341467
+            },
+            "s_hours": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "8AM-12AM",
+              "max": "8AM-4PM"
+            },
+            "s_manager": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 7,
+              "min": "Brett Yates",
+              "max": "William Ward"
+            },
+            "s_market_id": {
+              "type": "bigint",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 7,
+              "min": 2,
+              "max": 10
+            },
+            "s_geography_class": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "Unknown",
+              "max": "Unknown"
+            },
+            "s_market_desc": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 10,
+              "min": "At all african females might not become able aims. Good, final men tell; cas",
+              "max": "Results would face m"
+            },
+            "s_market_manager": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 7,
+              "min": "Charles Bartley",
+              "max": "Thomas Pollack"
+            },
+            "s_division_id": {
+              "type": "bigint",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": 1,
+              "max": 1
+            },
+            "s_division_name": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "Unknown",
+              "max": "Unknown"
+            },
+            "s_company_id": {
+              "type": "bigint",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": 1,
+              "max": 1
+            },
+            "s_company_name": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "Unknown",
+              "max": "Unknown"
+            },
+            "s_street_number": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 9,
+              "min": "175",
+              "max": "877"
+            },
+            "s_street_name": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 12,
+              "min": "12th ",
+              "max": "Sycamore "
+            },
+            "s_street_type": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 8,
+              "min": "Boulevard",
+              "max": "Wy"
+            },
+            "s_suite_number": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 11,
+              "min": "Suite 100",
+              "max": "Suite T"
+            },
+            "s_city": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "Fairview",
+              "max": "Midway"
+            },
+            "s_county": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "Williamson County",
+              "max": "Williamson County"
+            },
+            "s_state": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "TN",
+              "max": "TN"
+            },
+            "s_zip": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "31904",
+              "max": "35709"
+            },
+            "s_country": {
+              "type": "string",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "United States",
+              "max": "United States"
+            },
+            "s_gmt_offset": {
+              "type": "decimal(5,2)",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "-5.00",
+              "max": "-5.00"
+            },
+            "s_tax_percentage": {
+              "type": "decimal(5,2)",
+              "non_null": 12,
+              "null_rate": 0.0,
+              "ndv": 5,
+              "min": "0.01",
+              "max": "0.11"
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "s_store_sk",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.store_returns": {
+        "stats": {
+          "row_count": 287867,
+          "columns": {
+            "sr_returned_date_sk": {
+              "type": "bigint",
+              "non_null": 277623,
+              "null_rate": 0.0356,
+              "ndv": 2019,
+              "min": 2450820,
+              "max": 2452822
+            },
+            "sr_return_time_sk": {
+              "type": "bigint",
+              "non_null": 277748,
+              "null_rate": 0.0352,
+              "ndv": 33119,
+              "min": 28799,
+              "max": 61199
+            },
+            "sr_item_sk": {
+              "type": "bigint",
+              "non_null": 287867,
+              "null_rate": 0.0,
+              "ndv": 17975,
+              "min": 1,
+              "max": 18000
+            },
+            "sr_customer_sk": {
+              "type": "bigint",
+              "non_null": 277776,
+              "null_rate": 0.0351,
+              "ndv": 85884,
+              "min": 2,
+              "max": 100000
+            },
+            "sr_cdemo_sk": {
+              "type": "bigint",
+              "non_null": 277675,
+              "null_rate": 0.0354,
+              "ndv": 253911,
+              "min": 5,
+              "max": 1920800
+            },
+            "sr_hdemo_sk": {
+              "type": "bigint",
+              "non_null": 277733,
+              "null_rate": 0.0352,
+              "ndv": 6968,
+              "min": 1,
+              "max": 7200
+            },
+            "sr_addr_sk": {
+              "type": "bigint",
+              "non_null": 277654,
+              "null_rate": 0.0355,
+              "ndv": 51250,
+              "min": 1,
+              "max": 50000
+            },
+            "sr_store_sk": {
+              "type": "bigint",
+              "non_null": 277639,
+              "null_rate": 0.0355,
+              "ndv": 6,
+              "min": 1,
+              "max": 10
+            },
+            "sr_reason_sk": {
+              "type": "bigint",
+              "non_null": 277759,
+              "null_rate": 0.0351,
+              "ndv": 34,
+              "min": 1,
+              "max": 35
+            },
+            "sr_ticket_number": {
+              "type": "bigint",
+              "non_null": 287867,
+              "null_rate": 0.0,
+              "ndv": 164426,
+              "min": 1,
+              "max": 240000
+            },
+            "sr_return_quantity": {
+              "type": "bigint",
+              "non_null": 277672,
+              "null_rate": 0.0354,
+              "ndv": 98,
+              "min": 1,
+              "max": 100
+            },
+            "sr_return_amt": {
+              "type": "decimal(7,2)",
+              "non_null": 277682,
+              "null_rate": 0.0354,
+              "ndv": 114780,
+              "min": "0.00",
+              "max": "17202.21"
+            },
+            "sr_return_tax": {
+              "type": "decimal(7,2)",
+              "non_null": 277667,
+              "null_rate": 0.0354,
+              "ndv": 28932,
+              "min": "0.00",
+              "max": "1442.07"
+            },
+            "sr_return_amt_inc_tax": {
+              "type": "decimal(7,2)",
+              "non_null": 277702,
+              "null_rate": 0.0353,
+              "ndv": 140073,
+              "min": "0.00",
+              "max": "17565.05"
+            },
+            "sr_fee": {
+              "type": "decimal(7,2)",
+              "non_null": 277699,
+              "null_rate": 0.0353,
+              "ndv": 10256,
+              "min": "0.50",
+              "max": "100.00"
+            },
+            "sr_return_ship_cost": {
+              "type": "decimal(7,2)",
+              "non_null": 277623,
+              "null_rate": 0.0356,
+              "ndv": 82535,
+              "min": "0.00",
+              "max": "8710.98"
+            },
+            "sr_refunded_cash": {
+              "type": "decimal(7,2)",
+              "non_null": 277615,
+              "null_rate": 0.0356,
+              "ndv": 101053,
+              "min": "0.00",
+              "max": "15603.05"
+            },
+            "sr_reversed_charge": {
+              "type": "decimal(7,2)",
+              "non_null": 277792,
+              "null_rate": 0.035,
+              "ndv": 77090,
+              "min": "0.00",
+              "max": "10981.28"
+            },
+            "sr_store_credit": {
+              "type": "decimal(7,2)",
+              "non_null": 277751,
+              "null_rate": 0.0351,
+              "ndv": 69561,
+              "min": "0.00",
+              "max": "11761.45"
+            },
+            "sr_net_loss": {
+              "type": "decimal(7,2)",
+              "non_null": 277598,
+              "null_rate": 0.0357,
+              "ndv": 118671,
+              "min": "1.03",
+              "max": "9218.97"
+            }
+          }
+        },
+        "primary_keys": []
+      },
+      "tpcds.store_sales": {
+        "stats": {
+          "row_count": 2880404,
+          "columns": {
+            "ss_sold_date_sk": {
+              "type": "bigint",
+              "non_null": 2750554,
+              "null_rate": 0.0451,
+              "ndv": 1771,
+              "min": 2450816,
+              "max": 2452642
+            },
+            "ss_sold_time_sk": {
+              "type": "bigint",
+              "non_null": 2751238,
+              "null_rate": 0.0448,
+              "ndv": 47223,
+              "min": 28800,
+              "max": 75599
+            },
+            "ss_item_sk": {
+              "type": "bigint",
+              "non_null": 2880404,
+              "null_rate": 0.0,
+              "ndv": 17975,
+              "min": 1,
+              "max": 18000
+            },
+            "ss_customer_sk": {
+              "type": "bigint",
+              "non_null": 2751012,
+              "null_rate": 0.0449,
+              "ndv": 89961,
+              "min": 1,
+              "max": 100000
+            },
+            "ss_cdemo_sk": {
+              "type": "bigint",
+              "non_null": 2751117,
+              "null_rate": 0.0449,
+              "ndv": 228653,
+              "min": 15,
+              "max": 1920797
+            },
+            "ss_hdemo_sk": {
+              "type": "bigint",
+              "non_null": 2750821,
+              "null_rate": 0.045,
+              "ndv": 6968,
+              "min": 1,
+              "max": 7200
+            },
+            "ss_addr_sk": {
+              "type": "bigint",
+              "non_null": 2750741,
+              "null_rate": 0.045,
+              "ndv": 51162,
+              "min": 1,
+              "max": 50000
+            },
+            "ss_store_sk": {
+              "type": "bigint",
+              "non_null": 2750943,
+              "null_rate": 0.0449,
+              "ndv": 6,
+              "min": 1,
+              "max": 10
+            },
+            "ss_promo_sk": {
+              "type": "bigint",
+              "non_null": 2751222,
+              "null_rate": 0.0448,
+              "ndv": 298,
+              "min": 1,
+              "max": 300
+            },
+            "ss_ticket_number": {
+              "type": "bigint",
+              "non_null": 2880404,
+              "null_rate": 0.0,
+              "ndv": 240553,
+              "min": 1,
+              "max": 240000
+            },
+            "ss_quantity": {
+              "type": "bigint",
+              "non_null": 2750566,
+              "null_rate": 0.0451,
+              "ndv": 98,
+              "min": 1,
+              "max": 100
+            },
+            "ss_wholesale_cost": {
+              "type": "decimal(7,2)",
+              "non_null": 2750428,
+              "null_rate": 0.0451,
+              "ndv": 10196,
+              "min": "1.00",
+              "max": "100.00"
+            },
+            "ss_list_price": {
+              "type": "decimal(7,2)",
+              "non_null": 2750716,
+              "null_rate": 0.045,
+              "ndv": 20219,
+              "min": "1.00",
+              "max": "200.00"
+            },
+            "ss_sales_price": {
+              "type": "decimal(7,2)",
+              "non_null": 2750660,
+              "null_rate": 0.045,
+              "ndv": 19133,
+              "min": "0.00",
+              "max": "199.56"
+            },
+            "ss_ext_discount_amt": {
+              "type": "decimal(7,2)",
+              "non_null": 2750762,
+              "null_rate": 0.045,
+              "ndv": 209847,
+              "min": "0.00",
+              "max": "17588.25"
+            },
+            "ss_ext_sales_price": {
+              "type": "decimal(7,2)",
+              "non_null": 2750267,
+              "null_rate": 0.0452,
+              "ndv": 420824,
+              "min": "0.00",
+              "max": "19308.00"
+            },
+            "ss_ext_wholesale_cost": {
+              "type": "decimal(7,2)",
+              "non_null": 2750612,
+              "null_rate": 0.0451,
+              "ndv": 382303,
+              "min": "1.00",
+              "max": "10000.00"
+            },
+            "ss_ext_list_price": {
+              "type": "decimal(7,2)",
+              "non_null": 2750947,
+              "null_rate": 0.0449,
+              "ndv": 592206,
+              "min": "1.06",
+              "max": "19984.00"
+            },
+            "ss_ext_tax": {
+              "type": "decimal(7,2)",
+              "non_null": 2750451,
+              "null_rate": 0.0451,
+              "ndv": 78948,
+              "min": "0.00",
+              "max": "1749.87"
+            },
+            "ss_coupon_amt": {
+              "type": "decimal(7,2)",
+              "non_null": 2751185,
+              "null_rate": 0.0449,
+              "ndv": 212250,
+              "min": "0.00",
+              "max": "17588.25"
+            },
+            "ss_net_paid": {
+              "type": "decimal(7,2)",
+              "non_null": 2750788,
+              "null_rate": 0.045,
+              "ndv": 463316,
+              "min": "0.00",
+              "max": "19443.00"
+            },
+            "ss_net_paid_inc_tax": {
+              "type": "decimal(7,2)",
+              "non_null": 2750462,
+              "null_rate": 0.0451,
+              "ndv": 620398,
+              "min": "0.00",
+              "max": "20669.67"
+            },
+            "ss_net_profit": {
+              "type": "decimal(7,2)",
+              "non_null": 2750831,
+              "null_rate": 0.045,
+              "ndv": 566574,
+              "min": "-9969.53",
+              "max": "9407.00"
+            }
+          }
+        },
+        "primary_keys": []
+      },
+      "tpcds.time_dim": {
+        "stats": {
+          "row_count": 86400,
+          "columns": {
+            "t_time_sk": {
+              "type": "bigint",
+              "non_null": 86400,
+              "null_rate": 0.0,
+              "ndv": 85450,
+              "min": 0,
+              "max": 86399,
+              "ndv_exact": 86400
+            },
+            "t_time_id": {
+              "type": "string",
+              "non_null": 86400,
+              "null_rate": 0.0,
+              "ndv": 86285,
+              "min": "AAAAAAAAAAAABAAA",
+              "max": "AAAAAAAAPPPPAAAA",
+              "ndv_exact": 86400
+            },
+            "t_time": {
+              "type": "bigint",
+              "non_null": 86400,
+              "null_rate": 0.0,
+              "ndv": 85450,
+              "min": 0,
+              "max": 86399
+            },
+            "t_hour": {
+              "type": "bigint",
+              "non_null": 86400,
+              "null_rate": 0.0,
+              "ndv": 24,
+              "min": 0,
+              "max": 23
+            },
+            "t_minute": {
+              "type": "bigint",
+              "non_null": 86400,
+              "null_rate": 0.0,
+              "ndv": 59,
+              "min": 0,
+              "max": 59
+            },
+            "t_second": {
+              "type": "bigint",
+              "non_null": 86400,
+              "null_rate": 0.0,
+              "ndv": 59,
+              "min": 0,
+              "max": 59
+            },
+            "t_am_pm": {
+              "type": "string",
+              "non_null": 86400,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "AM",
+              "max": "PM"
+            },
+            "t_shift": {
+              "type": "string",
+              "non_null": 86400,
+              "null_rate": 0.0,
+              "ndv": 3,
+              "min": "first",
+              "max": "third"
+            },
+            "t_sub_shift": {
+              "type": "string",
+              "non_null": 86400,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": "afternoon",
+              "max": "night"
+            },
+            "t_meal_time": {
+              "type": "string",
+              "non_null": 86400,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": "",
+              "max": "lunch"
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "t_time_sk",
+            "confidence": 0.95
+          },
+          {
+            "column": "t_time_id",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.warehouse": {
+        "stats": {
+          "row_count": 5,
+          "columns": {
+            "w_warehouse_sk": {
+              "type": "bigint",
+              "non_null": 5,
+              "null_rate": 0.0,
+              "ndv": 5,
+              "min": 1,
+              "max": 5,
+              "ndv_exact": 5
+            },
+            "w_warehouse_id": {
+              "type": "string",
+              "non_null": 5,
+              "null_rate": 0.0,
+              "ndv": 5,
+              "min": "AAAAAAAABAAAAAAA",
+              "max": "AAAAAAAAFAAAAAAA",
+              "ndv_exact": 5
+            },
+            "w_warehouse_name": {
+              "type": "string",
+              "non_null": 4,
+              "null_rate": 0.2,
+              "ndv": 4,
+              "min": "Conventional childr",
+              "max": "Terms overcome instr"
+            },
+            "w_warehouse_sq_ft": {
+              "type": "bigint",
+              "non_null": 4,
+              "null_rate": 0.2,
+              "ndv": 4,
+              "min": 138504,
+              "max": 977787
+            },
+            "w_street_number": {
+              "type": "string",
+              "non_null": 4,
+              "null_rate": 0.2,
+              "ndv": 4,
+              "min": "368",
+              "max": "651"
+            },
+            "w_street_name": {
+              "type": "string",
+              "non_null": 4,
+              "null_rate": 0.2,
+              "ndv": 4,
+              "min": "6th ",
+              "max": "Wilson Elm"
+            },
+            "w_street_type": {
+              "type": "string",
+              "non_null": 4,
+              "null_rate": 0.2,
+              "ndv": 4,
+              "min": "Avenue",
+              "max": "Parkway"
+            },
+            "w_suite_number": {
+              "type": "string",
+              "non_null": 4,
+              "null_rate": 0.2,
+              "ndv": 4,
+              "min": "Suite 0",
+              "max": "Suite P"
+            },
+            "w_city": {
+              "type": "string",
+              "non_null": 5,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "Fairview",
+              "max": "Fairview"
+            },
+            "w_county": {
+              "type": "string",
+              "non_null": 5,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "Williamson County",
+              "max": "Williamson County"
+            },
+            "w_state": {
+              "type": "string",
+              "non_null": 5,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "TN",
+              "max": "TN"
+            },
+            "w_zip": {
+              "type": "string",
+              "non_null": 5,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "35709",
+              "max": "35709"
+            },
+            "w_country": {
+              "type": "string",
+              "non_null": 5,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "United States",
+              "max": "United States"
+            },
+            "w_gmt_offset": {
+              "type": "decimal(5,2)",
+              "non_null": 4,
+              "null_rate": 0.2,
+              "ndv": 1,
+              "min": "-5.00",
+              "max": "-5.00"
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "w_warehouse_sk",
+            "confidence": 0.95
+          },
+          {
+            "column": "w_warehouse_id",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.web_page": {
+        "stats": {
+          "row_count": 60,
+          "columns": {
+            "wp_web_page_sk": {
+              "type": "bigint",
+              "non_null": 60,
+              "null_rate": 0.0,
+              "ndv": 59,
+              "min": 1,
+              "max": 60,
+              "ndv_exact": 60
+            },
+            "wp_web_page_id": {
+              "type": "string",
+              "non_null": 60,
+              "null_rate": 0.0,
+              "ndv": 30,
+              "min": "AAAAAAAAABAAAAAA",
+              "max": "AAAAAAAAPBAAAAAA"
+            },
+            "wp_rec_start_date": {
+              "type": "date",
+              "non_null": 60,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": "1997-09-03",
+              "max": "2001-09-03"
+            },
+            "wp_rec_end_date": {
+              "type": "date",
+              "non_null": 30,
+              "null_rate": 0.5,
+              "ndv": 3,
+              "min": "1999-09-03",
+              "max": "2001-09-02"
+            },
+            "wp_creation_date_sk": {
+              "type": "bigint",
+              "non_null": 59,
+              "null_rate": 0.0167,
+              "ndv": 9,
+              "min": 2450807,
+              "max": 2450815
+            },
+            "wp_access_date_sk": {
+              "type": "bigint",
+              "non_null": 60,
+              "null_rate": 0.0,
+              "ndv": 40,
+              "min": 2452549,
+              "max": 2452648
+            },
+            "wp_autogen_flag": {
+              "type": "string",
+              "non_null": 60,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "N",
+              "max": "Y"
+            },
+            "wp_customer_sk": {
+              "type": "bigint",
+              "non_null": 21,
+              "null_rate": 0.65,
+              "ndv": 17,
+              "min": 1898,
+              "max": 98633
+            },
+            "wp_url": {
+              "type": "string",
+              "non_null": 60,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "http://www.foo.com",
+              "max": "http://www.foo.com"
+            },
+            "wp_type": {
+              "type": "string",
+              "non_null": 59,
+              "null_rate": 0.0167,
+              "ndv": 7,
+              "min": "ad",
+              "max": "welcome"
+            },
+            "wp_char_count": {
+              "type": "bigint",
+              "non_null": 59,
+              "null_rate": 0.0167,
+              "ndv": 42,
+              "min": 701,
+              "max": 7046
+            },
+            "wp_link_count": {
+              "type": "bigint",
+              "non_null": 59,
+              "null_rate": 0.0167,
+              "ndv": 21,
+              "min": 2,
+              "max": 25
+            },
+            "wp_image_count": {
+              "type": "bigint",
+              "non_null": 59,
+              "null_rate": 0.0167,
+              "ndv": 7,
+              "min": 1,
+              "max": 7
+            },
+            "wp_max_ad_count": {
+              "type": "int",
+              "non_null": 59,
+              "null_rate": 0.0167,
+              "ndv": 5,
+              "min": 0,
+              "max": 4
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "wp_web_page_sk",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "tpcds.web_returns": {
+        "stats": {
+          "row_count": 71654,
+          "columns": {
+            "wr_returned_date_sk": {
+              "type": "bigint",
+              "non_null": 68461,
+              "null_rate": 0.0446,
+              "ndv": 2137,
+              "min": 2450841,
+              "max": 2452994
+            },
+            "wr_returned_time_sk": {
+              "type": "bigint",
+              "non_null": 68416,
+              "null_rate": 0.0452,
+              "ndv": 44192,
+              "min": 14,
+              "max": 86398
+            },
+            "wr_item_sk": {
+              "type": "bigint",
+              "non_null": 71654,
+              "null_rate": 0.0,
+              "ndv": 16464,
+              "min": 1,
+              "max": 18000
+            },
+            "wr_refunded_customer_sk": {
+              "type": "bigint",
+              "non_null": 68515,
+              "null_rate": 0.0438,
+              "ndv": 50059,
+              "min": 2,
+              "max": 99999
+            },
+            "wr_refunded_cdemo_sk": {
+              "type": "bigint",
+              "non_null": 68524,
+              "null_rate": 0.0437,
+              "ndv": 67422,
+              "min": 24,
+              "max": 1920785
+            },
+            "wr_refunded_hdemo_sk": {
+              "type": "bigint",
+              "non_null": 68540,
+              "null_rate": 0.0435,
+              "ndv": 6968,
+              "min": 1,
+              "max": 7200
+            },
+            "wr_refunded_addr_sk": {
+              "type": "bigint",
+              "non_null": 68544,
+              "null_rate": 0.0434,
+              "ndv": 37866,
+              "min": 1,
+              "max": 50000
+            },
+            "wr_returning_customer_sk": {
+              "type": "bigint",
+              "non_null": 68451,
+              "null_rate": 0.0447,
+              "ndv": 50009,
+              "min": 2,
+              "max": 99999
+            },
+            "wr_returning_cdemo_sk": {
+              "type": "bigint",
+              "non_null": 68552,
+              "null_rate": 0.0433,
+              "ndv": 66867,
+              "min": 24,
+              "max": 1920785
+            },
+            "wr_returning_hdemo_sk": {
+              "type": "bigint",
+              "non_null": 68423,
+              "null_rate": 0.0451,
+              "ndv": 6968,
+              "min": 1,
+              "max": 7200
+            },
+            "wr_returning_addr_sk": {
+              "type": "bigint",
+              "non_null": 68479,
+              "null_rate": 0.0443,
+              "ndv": 37665,
+              "min": 1,
+              "max": 50000
+            },
+            "wr_web_page_sk": {
+              "type": "bigint",
+              "non_null": 68451,
+              "null_rate": 0.0447,
+              "ndv": 59,
+              "min": 1,
+              "max": 60
+            },
+            "wr_reason_sk": {
+              "type": "bigint",
+              "non_null": 68529,
+              "null_rate": 0.0436,
+              "ndv": 34,
+              "min": 1,
+              "max": 35
+            },
+            "wr_order_number": {
+              "type": "bigint",
+              "non_null": 71654,
+              "null_rate": 0.0,
+              "ndv": 42300,
+              "min": 1,
+              "max": 59999
+            },
+            "wr_return_quantity": {
+              "type": "bigint",
+              "non_null": 68476,
+              "null_rate": 0.0444,
+              "ndv": 98,
+              "min": 1,
+              "max": 100
+            },
+            "wr_return_amt": {
+              "type": "decimal(7,2)",
+              "non_null": 68495,
+              "null_rate": 0.0441,
+              "ndv": 49546,
+              "min": "0.00",
+              "max": "21564.80"
+            },
+            "wr_return_tax": {
+              "type": "decimal(7,2)",
+              "non_null": 68545,
+              "null_rate": 0.0434,
+              "ndv": 18552,
+              "min": "0.00",
+              "max": "1833.66"
+            },
+            "wr_return_amt_inc_tax": {
+              "type": "decimal(7,2)",
+              "non_null": 68528,
+              "null_rate": 0.0436,
+              "ndv": 55718,
+              "min": "0.00",
+              "max": "23002.73"
+            },
+            "wr_fee": {
+              "type": "decimal(7,2)",
+              "non_null": 68515,
+              "null_rate": 0.0438,
+              "ndv": 10246,
+              "min": "0.50",
+              "max": "100.00"
+            },
+            "wr_return_ship_cost": {
+              "type": "decimal(7,2)",
+              "non_null": 68503,
+              "null_rate": 0.044,
+              "ndv": 40887,
+              "min": "0.00",
+              "max": "11690.44"
+            },
+            "wr_refunded_cash": {
+              "type": "decimal(7,2)",
+              "non_null": 68448,
+              "null_rate": 0.0447,
+              "ndv": 43512,
+              "min": "0.00",
+              "max": "17806.09"
+            },
+            "wr_reversed_charge": {
+              "type": "decimal(7,2)",
+              "non_null": 68476,
+              "null_rate": 0.0444,
+              "ndv": 33833,
+              "min": "0.00",
+              "max": "14901.40"
+            },
+            "wr_account_credit": {
+              "type": "decimal(7,2)",
+              "non_null": 68446,
+              "null_rate": 0.0448,
+              "ndv": 35602,
+              "min": "0.00",
+              "max": "12543.96"
+            },
+            "wr_net_loss": {
+              "type": "decimal(7,2)",
+              "non_null": 68529,
+              "null_rate": 0.0436,
+              "ndv": 50870,
+              "min": "0.52",
+              "max": "11910.44"
+            }
+          }
+        },
+        "primary_keys": []
+      },
+      "tpcds.web_sales": {
+        "stats": {
+          "row_count": 719384,
+          "columns": {
+            "ws_sold_date_sk": {
+              "type": "bigint",
+              "non_null": 719199,
+              "null_rate": 0.0003,
+              "ndv": 1771,
+              "min": 2450816,
+              "max": 2452642
+            },
+            "ws_sold_time_sk": {
+              "type": "bigint",
+              "non_null": 719199,
+              "null_rate": 0.0003,
+              "ndv": 44202,
+              "min": 7,
+              "max": 86367
+            },
+            "ws_ship_date_sk": {
+              "type": "bigint",
+              "non_null": 719213,
+              "null_rate": 0.0002,
+              "ndv": 1943,
+              "min": 2450818,
+              "max": 2452762
+            },
+            "ws_item_sk": {
+              "type": "bigint",
+              "non_null": 719384,
+              "null_rate": 0.0,
+              "ndv": 17975,
+              "min": 1,
+              "max": 18000
+            },
+            "ws_bill_customer_sk": {
+              "type": "bigint",
+              "non_null": 719214,
+              "null_rate": 0.0002,
+              "ndv": 45704,
+              "min": 2,
+              "max": 100000
+            },
+            "ws_bill_cdemo_sk": {
+              "type": "bigint",
+              "non_null": 719214,
+              "null_rate": 0.0002,
+              "ndv": 58133,
+              "min": 31,
+              "max": 1920747
+            },
+            "ws_bill_hdemo_sk": {
+              "type": "bigint",
+              "non_null": 719207,
+              "null_rate": 0.0002,
+              "ndv": 6960,
+              "min": 1,
+              "max": 7200
+            },
+            "ws_bill_addr_sk": {
+              "type": "bigint",
+              "non_null": 719215,
+              "null_rate": 0.0002,
+              "ndv": 37023,
+              "min": 1,
+              "max": 50000
+            },
+            "ws_ship_customer_sk": {
+              "type": "bigint",
+              "non_null": 719214,
+              "null_rate": 0.0002,
+              "ndv": 47627,
+              "min": 3,
+              "max": 99999
+            },
+            "ws_ship_cdemo_sk": {
+              "type": "bigint",
+              "non_null": 719204,
+              "null_rate": 0.0003,
+              "ndv": 61437,
+              "min": 12,
+              "max": 1920761
+            },
+            "ws_ship_hdemo_sk": {
+              "type": "bigint",
+              "non_null": 719220,
+              "null_rate": 0.0002,
+              "ndv": 6968,
+              "min": 1,
+              "max": 7200
+            },
+            "ws_ship_addr_sk": {
+              "type": "bigint",
+              "non_null": 719213,
+              "null_rate": 0.0002,
+              "ndv": 34894,
+              "min": 1,
+              "max": 50000
+            },
+            "ws_web_page_sk": {
+              "type": "bigint",
+              "non_null": 719209,
+              "null_rate": 0.0002,
+              "ndv": 59,
+              "min": 1,
+              "max": 60
+            },
+            "ws_web_site_sk": {
+              "type": "bigint",
+              "non_null": 719211,
+              "null_rate": 0.0002,
+              "ndv": 30,
+              "min": 1,
+              "max": 30
+            },
+            "ws_ship_mode_sk": {
+              "type": "bigint",
+              "non_null": 719209,
+              "null_rate": 0.0002,
+              "ndv": 20,
+              "min": 1,
+              "max": 20
+            },
+            "ws_warehouse_sk": {
+              "type": "bigint",
+              "non_null": 719215,
+              "null_rate": 0.0002,
+              "ndv": 5,
+              "min": 1,
+              "max": 5
+            },
+            "ws_promo_sk": {
+              "type": "bigint",
+              "non_null": 719202,
+              "null_rate": 0.0003,
+              "ndv": 298,
+              "min": 1,
+              "max": 300
+            },
+            "ws_order_number": {
+              "type": "bigint",
+              "non_null": 719384,
+              "null_rate": 0.0,
+              "ndv": 59774,
+              "min": 1,
+              "max": 60000
+            },
+            "ws_quantity": {
+              "type": "bigint",
+              "non_null": 719211,
+              "null_rate": 0.0002,
+              "ndv": 98,
+              "min": 1,
+              "max": 100
+            },
+            "ws_wholesale_cost": {
+              "type": "decimal(7,2)",
+              "non_null": 719221,
+              "null_rate": 0.0002,
+              "ndv": 10196,
+              "min": "1.00",
+              "max": "100.00"
+            },
+            "ws_list_price": {
+              "type": "decimal(7,2)",
+              "non_null": 719204,
+              "null_rate": 0.0003,
+              "ndv": 28829,
+              "min": "1.01",
+              "max": "300.00"
+            },
+            "ws_sales_price": {
+              "type": "decimal(7,2)",
+              "non_null": 719214,
+              "null_rate": 0.0002,
+              "ndv": 24760,
+              "min": "0.00",
+              "max": "299.16"
+            },
+            "ws_ext_discount_amt": {
+              "type": "decimal(7,2)",
+              "non_null": 719212,
+              "null_rate": 0.0002,
+              "ndv": 284784,
+              "min": "0.00",
+              "max": "29317.00"
+            },
+            "ws_ext_sales_price": {
+              "type": "decimal(7,2)",
+              "non_null": 719212,
+              "null_rate": 0.0002,
+              "ndv": 276304,
+              "min": "0.00",
+              "max": "28592.19"
+            },
+            "ws_ext_wholesale_cost": {
+              "type": "decimal(7,2)",
+              "non_null": 719203,
+              "null_rate": 0.0003,
+              "ndv": 273091,
+              "min": "1.00",
+              "max": "10000.00"
+            },
+            "ws_ext_list_price": {
+              "type": "decimal(7,2)",
+              "non_null": 719197,
+              "null_rate": 0.0003,
+              "ndv": 396737,
+              "min": "1.11",
+              "max": "29471.31"
+            },
+            "ws_ext_tax": {
+              "type": "decimal(7,2)",
+              "non_null": 719207,
+              "null_rate": 0.0002,
+              "ndv": 67390,
+              "min": "0.00",
+              "max": "2433.41"
+            },
+            "ws_coupon_amt": {
+              "type": "decimal(7,2)",
+              "non_null": 719194,
+              "null_rate": 0.0003,
+              "ndv": 96307,
+              "min": "0.00",
+              "max": "26909.62"
+            },
+            "ws_ext_ship_cost": {
+              "type": "decimal(7,2)",
+              "non_null": 719195,
+              "null_rate": 0.0003,
+              "ndv": 208880,
+              "min": "0.00",
+              "max": "14231.25"
+            },
+            "ws_net_paid": {
+              "type": "decimal(7,2)",
+              "non_null": 719225,
+              "null_rate": 0.0002,
+              "ndv": 287904,
+              "min": "0.00",
+              "max": "28538.37"
+            },
+            "ws_net_paid_inc_tax": {
+              "type": "decimal(7,2)",
+              "non_null": 719205,
+              "null_rate": 0.0002,
+              "ndv": 359782,
+              "min": "0.00",
+              "max": "30821.43"
+            },
+            "ws_net_paid_inc_ship": {
+              "type": "decimal(7,2)",
+              "non_null": 719384,
+              "null_rate": 0.0,
+              "ndv": 378955,
+              "min": "0.00",
+              "max": "41222.09"
+            },
+            "ws_net_paid_inc_ship_tax": {
+              "type": "decimal(7,2)",
+              "non_null": 719384,
+              "null_rate": 0.0,
+              "ndv": 478554,
+              "min": "0.00",
+              "max": "43505.15"
+            },
+            "ws_net_profit": {
+              "type": "decimal(7,2)",
+              "non_null": 719384,
+              "null_rate": 0.0,
+              "ndv": 316678,
+              "min": "-9938.00",
+              "max": "18864.56"
+            }
+          }
+        },
+        "primary_keys": []
+      },
+      "tpcds.web_site": {
+        "stats": {
+          "row_count": 30,
+          "columns": {
+            "web_site_sk": {
+              "type": "bigint",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 30,
+              "min": 1,
+              "max": 30,
+              "ndv_exact": 30
+            },
+            "web_site_id": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 15,
+              "min": "AAAAAAAAABAAAAAA",
+              "max": "AAAAAAAAOAAAAAAA"
+            },
+            "web_rec_start_date": {
+              "type": "date",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 4,
+              "min": "1997-08-16",
+              "max": "2001-08-16"
+            },
+            "web_rec_end_date": {
+              "type": "date",
+              "non_null": 15,
+              "null_rate": 0.5,
+              "ndv": 3,
+              "min": "1999-08-16",
+              "max": "2001-08-15"
+            },
+            "web_name": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 5,
+              "min": "site_0",
+              "max": "site_4"
+            },
+            "web_open_date_sk": {
+              "type": "bigint",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 15,
+              "min": 2450577,
+              "max": 2450807
+            },
+            "web_close_date_sk": {
+              "type": "bigint",
+              "non_null": 25,
+              "null_rate": 0.1667,
+              "ndv": 9,
+              "min": 2446944,
+              "max": 2448956
+            },
+            "web_class": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "Unknown",
+              "max": "Unknown"
+            },
+            "web_manager": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 21,
+              "min": "Arnoldo Reed",
+              "max": "William Carter"
+            },
+            "web_mkt_id": {
+              "type": "bigint",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 6,
+              "min": 1,
+              "max": 6
+            },
+            "web_mkt_class": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 23,
+              "min": "Components take even levels. Also ",
+              "max": "Years arrest quite different contexts; ani"
+            },
+            "web_mkt_desc": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 26,
+              "min": "Above possible winners shall add sure, beneficial others",
+              "max": "Young weeks would resign. Lessons might not assess a"
+            },
+            "web_market_manager": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 24,
+              "min": "Albert Leung",
+              "max": "William Reyes"
+            },
+            "web_company_id": {
+              "type": "bigint",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 6,
+              "min": 1,
+              "max": 6
+            },
+            "web_company_name": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 6,
+              "min": "able",
+              "max": "pri"
+            },
+            "web_street_number": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 23,
+              "min": "184",
+              "max": "973"
+            },
+            "web_street_name": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 30,
+              "min": "11th ",
+              "max": "Wilson Ridge"
+            },
+            "web_street_type": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 15,
+              "min": "Avenue",
+              "max": "Wy"
+            },
+            "web_suite_number": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 23,
+              "min": "Suite 100",
+              "max": "Suite U"
+            },
+            "web_city": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "Fairview",
+              "max": "Midway"
+            },
+            "web_county": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "Williamson County",
+              "max": "Williamson County"
+            },
+            "web_state": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "TN",
+              "max": "TN"
+            },
+            "web_zip": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 2,
+              "min": "31904",
+              "max": "35709"
+            },
+            "web_country": {
+              "type": "string",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "United States",
+              "max": "United States"
+            },
+            "web_gmt_offset": {
+              "type": "decimal(5,2)",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 1,
+              "min": "-5.00",
+              "max": "-5.00"
+            },
+            "web_tax_percentage": {
+              "type": "decimal(5,2)",
+              "non_null": 30,
+              "null_rate": 0.0,
+              "ndv": 11,
+              "min": "0.00",
+              "max": "0.12"
+            }
+          }
+        },
+        "primary_keys": [
+          {
+            "column": "web_site_sk",
+            "confidence": 0.95
+          }
+        ]
+      }
+    },
+    "relationships": [
+      {
+        "from": "tpcds.call_center",
+        "from_column": "cc_open_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 3,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_page",
+        "from_column": "cp_start_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 91,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_page",
+        "from_column": "cp_end_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 97,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_returned_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 2055,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_returned_time_sk",
+        "to": "tpcds.time_dim",
+        "to_column": "t_time_sk",
+        "name_score": 1.0,
+        "distinct_values": 64982,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_item_sk",
+        "to": "tpcds.item",
+        "to_column": "i_item_sk",
+        "name_score": 1.0,
+        "distinct_values": 17862,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_refunded_customer_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 1.0,
+        "distinct_values": 60390,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_refunded_cdemo_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 90815,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_refunded_hdemo_sk",
+        "to": "tpcds.household_demographics",
+        "to_column": "hd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 7200,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_refunded_addr_sk",
+        "to": "tpcds.customer_address",
+        "to_column": "ca_address_sk",
+        "name_score": 0.9,
+        "distinct_values": 42305,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_returning_customer_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 1.0,
+        "distinct_values": 75394,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_returning_cdemo_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 135381,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_returning_hdemo_sk",
+        "to": "tpcds.household_demographics",
+        "to_column": "hd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 7200,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_returning_addr_sk",
+        "to": "tpcds.customer_address",
+        "to_column": "ca_address_sk",
+        "name_score": 0.9,
+        "distinct_values": 46970,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_call_center_sk",
+        "to": "tpcds.call_center",
+        "to_column": "cc_call_center_sk",
+        "name_score": 1.0,
+        "distinct_values": 6,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_catalog_page_sk",
+        "to": "tpcds.catalog_page",
+        "to_column": "cp_catalog_page_sk",
+        "name_score": 1.0,
+        "distinct_values": 6534,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_ship_mode_sk",
+        "to": "tpcds.ship_mode",
+        "to_column": "sm_ship_mode_sk",
+        "name_score": 1.0,
+        "distinct_values": 20,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_warehouse_sk",
+        "to": "tpcds.warehouse",
+        "to_column": "w_warehouse_sk",
+        "name_score": 1.0,
+        "distinct_values": 5,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_returns",
+        "from_column": "cr_reason_sk",
+        "to": "tpcds.reason",
+        "to_column": "r_reason_sk",
+        "name_score": 1.0,
+        "distinct_values": 35,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_sold_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 1830,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_sold_time_sk",
+        "to": "tpcds.time_dim",
+        "to_column": "t_time_sk",
+        "name_score": 1.0,
+        "distinct_values": 67461,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_ship_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 1921,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_bill_customer_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 1.0,
+        "distinct_values": 79641,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_bill_cdemo_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 153251,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_bill_hdemo_sk",
+        "to": "tpcds.household_demographics",
+        "to_column": "hd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 7200,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_bill_addr_sk",
+        "to": "tpcds.customer_address",
+        "to_column": "ca_address_sk",
+        "name_score": 0.9,
+        "distinct_values": 47999,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_ship_customer_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 1.0,
+        "distinct_values": 79704,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_ship_cdemo_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 153334,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_ship_hdemo_sk",
+        "to": "tpcds.household_demographics",
+        "to_column": "hd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 7200,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_ship_addr_sk",
+        "to": "tpcds.customer_address",
+        "to_column": "ca_address_sk",
+        "name_score": 0.9,
+        "distinct_values": 48005,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_call_center_sk",
+        "to": "tpcds.call_center",
+        "to_column": "cc_call_center_sk",
+        "name_score": 1.0,
+        "distinct_values": 6,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_catalog_page_sk",
+        "to": "tpcds.catalog_page",
+        "to_column": "cp_catalog_page_sk",
+        "name_score": 1.0,
+        "distinct_values": 6588,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_ship_mode_sk",
+        "to": "tpcds.ship_mode",
+        "to_column": "sm_ship_mode_sk",
+        "name_score": 1.0,
+        "distinct_values": 20,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_warehouse_sk",
+        "to": "tpcds.warehouse",
+        "to_column": "w_warehouse_sk",
+        "name_score": 1.0,
+        "distinct_values": 5,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_item_sk",
+        "to": "tpcds.item",
+        "to_column": "i_item_sk",
+        "name_score": 1.0,
+        "distinct_values": 18000,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.catalog_sales",
+        "from_column": "cs_promo_sk",
+        "to": "tpcds.promotion",
+        "to_column": "p_promo_sk",
+        "name_score": 0.9,
+        "distinct_values": 300,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.customer",
+        "from_column": "c_current_cdemo_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 94215,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.customer",
+        "from_column": "c_current_hdemo_sk",
+        "to": "tpcds.household_demographics",
+        "to_column": "hd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 7200,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.customer",
+        "from_column": "c_current_addr_sk",
+        "to": "tpcds.customer_address",
+        "to_column": "ca_address_sk",
+        "name_score": 0.9,
+        "distinct_values": 43282,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.customer",
+        "from_column": "c_first_shipto_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 3651,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.customer",
+        "from_column": "c_first_sales_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 3651,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.customer",
+        "from_column": "c_last_review_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 366,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.household_demographics",
+        "from_column": "hd_income_band_sk",
+        "to": "tpcds.income_band",
+        "to_column": "ib_income_band_sk",
+        "name_score": 1.0,
+        "distinct_values": 20,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.inventory",
+        "from_column": "inv_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 261,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.inventory",
+        "from_column": "inv_item_sk",
+        "to": "tpcds.item",
+        "to_column": "i_item_sk",
+        "name_score": 1.0,
+        "distinct_values": 18000,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.inventory",
+        "from_column": "inv_warehouse_sk",
+        "to": "tpcds.warehouse",
+        "to_column": "w_warehouse_sk",
+        "name_score": 1.0,
+        "distinct_values": 5,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.promotion",
+        "from_column": "p_start_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 255,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.promotion",
+        "from_column": "p_end_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 249,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.promotion",
+        "from_column": "p_item_sk",
+        "to": "tpcds.item",
+        "to_column": "i_item_sk",
+        "name_score": 1.0,
+        "distinct_values": 291,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store",
+        "from_column": "s_closed_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 3,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_returns",
+        "from_column": "sr_returned_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 2003,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_returns",
+        "from_column": "sr_return_time_sk",
+        "to": "tpcds.time_dim",
+        "to_column": "t_time_sk",
+        "name_score": 1.0,
+        "distinct_values": 32390,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_returns",
+        "from_column": "sr_item_sk",
+        "to": "tpcds.item",
+        "to_column": "i_item_sk",
+        "name_score": 1.0,
+        "distinct_values": 17997,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_returns",
+        "from_column": "sr_customer_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 1.0,
+        "distinct_values": 86959,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_returns",
+        "from_column": "sr_cdemo_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 258702,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_returns",
+        "from_column": "sr_hdemo_sk",
+        "to": "tpcds.household_demographics",
+        "to_column": "hd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 7200,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_returns",
+        "from_column": "sr_addr_sk",
+        "to": "tpcds.customer_address",
+        "to_column": "ca_address_sk",
+        "name_score": 0.9,
+        "distinct_values": 49816,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_returns",
+        "from_column": "sr_store_sk",
+        "to": "tpcds.store",
+        "to_column": "s_store_sk",
+        "name_score": 1.0,
+        "distinct_values": 6,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_returns",
+        "from_column": "sr_reason_sk",
+        "to": "tpcds.reason",
+        "to_column": "r_reason_sk",
+        "name_score": 1.0,
+        "distinct_values": 35,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_sales",
+        "from_column": "ss_sold_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 1823,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_sales",
+        "from_column": "ss_sold_time_sk",
+        "to": "tpcds.time_dim",
+        "to_column": "t_time_sk",
+        "name_score": 1.0,
+        "distinct_values": 45647,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_sales",
+        "from_column": "ss_item_sk",
+        "to": "tpcds.item",
+        "to_column": "i_item_sk",
+        "name_score": 1.0,
+        "distinct_values": 18000,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_sales",
+        "from_column": "ss_customer_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 1.0,
+        "distinct_values": 90858,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_sales",
+        "from_column": "ss_cdemo_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 225783,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_sales",
+        "from_column": "ss_hdemo_sk",
+        "to": "tpcds.household_demographics",
+        "to_column": "hd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 7200,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_sales",
+        "from_column": "ss_addr_sk",
+        "to": "tpcds.customer_address",
+        "to_column": "ca_address_sk",
+        "name_score": 0.9,
+        "distinct_values": 49600,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_sales",
+        "from_column": "ss_store_sk",
+        "to": "tpcds.store",
+        "to_column": "s_store_sk",
+        "name_score": 1.0,
+        "distinct_values": 6,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store_sales",
+        "from_column": "ss_promo_sk",
+        "to": "tpcds.promotion",
+        "to_column": "p_promo_sk",
+        "name_score": 0.9,
+        "distinct_values": 300,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_page",
+        "from_column": "wp_web_page_id",
+        "to": "tpcds.catalog_page",
+        "to_column": "cp_catalog_page_id",
+        "name_score": 1.0,
+        "distinct_values": 30,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_page",
+        "from_column": "wp_creation_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 9,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_page",
+        "from_column": "wp_access_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 40,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_page",
+        "from_column": "wp_customer_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 1.0,
+        "distinct_values": 17,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_returns",
+        "from_column": "wr_returned_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 2114,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_returns",
+        "from_column": "wr_returned_time_sk",
+        "to": "tpcds.time_dim",
+        "to_column": "t_time_sk",
+        "name_score": 1.0,
+        "distinct_values": 44650,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_returns",
+        "from_column": "wr_item_sk",
+        "to": "tpcds.item",
+        "to_column": "i_item_sk",
+        "name_score": 1.0,
+        "distinct_values": 16981,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_returns",
+        "from_column": "wr_refunded_customer_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 1.0,
+        "distinct_values": 49479,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_returns",
+        "from_column": "wr_refunded_cdemo_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 67167,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_returns",
+        "from_column": "wr_refunded_hdemo_sk",
+        "to": "tpcds.household_demographics",
+        "to_column": "hd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 7200,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_returns",
+        "from_column": "wr_refunded_addr_sk",
+        "to": "tpcds.customer_address",
+        "to_column": "ca_address_sk",
+        "name_score": 0.9,
+        "distinct_values": 37264,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_returns",
+        "from_column": "wr_returning_customer_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 1.0,
+        "distinct_values": 49435,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_returns",
+        "from_column": "wr_returning_cdemo_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 67201,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_returns",
+        "from_column": "wr_returning_hdemo_sk",
+        "to": "tpcds.household_demographics",
+        "to_column": "hd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 7200,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_returns",
+        "from_column": "wr_returning_addr_sk",
+        "to": "tpcds.customer_address",
+        "to_column": "ca_address_sk",
+        "name_score": 0.9,
+        "distinct_values": 37280,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_returns",
+        "from_column": "wr_web_page_sk",
+        "to": "tpcds.web_page",
+        "to_column": "wp_web_page_sk",
+        "name_score": 1.0,
+        "distinct_values": 60,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_returns",
+        "from_column": "wr_reason_sk",
+        "to": "tpcds.reason",
+        "to_column": "r_reason_sk",
+        "name_score": 1.0,
+        "distinct_values": 35,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_sold_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 1823,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_sold_time_sk",
+        "to": "tpcds.time_dim",
+        "to_column": "t_time_sk",
+        "name_score": 1.0,
+        "distinct_values": 41020,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_ship_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 1945,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_item_sk",
+        "to": "tpcds.item",
+        "to_column": "i_item_sk",
+        "name_score": 1.0,
+        "distinct_values": 18000,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_bill_customer_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 1.0,
+        "distinct_values": 45161,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_bill_cdemo_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 59093,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_bill_hdemo_sk",
+        "to": "tpcds.household_demographics",
+        "to_column": "hd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 7197,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_bill_addr_sk",
+        "to": "tpcds.customer_address",
+        "to_column": "ca_address_sk",
+        "name_score": 0.9,
+        "distinct_values": 34971,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_ship_customer_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 1.0,
+        "distinct_values": 45181,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_ship_cdemo_sk",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 59121,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_ship_hdemo_sk",
+        "to": "tpcds.household_demographics",
+        "to_column": "hd_demo_sk",
+        "name_score": 0.8,
+        "distinct_values": 7198,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_ship_addr_sk",
+        "to": "tpcds.customer_address",
+        "to_column": "ca_address_sk",
+        "name_score": 0.9,
+        "distinct_values": 35012,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_web_page_sk",
+        "to": "tpcds.web_page",
+        "to_column": "wp_web_page_sk",
+        "name_score": 1.0,
+        "distinct_values": 60,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_web_site_sk",
+        "to": "tpcds.web_site",
+        "to_column": "web_site_sk",
+        "name_score": 1.0,
+        "distinct_values": 30,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_ship_mode_sk",
+        "to": "tpcds.ship_mode",
+        "to_column": "sm_ship_mode_sk",
+        "name_score": 1.0,
+        "distinct_values": 20,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_warehouse_sk",
+        "to": "tpcds.warehouse",
+        "to_column": "w_warehouse_sk",
+        "name_score": 1.0,
+        "distinct_values": 5,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_sales",
+        "from_column": "ws_promo_sk",
+        "to": "tpcds.promotion",
+        "to_column": "p_promo_sk",
+        "name_score": 0.9,
+        "distinct_values": 300,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_site",
+        "from_column": "web_open_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 15,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_site",
+        "from_column": "web_close_date_sk",
+        "to": "tpcds.date_dim",
+        "to_column": "d_date_sk",
+        "name_score": 1.0,
+        "distinct_values": 10,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      }
+    ],
+    "suggested_relationships": [
+      {
+        "from": "tpcds.call_center",
+        "from_column": "cc_call_center_id",
+        "to": "tpcds.catalog_page",
+        "to_column": "cp_catalog_page_id",
+        "name_score": 0.0,
+        "distinct_values": 3,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.call_center",
+        "from_column": "cc_mkt_id",
+        "to": "tpcds.catalog_page",
+        "to_column": "cp_catalog_page_sk",
+        "name_score": 0.0,
+        "distinct_values": 3,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.item",
+        "from_column": "i_item_id",
+        "to": "tpcds.customer",
+        "to_column": "c_customer_id",
+        "name_score": 0.0,
+        "distinct_values": 9000,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.item",
+        "from_column": "i_class_id",
+        "to": "tpcds.catalog_page",
+        "to_column": "cp_catalog_page_sk",
+        "name_score": 0.0,
+        "distinct_values": 16,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.item",
+        "from_column": "i_category_id",
+        "to": "tpcds.catalog_page",
+        "to_column": "cp_catalog_page_sk",
+        "name_score": 0.0,
+        "distinct_values": 10,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.item",
+        "from_column": "i_manufact_id",
+        "to": "tpcds.catalog_page",
+        "to_column": "cp_catalog_page_sk",
+        "name_score": 0.0,
+        "distinct_values": 994,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.item",
+        "from_column": "i_manager_id",
+        "to": "tpcds.catalog_page",
+        "to_column": "cp_catalog_page_sk",
+        "name_score": 0.0,
+        "distinct_values": 100,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store",
+        "from_column": "s_store_id",
+        "to": "tpcds.catalog_page",
+        "to_column": "cp_catalog_page_id",
+        "name_score": 0.0,
+        "distinct_values": 6,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store",
+        "from_column": "s_market_id",
+        "to": "tpcds.catalog_page",
+        "to_column": "cp_catalog_page_sk",
+        "name_score": 0.0,
+        "distinct_values": 7,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store",
+        "from_column": "s_division_id",
+        "to": "tpcds.call_center",
+        "to_column": "cc_call_center_sk",
+        "name_score": 0.0,
+        "distinct_values": 1,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.store",
+        "from_column": "s_company_id",
+        "to": "tpcds.call_center",
+        "to_column": "cc_call_center_sk",
+        "name_score": 0.0,
+        "distinct_values": 1,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_site",
+        "from_column": "web_site_id",
+        "to": "tpcds.catalog_page",
+        "to_column": "cp_catalog_page_id",
+        "name_score": 0.0,
+        "distinct_values": 15,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_site",
+        "from_column": "web_mkt_id",
+        "to": "tpcds.call_center",
+        "to_column": "cc_call_center_sk",
+        "name_score": 0.0,
+        "distinct_values": 6,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      },
+      {
+        "from": "tpcds.web_site",
+        "from_column": "web_company_id",
+        "to": "tpcds.call_center",
+        "to_column": "cc_call_center_sk",
+        "name_score": 0.0,
+        "distinct_values": 6,
+        "unmatched": 0,
+        "match_ratio": 1.0
+      }
+    ],
+    "rejected_candidates": [
+      {
+        "from": "tpcds.item",
+        "from_column": "i_brand_id",
+        "to": "tpcds.customer_demographics",
+        "to_column": "cd_demo_sk",
+        "name_score": 0.0,
+        "distinct_values": 948,
+        "unmatched": 940,
+        "match_ratio": 0.0084
+      }
+    ]
+  }

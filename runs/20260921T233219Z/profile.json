@@ -1,5 +1,5 @@
 {
-  "profiled_at": "2026-09-21T19:43:40.219076+00:00",
+  "profiled_at": "2026-09-21T23:34:41.708665+00:00",
   "engine": "impala",
   "tables": {
     "tpcds.call_center": {
@@ -3749,6 +3749,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 3,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3759,6 +3760,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 91,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3769,6 +3771,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 97,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3779,6 +3782,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 2055,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3789,6 +3793,7 @@
       "to": "tpcds.time_dim",
       "to_column": "t_time_sk",
       "name_score": 1.0,
+      "to_rows": 86400,
       "distinct_values": 64982,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3799,6 +3804,7 @@
       "to": "tpcds.item",
       "to_column": "i_item_sk",
       "name_score": 1.0,
+      "to_rows": 18000,
       "distinct_values": 17862,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3806,9 +3812,10 @@
     {
       "from": "tpcds.catalog_returns",
       "from_column": "cr_refunded_customer_sk",
-      "to": "tpcds.customer_demographics",
-      "to_column": "cd_demo_sk",
+      "to": "tpcds.customer",
+      "to_column": "c_customer_sk",
       "name_score": 1.0,
+      "to_rows": 100000,
       "distinct_values": 60390,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3819,6 +3826,7 @@
       "to": "tpcds.customer_demographics",
       "to_column": "cd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 1920800,
       "distinct_values": 90815,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3829,6 +3837,7 @@
       "to": "tpcds.household_demographics",
       "to_column": "hd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 7200,
       "distinct_values": 7200,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3839,6 +3848,7 @@
       "to": "tpcds.customer_address",
       "to_column": "ca_address_sk",
       "name_score": 0.9,
+      "to_rows": 50000,
       "distinct_values": 42305,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3846,9 +3856,10 @@
     {
       "from": "tpcds.catalog_returns",
       "from_column": "cr_returning_customer_sk",
-      "to": "tpcds.customer_demographics",
-      "to_column": "cd_demo_sk",
+      "to": "tpcds.customer",
+      "to_column": "c_customer_sk",
       "name_score": 1.0,
+      "to_rows": 100000,
       "distinct_values": 75394,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3859,6 +3870,7 @@
       "to": "tpcds.customer_demographics",
       "to_column": "cd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 1920800,
       "distinct_values": 135381,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3869,6 +3881,7 @@
       "to": "tpcds.household_demographics",
       "to_column": "hd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 7200,
       "distinct_values": 7200,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3879,6 +3892,7 @@
       "to": "tpcds.customer_address",
       "to_column": "ca_address_sk",
       "name_score": 0.9,
+      "to_rows": 50000,
       "distinct_values": 46970,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3889,6 +3903,7 @@
       "to": "tpcds.call_center",
       "to_column": "cc_call_center_sk",
       "name_score": 1.0,
+      "to_rows": 6,
       "distinct_values": 6,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3899,6 +3914,7 @@
       "to": "tpcds.catalog_page",
       "to_column": "cp_catalog_page_sk",
       "name_score": 1.0,
+      "to_rows": 11718,
       "distinct_values": 6534,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3909,6 +3925,7 @@
       "to": "tpcds.ship_mode",
       "to_column": "sm_ship_mode_sk",
       "name_score": 1.0,
+      "to_rows": 20,
       "distinct_values": 20,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3919,6 +3936,7 @@
       "to": "tpcds.warehouse",
       "to_column": "w_warehouse_sk",
       "name_score": 1.0,
+      "to_rows": 5,
       "distinct_values": 5,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3929,6 +3947,7 @@
       "to": "tpcds.reason",
       "to_column": "r_reason_sk",
       "name_score": 1.0,
+      "to_rows": 35,
       "distinct_values": 35,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3939,6 +3958,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 1830,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3949,6 +3969,7 @@
       "to": "tpcds.time_dim",
       "to_column": "t_time_sk",
       "name_score": 1.0,
+      "to_rows": 86400,
       "distinct_values": 67461,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3959,6 +3980,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 1921,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3966,9 +3988,10 @@
     {
       "from": "tpcds.catalog_sales",
       "from_column": "cs_bill_customer_sk",
-      "to": "tpcds.customer_demographics",
-      "to_column": "cd_demo_sk",
+      "to": "tpcds.customer",
+      "to_column": "c_customer_sk",
       "name_score": 1.0,
+      "to_rows": 100000,
       "distinct_values": 79641,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3979,6 +4002,7 @@
       "to": "tpcds.customer_demographics",
       "to_column": "cd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 1920800,
       "distinct_values": 153251,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3989,6 +4013,7 @@
       "to": "tpcds.household_demographics",
       "to_column": "hd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 7200,
       "distinct_values": 7200,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -3999,6 +4024,7 @@
       "to": "tpcds.customer_address",
       "to_column": "ca_address_sk",
       "name_score": 0.9,
+      "to_rows": 50000,
       "distinct_values": 47999,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4006,9 +4032,10 @@
     {
       "from": "tpcds.catalog_sales",
       "from_column": "cs_ship_customer_sk",
-      "to": "tpcds.customer_demographics",
-      "to_column": "cd_demo_sk",
+      "to": "tpcds.customer",
+      "to_column": "c_customer_sk",
       "name_score": 1.0,
+      "to_rows": 100000,
       "distinct_values": 79704,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4019,6 +4046,7 @@
       "to": "tpcds.customer_demographics",
       "to_column": "cd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 1920800,
       "distinct_values": 153334,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4029,6 +4057,7 @@
       "to": "tpcds.household_demographics",
       "to_column": "hd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 7200,
       "distinct_values": 7200,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4039,6 +4068,7 @@
       "to": "tpcds.customer_address",
       "to_column": "ca_address_sk",
       "name_score": 0.9,
+      "to_rows": 50000,
       "distinct_values": 48005,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4049,6 +4079,7 @@
       "to": "tpcds.call_center",
       "to_column": "cc_call_center_sk",
       "name_score": 1.0,
+      "to_rows": 6,
       "distinct_values": 6,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4059,6 +4090,7 @@
       "to": "tpcds.catalog_page",
       "to_column": "cp_catalog_page_sk",
       "name_score": 1.0,
+      "to_rows": 11718,
       "distinct_values": 6588,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4069,6 +4101,7 @@
       "to": "tpcds.ship_mode",
       "to_column": "sm_ship_mode_sk",
       "name_score": 1.0,
+      "to_rows": 20,
       "distinct_values": 20,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4079,6 +4112,7 @@
       "to": "tpcds.warehouse",
       "to_column": "w_warehouse_sk",
       "name_score": 1.0,
+      "to_rows": 5,
       "distinct_values": 5,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4089,6 +4123,7 @@
       "to": "tpcds.item",
       "to_column": "i_item_sk",
       "name_score": 1.0,
+      "to_rows": 18000,
       "distinct_values": 18000,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4098,7 +4133,8 @@
       "from_column": "cs_promo_sk",
       "to": "tpcds.promotion",
       "to_column": "p_promo_sk",
-      "name_score": 0.9,
+      "name_score": 1.0,
+      "to_rows": 300,
       "distinct_values": 300,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4109,6 +4145,7 @@
       "to": "tpcds.customer_demographics",
       "to_column": "cd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 1920800,
       "distinct_values": 94215,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4119,6 +4156,7 @@
       "to": "tpcds.household_demographics",
       "to_column": "hd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 7200,
       "distinct_values": 7200,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4129,6 +4167,7 @@
       "to": "tpcds.customer_address",
       "to_column": "ca_address_sk",
       "name_score": 0.9,
+      "to_rows": 50000,
       "distinct_values": 43282,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4138,7 +4177,8 @@
       "from_column": "c_first_shipto_date_sk",
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
-      "name_score": 1.0,
+      "name_score": 0.7,
+      "to_rows": 73049,
       "distinct_values": 3651,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4148,7 +4188,8 @@
       "from_column": "c_first_sales_date_sk",
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
-      "name_score": 1.0,
+      "name_score": 0.7,
+      "to_rows": 73049,
       "distinct_values": 3651,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4158,7 +4199,8 @@
       "from_column": "c_last_review_date_sk",
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
-      "name_score": 1.0,
+      "name_score": 0.7,
+      "to_rows": 73049,
       "distinct_values": 366,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4169,6 +4211,7 @@
       "to": "tpcds.income_band",
       "to_column": "ib_income_band_sk",
       "name_score": 1.0,
+      "to_rows": 20,
       "distinct_values": 20,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4179,6 +4222,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 261,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4189,6 +4233,7 @@
       "to": "tpcds.item",
       "to_column": "i_item_sk",
       "name_score": 1.0,
+      "to_rows": 18000,
       "distinct_values": 18000,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4199,6 +4244,7 @@
       "to": "tpcds.warehouse",
       "to_column": "w_warehouse_sk",
       "name_score": 1.0,
+      "to_rows": 5,
       "distinct_values": 5,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4209,6 +4255,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 255,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4219,6 +4266,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 249,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4229,6 +4277,7 @@
       "to": "tpcds.item",
       "to_column": "i_item_sk",
       "name_score": 1.0,
+      "to_rows": 18000,
       "distinct_values": 291,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4239,6 +4288,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 3,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4249,6 +4299,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 2003,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4259,6 +4310,7 @@
       "to": "tpcds.time_dim",
       "to_column": "t_time_sk",
       "name_score": 1.0,
+      "to_rows": 86400,
       "distinct_values": 32390,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4269,6 +4321,7 @@
       "to": "tpcds.item",
       "to_column": "i_item_sk",
       "name_score": 1.0,
+      "to_rows": 18000,
       "distinct_values": 17997,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4276,9 +4329,10 @@
     {
       "from": "tpcds.store_returns",
       "from_column": "sr_customer_sk",
-      "to": "tpcds.customer_demographics",
-      "to_column": "cd_demo_sk",
+      "to": "tpcds.customer",
+      "to_column": "c_customer_sk",
       "name_score": 1.0,
+      "to_rows": 100000,
       "distinct_values": 86959,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4289,6 +4343,7 @@
       "to": "tpcds.customer_demographics",
       "to_column": "cd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 1920800,
       "distinct_values": 258702,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4299,6 +4354,7 @@
       "to": "tpcds.household_demographics",
       "to_column": "hd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 7200,
       "distinct_values": 7200,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4309,6 +4365,7 @@
       "to": "tpcds.customer_address",
       "to_column": "ca_address_sk",
       "name_score": 0.9,
+      "to_rows": 50000,
       "distinct_values": 49816,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4319,6 +4376,7 @@
       "to": "tpcds.store",
       "to_column": "s_store_sk",
       "name_score": 1.0,
+      "to_rows": 12,
       "distinct_values": 6,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4329,6 +4387,7 @@
       "to": "tpcds.reason",
       "to_column": "r_reason_sk",
       "name_score": 1.0,
+      "to_rows": 35,
       "distinct_values": 35,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4339,6 +4398,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 1823,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4349,6 +4409,7 @@
       "to": "tpcds.time_dim",
       "to_column": "t_time_sk",
       "name_score": 1.0,
+      "to_rows": 86400,
       "distinct_values": 45647,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4359,6 +4420,7 @@
       "to": "tpcds.item",
       "to_column": "i_item_sk",
       "name_score": 1.0,
+      "to_rows": 18000,
       "distinct_values": 18000,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4366,9 +4428,10 @@
     {
       "from": "tpcds.store_sales",
       "from_column": "ss_customer_sk",
-      "to": "tpcds.customer_demographics",
-      "to_column": "cd_demo_sk",
+      "to": "tpcds.customer",
+      "to_column": "c_customer_sk",
       "name_score": 1.0,
+      "to_rows": 100000,
       "distinct_values": 90858,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4379,6 +4442,7 @@
       "to": "tpcds.customer_demographics",
       "to_column": "cd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 1920800,
       "distinct_values": 225783,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4389,6 +4453,7 @@
       "to": "tpcds.household_demographics",
       "to_column": "hd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 7200,
       "distinct_values": 7200,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4399,6 +4464,7 @@
       "to": "tpcds.customer_address",
       "to_column": "ca_address_sk",
       "name_score": 0.9,
+      "to_rows": 50000,
       "distinct_values": 49600,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4409,6 +4475,7 @@
       "to": "tpcds.store",
       "to_column": "s_store_sk",
       "name_score": 1.0,
+      "to_rows": 12,
       "distinct_values": 6,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4418,18 +4485,9 @@
       "from_column": "ss_promo_sk",
       "to": "tpcds.promotion",
       "to_column": "p_promo_sk",
-      "name_score": 0.9,
-      "distinct_values": 300,
-      "unmatched": 0,
-      "match_ratio": 1.0
-    },
-    {
-      "from": "tpcds.web_page",
-      "from_column": "wp_web_page_id",
-      "to": "tpcds.catalog_page",
-      "to_column": "cp_catalog_page_id",
       "name_score": 1.0,
-      "distinct_values": 30,
+      "to_rows": 300,
+      "distinct_values": 300,
       "unmatched": 0,
       "match_ratio": 1.0
     },
@@ -4439,6 +4497,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 9,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4449,6 +4508,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 40,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4456,9 +4516,10 @@
     {
       "from": "tpcds.web_page",
       "from_column": "wp_customer_sk",
-      "to": "tpcds.customer_demographics",
-      "to_column": "cd_demo_sk",
+      "to": "tpcds.customer",
+      "to_column": "c_customer_sk",
       "name_score": 1.0,
+      "to_rows": 100000,
       "distinct_values": 17,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4469,6 +4530,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 2114,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4479,6 +4541,7 @@
       "to": "tpcds.time_dim",
       "to_column": "t_time_sk",
       "name_score": 1.0,
+      "to_rows": 86400,
       "distinct_values": 44650,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4489,6 +4552,7 @@
       "to": "tpcds.item",
       "to_column": "i_item_sk",
       "name_score": 1.0,
+      "to_rows": 18000,
       "distinct_values": 16981,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4496,9 +4560,10 @@
     {
       "from": "tpcds.web_returns",
       "from_column": "wr_refunded_customer_sk",
-      "to": "tpcds.customer_demographics",
-      "to_column": "cd_demo_sk",
+      "to": "tpcds.customer",
+      "to_column": "c_customer_sk",
       "name_score": 1.0,
+      "to_rows": 100000,
       "distinct_values": 49479,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4509,6 +4574,7 @@
       "to": "tpcds.customer_demographics",
       "to_column": "cd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 1920800,
       "distinct_values": 67167,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4519,6 +4585,7 @@
       "to": "tpcds.household_demographics",
       "to_column": "hd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 7200,
       "distinct_values": 7200,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4529,6 +4596,7 @@
       "to": "tpcds.customer_address",
       "to_column": "ca_address_sk",
       "name_score": 0.9,
+      "to_rows": 50000,
       "distinct_values": 37264,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4536,9 +4604,10 @@
     {
       "from": "tpcds.web_returns",
       "from_column": "wr_returning_customer_sk",
-      "to": "tpcds.customer_demographics",
-      "to_column": "cd_demo_sk",
+      "to": "tpcds.customer",
+      "to_column": "c_customer_sk",
       "name_score": 1.0,
+      "to_rows": 100000,
       "distinct_values": 49435,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4549,6 +4618,7 @@
       "to": "tpcds.customer_demographics",
       "to_column": "cd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 1920800,
       "distinct_values": 67201,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4559,6 +4629,7 @@
       "to": "tpcds.household_demographics",
       "to_column": "hd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 7200,
       "distinct_values": 7200,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4569,6 +4640,7 @@
       "to": "tpcds.customer_address",
       "to_column": "ca_address_sk",
       "name_score": 0.9,
+      "to_rows": 50000,
       "distinct_values": 37280,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4579,6 +4651,7 @@
       "to": "tpcds.web_page",
       "to_column": "wp_web_page_sk",
       "name_score": 1.0,
+      "to_rows": 60,
       "distinct_values": 60,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4589,6 +4662,7 @@
       "to": "tpcds.reason",
       "to_column": "r_reason_sk",
       "name_score": 1.0,
+      "to_rows": 35,
       "distinct_values": 35,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4599,6 +4673,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 1823,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4609,6 +4684,7 @@
       "to": "tpcds.time_dim",
       "to_column": "t_time_sk",
       "name_score": 1.0,
+      "to_rows": 86400,
       "distinct_values": 41020,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4619,6 +4695,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 1945,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4629,6 +4706,7 @@
       "to": "tpcds.item",
       "to_column": "i_item_sk",
       "name_score": 1.0,
+      "to_rows": 18000,
       "distinct_values": 18000,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4636,9 +4714,10 @@
     {
       "from": "tpcds.web_sales",
       "from_column": "ws_bill_customer_sk",
-      "to": "tpcds.customer_demographics",
-      "to_column": "cd_demo_sk",
+      "to": "tpcds.customer",
+      "to_column": "c_customer_sk",
       "name_score": 1.0,
+      "to_rows": 100000,
       "distinct_values": 45161,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4649,6 +4728,7 @@
       "to": "tpcds.customer_demographics",
       "to_column": "cd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 1920800,
       "distinct_values": 59093,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4659,6 +4739,7 @@
       "to": "tpcds.household_demographics",
       "to_column": "hd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 7200,
       "distinct_values": 7197,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4669,6 +4750,7 @@
       "to": "tpcds.customer_address",
       "to_column": "ca_address_sk",
       "name_score": 0.9,
+      "to_rows": 50000,
       "distinct_values": 34971,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4676,9 +4758,10 @@
     {
       "from": "tpcds.web_sales",
       "from_column": "ws_ship_customer_sk",
-      "to": "tpcds.customer_demographics",
-      "to_column": "cd_demo_sk",
+      "to": "tpcds.customer",
+      "to_column": "c_customer_sk",
       "name_score": 1.0,
+      "to_rows": 100000,
       "distinct_values": 45181,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4689,6 +4772,7 @@
       "to": "tpcds.customer_demographics",
       "to_column": "cd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 1920800,
       "distinct_values": 59121,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4699,6 +4783,7 @@
       "to": "tpcds.household_demographics",
       "to_column": "hd_demo_sk",
       "name_score": 0.8,
+      "to_rows": 7200,
       "distinct_values": 7198,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4709,6 +4794,7 @@
       "to": "tpcds.customer_address",
       "to_column": "ca_address_sk",
       "name_score": 0.9,
+      "to_rows": 50000,
       "distinct_values": 35012,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4719,6 +4805,7 @@
       "to": "tpcds.web_page",
       "to_column": "wp_web_page_sk",
       "name_score": 1.0,
+      "to_rows": 60,
       "distinct_values": 60,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4729,6 +4816,7 @@
       "to": "tpcds.web_site",
       "to_column": "web_site_sk",
       "name_score": 1.0,
+      "to_rows": 30,
       "distinct_values": 30,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4739,6 +4827,7 @@
       "to": "tpcds.ship_mode",
       "to_column": "sm_ship_mode_sk",
       "name_score": 1.0,
+      "to_rows": 20,
       "distinct_values": 20,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4749,6 +4838,7 @@
       "to": "tpcds.warehouse",
       "to_column": "w_warehouse_sk",
       "name_score": 1.0,
+      "to_rows": 5,
       "distinct_values": 5,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4758,7 +4848,8 @@
       "from_column": "ws_promo_sk",
       "to": "tpcds.promotion",
       "to_column": "p_promo_sk",
-      "name_score": 0.9,
+      "name_score": 1.0,
+      "to_rows": 300,
       "distinct_values": 300,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4769,6 +4860,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 15,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4779,6 +4871,7 @@
       "to": "tpcds.date_dim",
       "to_column": "d_date_sk",
       "name_score": 1.0,
+      "to_rows": 73049,
       "distinct_values": 10,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4787,40 +4880,22 @@
   "suggested_relationships": [
     {
       "from": "tpcds.call_center",
-      "from_column": "cc_call_center_id",
-      "to": "tpcds.catalog_page",
-      "to_column": "cp_catalog_page_id",
-      "name_score": 0.0,
-      "distinct_values": 3,
-      "unmatched": 0,
-      "match_ratio": 1.0
-    },
-    {
-      "from": "tpcds.call_center",
       "from_column": "cc_mkt_id",
-      "to": "tpcds.catalog_page",
-      "to_column": "cp_catalog_page_sk",
+      "to": "tpcds.store",
+      "to_column": "s_store_sk",
       "name_score": 0.0,
+      "to_rows": 12,
       "distinct_values": 3,
-      "unmatched": 0,
-      "match_ratio": 1.0
-    },
-    {
-      "from": "tpcds.item",
-      "from_column": "i_item_id",
-      "to": "tpcds.customer",
-      "to_column": "c_customer_id",
-      "name_score": 0.0,
-      "distinct_values": 9000,
       "unmatched": 0,
       "match_ratio": 1.0
     },
     {
       "from": "tpcds.item",
       "from_column": "i_class_id",
-      "to": "tpcds.catalog_page",
-      "to_column": "cp_catalog_page_sk",
+      "to": "tpcds.income_band",
+      "to_column": "ib_income_band_sk",
       "name_score": 0.0,
+      "to_rows": 20,
       "distinct_values": 16,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4828,9 +4903,10 @@
     {
       "from": "tpcds.item",
       "from_column": "i_category_id",
-      "to": "tpcds.catalog_page",
-      "to_column": "cp_catalog_page_sk",
+      "to": "tpcds.store",
+      "to_column": "s_store_sk",
       "name_score": 0.0,
+      "to_rows": 12,
       "distinct_values": 10,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4838,9 +4914,10 @@
     {
       "from": "tpcds.item",
       "from_column": "i_manufact_id",
-      "to": "tpcds.catalog_page",
-      "to_column": "cp_catalog_page_sk",
+      "to": "tpcds.household_demographics",
+      "to_column": "hd_demo_sk",
       "name_score": 0.0,
+      "to_rows": 7200,
       "distinct_values": 994,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4848,29 +4925,21 @@
     {
       "from": "tpcds.item",
       "from_column": "i_manager_id",
-      "to": "tpcds.catalog_page",
-      "to_column": "cp_catalog_page_sk",
+      "to": "tpcds.promotion",
+      "to_column": "p_promo_sk",
       "name_score": 0.0,
+      "to_rows": 300,
       "distinct_values": 100,
       "unmatched": 0,
       "match_ratio": 1.0
     },
     {
       "from": "tpcds.store",
-      "from_column": "s_store_id",
-      "to": "tpcds.catalog_page",
-      "to_column": "cp_catalog_page_id",
-      "name_score": 0.0,
-      "distinct_values": 6,
-      "unmatched": 0,
-      "match_ratio": 1.0
-    },
-    {
-      "from": "tpcds.store",
       "from_column": "s_market_id",
-      "to": "tpcds.catalog_page",
-      "to_column": "cp_catalog_page_sk",
+      "to": "tpcds.income_band",
+      "to_column": "ib_income_band_sk",
       "name_score": 0.0,
+      "to_rows": 20,
       "distinct_values": 7,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4878,9 +4947,10 @@
     {
       "from": "tpcds.store",
       "from_column": "s_division_id",
-      "to": "tpcds.call_center",
-      "to_column": "cc_call_center_sk",
+      "to": "tpcds.warehouse",
+      "to_column": "w_warehouse_sk",
       "name_score": 0.0,
+      "to_rows": 5,
       "distinct_values": 1,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4888,20 +4958,11 @@
     {
       "from": "tpcds.store",
       "from_column": "s_company_id",
-      "to": "tpcds.call_center",
-      "to_column": "cc_call_center_sk",
+      "to": "tpcds.warehouse",
+      "to_column": "w_warehouse_sk",
       "name_score": 0.0,
+      "to_rows": 5,
       "distinct_values": 1,
-      "unmatched": 0,
-      "match_ratio": 1.0
-    },
-    {
-      "from": "tpcds.web_site",
-      "from_column": "web_site_id",
-      "to": "tpcds.catalog_page",
-      "to_column": "cp_catalog_page_id",
-      "name_score": 0.0,
-      "distinct_values": 15,
       "unmatched": 0,
       "match_ratio": 1.0
     },
@@ -4911,6 +4972,7 @@
       "to": "tpcds.call_center",
       "to_column": "cc_call_center_sk",
       "name_score": 0.0,
+      "to_rows": 6,
       "distinct_values": 6,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4921,6 +4983,7 @@
       "to": "tpcds.call_center",
       "to_column": "cc_call_center_sk",
       "name_score": 0.0,
+      "to_rows": 6,
       "distinct_values": 6,
       "unmatched": 0,
       "match_ratio": 1.0
@@ -4933,6 +4996,7 @@
       "to": "tpcds.customer_demographics",
       "to_column": "cd_demo_sk",
       "name_score": 0.0,
+      "to_rows": 1920800,
       "distinct_values": 948,
       "unmatched": 940,
       "match_ratio": 0.0084
