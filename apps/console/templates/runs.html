@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Runs · helios{% endblock %}
+{% block content %}
+<h1>Discovery runs</h1>
+<p class="sub">Output of the harvest, profile and propose jobs, read from <code>{{ runs_dir }}</code>.</p>
+{% if runs %}
+<table>
+<tr><th>Run</th><th>Harvest</th><th>Profile</th><th>Propose</th><th>Updated</th></tr>
+{% for r in runs %}
+<tr>
+  <td><a href="/runs/{{ r.id }}">{{ r.id }}</a></td>
+  {% for s in ['harvest','profile','propose'] %}<td><span class="status {{ 'ok' if r.stages[s] else 'skipped' }}">{{ 'done' if r.stages[s] else '—' }}</span></td>{% endfor %}
+  <td class="meta">{{ r.updated }}</td>
+</tr>
+{% endfor %}
+</table>
+{% else %}
+<p class="empty">No runs yet. Run the harvest job (Jobs → harvest) to create one.</p>
+{% endif %}
+{% endblock %}

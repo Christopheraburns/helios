@@ -14,6 +14,8 @@ from helios_core import __version__
 from helios_core.atlas import AtlasClient, AtlasError
 from helios_core.config import atlas_config, impala_config, inference_config
 from helios_core.engines import ImpalaEngine
+from helios_core import runs as runstore
+from fastapi import HTTPException
 
 HERE = Path(__file__).parent
 app = FastAPI(title="helios console")
@@ -178,3 +180,41 @@ def assign(request: Request, guid: str, column: str = Form(...)):
 def unassign(guid: str, entity_guid: str):
     atlas().unassign(guid, entity_guid)
     return RedirectResponse(f"/term/{guid}", status_code=303)
+
+
+# ---------------------------------------------------------------- runs
+@app.get("/runs", response_class=HTMLResponse)
+def runs(request: Request):
+    return render(request, "runs.html", runs=runstore.list_runs(), runs_dir=runstore.RUNS_DIR, active="runs")
+
+
+@app.get("/runs/{run_id}", response_class=HTMLResponse)
+def run_detail(request: Request, run_id: str):
+    s = runstore.summary(run_id)
+    if not s["harvest"] and not s["profile"]:
+        raise HTTPException(404, f"run {run_id} not found")
+    profile = runstore.load(run_id, "profile") or {}
+    harvest = runstore.load(run_id, "harvest") or {}
+    tables = []
+    for t in harvest.get("tables", []):
+        key = f"{t['database']}.{t['table']}"
+        prof = profile.get("tables", {}).get(key, {})
+        tables.append({"key": key, "columns": len(t["columns"]), "row_count": t.get("row_count"),
+                       "primary_keys": [pk["column"] for pk in prof.get("primary_keys", [])],
+                       "profiled": bool(prof)})
+    return render(request, "run.html", s=s, tables=tables, profile=profile, harvest=harvest, active="runs")
+
+
+@app.get("/runs/{run_id}/table/{key}", response_class=HTMLResponse)
+def run_table(request: Request, run_id: str, key: str):
+    profile = runstore.load(run_id, "profile") or {}
+    harvest = runstore.load(run_id, "harvest") or {}
+    prof = profile.get("tables", {}).get(key)
+    if not prof:
+        raise HTTPException(404, f"{key} not profiled in run {run_id}")
+    terms = {}
+    for term in harvest.get("glossary_terms", []):
+        for c in term["columns"]:
+            terms.setdefault(c.split("@")[0], []).append(term["name"])
+    rels = [r for r in profile.get("relationships", []) if r["from"] == key or r["to"] == key]
+    return render(request, "run_table.html", run_id=run_id, key=key, prof=prof, terms=terms, rels=rels, active="runs")

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ key }} · helios{% endblock %}
+{% block content %}
+<p class="meta"><a href="/runs">Runs</a> / <a href="/runs/{{ run_id }}">{{ run_id }}</a> / {{ key }}</p>
+<h1 class="mono">{{ key }}</h1>
+<p class="sub">{{ "{:,}".format(prof.stats.row_count) }} rows. Primary key candidates: <span class="mono">{{ prof.primary_keys | map(attribute='column') | join(", ") or "none" }}</span></p>
+
+<h2>Columns</h2>
+<table>
+<tr><th>Column</th><th>Type</th><th>Null rate</th><th>Distinct</th><th>Min</th><th>Max</th><th>Glossary terms</th></tr>
+{% for name, c in prof.stats.columns.items() %}
+<tr>
+  <td class="mono">{{ name }}</td><td class="meta">{{ c.type }}</td>
+  <td>{{ "%.1f" | format((c.null_rate or 0) * 100) }}%</td>
+  <td>{{ "{:,}".format(c.ndv_exact if c.ndv_exact is defined else c.ndv) }}{% if c.ndv_exact is not defined %}<span class="meta">≈</span>{% endif %}</td>
+  <td class="meta">{{ c.min if c.min is not none else "" }}</td><td class="meta">{{ c.max if c.max is not none else "" }}</td>
+  <td>{{ terms.get(key ~ "." ~ name, []) | join(", ") }}</td>
+</tr>
+{% endfor %}
+</table>
+
+<h2>Relationships</h2>
+{% if rels %}
+<table>
+<tr><th>From</th><th>To</th><th>Match</th></tr>
+{% for r in rels %}
+<tr><td class="mono">{{ r.from }}.{{ r.from_column }}</td><td class="mono">{{ r.to }}.{{ r.to_column }}</td><td>{{ "%.1f" | format(r.match_ratio * 100) }}%</td></tr>
+{% endfor %}
+</table>
+{% else %}<p class="empty">No accepted relationships involve this table.</p>{% endif %}
+{% endblock %}
