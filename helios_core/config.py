@@ -45,12 +45,36 @@ def atlas_config() -> AtlasConfig | None:
     return AtlasConfig(base.rstrip("/"), user, pw, _env("ATLAS_VERIFY_SSL", "true").lower() != "false")
 
 
+def _parse_impala_host(value: str) -> tuple[str, int | None, str | None]:
+    """Accept a bare hostname or a full CDW JDBC URL
+    (jdbc:impala://host:443/default;AuthMech=12;transportMode=http;httpPath=cliservice;ssl=1)
+    and return (host, port, http_path). Only the host is required."""
+    v = value.strip()
+    http_path = None
+    if v.lower().startswith("jdbc:impala://"):
+        v = v[len("jdbc:impala://"):]
+    if ";" in v:
+        v, _, props = v.partition(";")
+        for kv in props.split(";"):
+            k, _, val = kv.partition("=")
+            if k.strip().lower() == "httppath" and val:
+                http_path = val.strip()
+    v = v.split("/", 1)[0]
+    port = None
+    if ":" in v:
+        v, _, p = v.rpartition(":")
+        if p.isdigit():
+            port = int(p)
+    return v, port, http_path
+
+
 def impala_config() -> ImpalaConfig | None:
-    host, user, pw = _env("IMPALA_HOST"), _env("IMPALA_USER") or _env("ATLAS_USER"), _env("IMPALA_PASS") or _env("ATLAS_PASS")
-    if not (host and user and pw):
+    raw, user, pw = _env("IMPALA_HOST"), _env("IMPALA_USER") or _env("ATLAS_USER"), _env("IMPALA_PASS") or _env("ATLAS_PASS")
+    if not (raw and user and pw):
         return None
-    return ImpalaConfig(host, int(_env("IMPALA_PORT", "443")), user, pw,
-                        _env("IMPALA_DATABASE", "default"), _env("IMPALA_HTTP_PATH", "cliservice"))
+    host, port, http_path = _parse_impala_host(raw)
+    return ImpalaConfig(host, int(_env("IMPALA_PORT") or port or 443), user, pw,
+                        _env("IMPALA_DATABASE", "default"), _env("IMPALA_HTTP_PATH") or http_path or "cliservice")
 
 
 def inference_config() -> InferenceConfig:
