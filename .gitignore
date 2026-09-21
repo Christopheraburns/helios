@@ -4,4 +4,3 @@ __pycache__/
 .env
 .env.sh
 requirements.lock
-runs/
