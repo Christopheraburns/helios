@@ -17,10 +17,13 @@ from helios_core.engines import ImpalaEngine
 from helios_core import runs as runstore
 from fastapi import HTTPException
 
+from .review import review_router
+
 HERE = Path(__file__).parent
 app = FastAPI(title="helios console")
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 tpl = Jinja2Templates(directory=HERE / "templates")
+app.include_router(review_router)
 
 
 def atlas() -> AtlasClient:

@@ -1,0 +1,12 @@
+{
+  "run_id": "20260922T000009Z",
+  "published_at": "2026-09-22T00:38:54.912639+00:00",
+  "datasets": 24,
+  "relationships": 105,
+  "metrics": 39,
+  "review": {
+    "run_id": "20260922T000009Z",
+    "reviewed_at": "2026-09-22T00:38:45.171620+00:00",
+    "reviewed_by": null
+  }
+}

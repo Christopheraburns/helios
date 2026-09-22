@@ -3,7 +3,7 @@
 {% block content %}
 <p class="meta"><a href="/runs">Runs</a> / <a href="/runs/{{ run_id }}">{{ run_id }}</a> / proposal</p>
 <h1>Proposal</h1>
-<p class="sub">Drafted by {{ p.llm.provider }} / {{ p.llm.model }} in {{ p.llm.calls }} calls. Nothing here is published; review comes next.</p>
+<p class="sub">Drafted by {{ p.llm.provider }} / {{ p.llm.model }} in {{ p.llm.calls }} calls. Nothing here is published. <a class="btn" href="/runs/{{ run_id }}/review">Review and publish →</a></p>
 
 <h2>Datasets</h2>
 {% for d in p.datasets %}

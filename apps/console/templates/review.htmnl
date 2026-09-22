@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}Review {{ run_id }} · helios{% endblock %}
+{% block content %}
+<p class="meta"><a href="/runs">Runs</a> / <a href="/runs/{{ run_id }}">{{ run_id }}</a> / <a href="/runs/{{ run_id }}/propose">proposal</a> / review</p>
+<h1>Review</h1>
+<p class="sub">Drafted by {{ p.llm.provider }} / {{ p.llm.model }}. Accept, reject or edit each element; only accepted elements are published. Decisions are saved as you click.</p>
+
+{% if published %}<div class="notice">{{ published }}</div>{% endif %}
+{% if errors %}<div class="notice error"><strong>Not published — the model failed validation.</strong><ul>{% for e in errors %}<li class="mono">{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+
+<div class="review-bar">
+  <table class="counts" id="summary">
+    <tr><th></th><th>accept</th><th>edit</th><th>reject</th><th>pending</th></tr>
+    {% for s, c in summary.items() %}
+    <tr data-section="{{ s }}"><td>{{ s.replace('_', ' ') }} <span class="meta">/ {{ c.total }}</span></td>
+      <td class="n-accept">{{ c.accept }}</td><td class="n-edit">{{ c.edit }}</td><td class="n-reject">{{ c.reject }}</td><td class="n-pending">{{ c.pending }}</td></tr>
+    {% endfor %}
+  </table>
+  <div class="actions">
+    <form method="post" action="/runs/{{ run_id }}/review/bulk" class="row">
+      <span>Accept all pending with confidence ≥</span>
+      <input type="number" name="min_confidence" value="0.85" min="0" max="1" step="0.05" style="width:90px">
+      <button type="submit">Accept</button>
+    </form>
+    <form method="post" action="/runs/{{ run_id }}/review/reset" class="row" onsubmit="return confirm('Clear every decision for this run?')">
+      <button type="submit">Reset all decisions</button>
+    </form>
+    <form method="post" action="/runs/{{ run_id }}/publish" class="row">
+      <label style="margin:0"><input type="checkbox" name="commit" value="1"> git commit</label>
+      <button type="submit" class="primary">Publish {{ model_name }}.ossie.yaml</button>
+      {% if last_published %}<span class="meta">last published {{ last_published }}</span>{% endif %}
+    </form>
+  </div>
+</div>
+
+<h2>Datasets</h2>
+{% for d in p.datasets %}
+{% set did = d.table %}
+<details class="dec dec-{{ decisions.datasets.get(did, 'pending') }}" data-section="datasets" data-id="{{ did }}">
+<summary>
+  <span class="mono">{{ d.table }}</span> — <span class="v-name">{{ d.name }}</span>
+  <span class="meta">({{ d.kind }}, {{ "%.2f" | format(d.confidence) }})</span>
+  <span class="ctl">
+    <button type="button" class="cascade" data-decision="accept" title="accept dataset and all fields">accept all</button>
+    <button type="button" class="cascade" data-decision="reject" title="reject dataset and all fields">reject all</button>
+    <span class="sep"></span>
+    <button type="button" class="dec-btn" data-decision="accept">✓</button>
+    <button type="button" class="dec-btn" data-decision="reject">✗</button>
+    <button type="button" class="edit-btn">edit</button>
+    <span class="state"></span>
+  </span>
+</summary>
+<div class="editor" hidden>
+  <label>Business name</label><input type="text" name="name" value="{{ d.name }}">
+  <label>Kind</label><select name="kind">{% for k in kinds %}<option {% if k == d.kind %}selected{% endif %}>{{ k }}</option>{% endfor %}</select>
+  <label>Description</label><textarea name="description">{{ d.description }}</textarea>
+  <div class="row"><button type="button" class="save primary">Save as edit</button><button type="button" class="cancel">Cancel</button></div>
+</div>
+<p>{{ d.description }}</p>
+<table>
+<tr><th></th><th>Column</th><th>Business name</th><th>Role</th><th>Description</th><th>Refers to</th><th>Glossary</th><th>Conf.</th></tr>
+{% for f in d.fields %}
+{% set fid = d.table ~ '.' ~ f.column %}
+<tr class="dec dec-{{ decisions.fields.get(fid, 'pending') }}" data-section="fields" data-id="{{ fid }}">
+  <td class="ctl nowrap">
+    <button type="button" class="dec-btn" data-decision="accept">✓</button>
+    <button type="button" class="dec-btn" data-decision="reject">✗</button>
+    <button type="button" class="edit-btn">edit</button>
+  </td>
+  <td class="mono">{{ f.column }}</td><td class="v-name">{{ f.name }}</td><td class="meta v-role">{{ f.role }}</td>
+  <td class="v-description">{{ f.description }}</td>
+  <td class="mono meta v-refers_to">{{ f.refers_to or "" }}</td>
+  <td>{% if f.glossary_terms %}{{ f.glossary_terms | join(", ") }}{% elif f.proposed_term %}<span class="meta">proposed:</span> {{ f.proposed_term.name }}{% endif %}</td>
+  <td class="meta">{{ "%.2f" | format(f.confidence) }}</td>
+</tr>
+<tr class="editor-row" hidden><td colspan="8"><div class="editor">
+  <div class="grid3">
+    <div><label>Business name</label><input type="text" name="name" value="{{ f.name }}"></div>
+    <div><label>Role</label><select name="role">{% for r in roles %}<option {% if r == f.role %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+    <div><label>Refers to <span class="meta">(database.table.column or blank)</span></label><input type="text" name="refers_to" value="{{ f.refers_to or '' }}"></div>
+  </div>
+  <label>Description</label><textarea name="description">{{ f.description }}</textarea>
+  <div class="row"><button type="button" class="save primary">Save as edit</button><button type="button" class="cancel">Cancel</button></div>
+</div></td></tr>
+{% endfor %}
+</table>
+</details>
+{% endfor %}
+
+<h2>Relationships</h2>
+<p class="meta">Rows the model rejected are pending by default and stay out of the published model unless you accept them.</p>
+<table>
+<tr><th></th><th>From</th><th>To</th><th>Source</th><th>Conf.</th><th>Reason</th></tr>
+{% for r in p.relationships | sort(attribute='from') %}
+{% set rid_ = r.from ~ '.' ~ r.from_column ~ '->' ~ r.to ~ '.' ~ r.to_column %}
+<tr class="dec dec-{{ decisions.relationships.get(rid_, 'pending') }} {% if not r.accepted %}llm-rejected{% endif %}" data-section="relationships" data-id="{{ rid_ }}">
+  <td class="ctl nowrap">
+    <button type="button" class="dec-btn" data-decision="accept">✓</button>
+    <button type="button" class="dec-btn" data-decision="reject">✗</button>
+    <button type="button" class="edit-btn">edit</button>
+  </td>
+  <td class="mono">{{ r.from }}.{{ r.from_column }}</td>
+  <td class="mono"><span class="v-to">{{ r.to }}</span>.<span class="v-to_column">{{ r.to_column }}</span></td>
+  <td class="meta">{{ r.source }}</td><td class="meta">{{ "%.2f" | format(r.confidence) }}</td><td class="meta">{{ r.reason or "" }}</td>
+</tr>
+<tr class="editor-row" hidden><td colspan="6"><div class="editor">
+  <div class="grid3">
+    <div><label>Target table</label><input type="text" name="to" value="{{ r.to }}"></div>
+    <div><label>Target column</label><input type="text" name="to_column" value="{{ r.to_column }}"></div>
+  </div>
+  <div class="row"><button type="button" class="save primary">Save as edit</button><button type="button" class="cancel">Cancel</button></div>
+</div></td></tr>
+{% endfor %}
+</table>
+
+<h2>Metrics</h2>
+{% if p.metrics %}
+<table>
+<tr><th></th><th>Metric</th><th>Dataset</th><th>Expression</th><th>Source</th><th>Conf.</th></tr>
+{% for m in p.metrics %}
+{% set mid = m.dataset ~ '::' ~ m.name %}
+<tr class="dec dec-{{ decisions.metrics.get(mid, 'pending') }}" data-section="metrics" data-id="{{ mid }}">
+  <td class="ctl nowrap">
+    <button type="button" class="dec-btn" data-decision="accept">✓</button>
+    <button type="button" class="dec-btn" data-decision="reject">✗</button>
+    <button type="button" class="edit-btn">edit</button>
+  </td>
+  <td><strong class="v-name">{{ m.name }}</strong><br><span class="meta v-description">{{ m.description }}</span>
+      {% if m.name in preflight %}<br><span class="warn">cannot be published as written: {{ preflight[m.name] }}</span>{% endif %}</td>
+  <td class="mono">{{ m.dataset }}</td><td class="mono v-expression">{{ m.expression }}</td>
+  <td class="meta">{{ m.source }}</td><td class="meta">{{ "%.2f" | format(m.confidence) }}</td>
+</tr>
+<tr class="editor-row" hidden><td colspan="6"><div class="editor">
+  <label>Name</label><input type="text" name="name" value="{{ m.name }}">
+  <label>Expression <span class="meta">(aggregate over {{ m.dataset }} columns)</span></label><input type="text" name="expression" value="{{ m.expression }}" class="mono">
+  <label>Description</label><textarea name="description">{{ m.description }}</textarea>
+  <div class="row"><button type="button" class="save primary">Save as edit</button><button type="button" class="cancel">Cancel</button></div>
+</div></td></tr>
+{% endfor %}
+</table>
+{% else %}<p class="empty">No metrics proposed.</p>{% endif %}
+
+<h2>Proposed glossary terms</h2>
+{% if p.glossary_terms %}
+<table>
+<tr><th></th><th>Term</th><th>Definition</th><th>Columns</th><th>Conf.</th></tr>
+{% for t in p.glossary_terms %}
+<tr class="dec dec-{{ decisions.glossary_terms.get(t.name, 'pending') }}" data-section="glossary_terms" data-id="{{ t.name }}">
+  <td class="ctl nowrap">
+    <button type="button" class="dec-btn" data-decision="accept">✓</button>
+    <button type="button" class="dec-btn" data-decision="reject">✗</button>
+    <button type="button" class="edit-btn">edit</button>
+  </td>
+  <td class="v-name">{{ t.name }}</td><td class="v-definition">{{ t.definition }}</td>
+  <td class="mono">{{ t.columns | join("<br>") | safe }}</td><td class="meta">{{ "%.2f" | format(t.confidence) }}</td>
+</tr>
+<tr class="editor-row" hidden><td colspan="5"><div class="editor">
+  <label>Term</label><input type="text" name="name" value="{{ t.name }}">
+  <label>Definition</label><textarea name="definition">{{ t.definition }}</textarea>
+  <div class="row"><button type="button" class="save primary">Save as edit</button><button type="button" class="cancel">Cancel</button></div>
+</div></td></tr>
+{% endfor %}
+</table>
+{% else %}<p class="empty">No new terms proposed.</p>{% endif %}
+
+<script>
+(function () {
+  const RUN = {{ run_id | tojson }};
+  const post = (url, body) => fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}).then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e.detail || r.statusText)));
+
+  function setState(el, decision) {
+    el.classList.remove("dec-accept", "dec-reject", "dec-edit", "dec-pending");
+    el.classList.add("dec-" + decision);
+  }
+  function refreshSummary(summary) {
+    for (const [s, c] of Object.entries(summary)) {
+      const row = document.querySelector(`#summary tr[data-section="${s}"]`);
+      if (!row) continue;
+      for (const k of ["accept", "edit", "reject", "pending"]) row.querySelector(".n-" + k).textContent = c[k];
+    }
+  }
+  function elementOf(btn) { return btn.closest(".dec"); }
+  function editorOf(el) {
+    if (el.tagName === "DETAILS") return el.querySelector(":scope > .editor");
+    return el.nextElementSibling && el.nextElementSibling.classList.contains("editor-row") ? el.nextElementSibling : null;
+  }
+
+  document.addEventListener("click", async (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    if (b.classList.contains("dec-btn") || b.classList.contains("cascade") || b.classList.contains("edit-btn") || b.classList.contains("save") || b.classList.contains("cancel")) {
+      ev.preventDefault(); ev.stopPropagation();
+    }
+    const el = elementOf(b);
+    if (!el) return;
+    try {
+      if (b.classList.contains("dec-btn")) {
+        const r = await post(`/runs/${RUN}/review/decide`, {section: el.dataset.section, id: el.dataset.id, decision: b.dataset.decision});
+        setState(el, b.dataset.decision); refreshSummary(r.summary);
+      } else if (b.classList.contains("cascade")) {
+        const r = await post(`/runs/${RUN}/review/dataset`, {table: el.dataset.id, decision: b.dataset.decision});
+        setState(el, b.dataset.decision);
+        el.querySelectorAll('tr.dec[data-section="fields"]').forEach(tr => setState(tr, b.dataset.decision));
+        refreshSummary(r.summary);
+      } else if (b.classList.contains("edit-btn")) {
+        const ed = editorOf(el); if (ed) ed.hidden = !ed.hidden;
+      } else if (b.classList.contains("cancel")) {
+        const ed = editorOf(el); if (ed) ed.hidden = true;
+      } else if (b.classList.contains("save")) {
+        const ed = editorOf(el);
+        const overrides = {};
+        ed.querySelectorAll("input[name], select[name], textarea[name]").forEach(i => { overrides[i.name] = i.value === "" && i.name === "refers_to" ? null : i.value; });
+        const r = await post(`/runs/${RUN}/review/decide`, {section: el.dataset.section, id: el.dataset.id, decision: "edit", overrides});
+        for (const [k, v] of Object.entries(overrides)) { const cell = el.querySelector(".v-" + k); if (cell) cell.textContent = v == null ? "" : v; }
+        setState(el, "edit"); ed.hidden = true; refreshSummary(r.summary);
+      }
+    } catch (e) { alert("Could not save decision: " + e); }
+  });
+})();
+</script>
+{% endblock %}

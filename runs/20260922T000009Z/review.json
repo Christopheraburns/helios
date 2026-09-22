@@ -1,0 +1,1809 @@
+{
+  "run_id": "20260922T000009Z",
+  "reviewed_at": "2026-09-22T00:38:45.171620+00:00",
+  "reviewed_by": null,
+  "datasets": {
+    "tpcds.call_center": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_page": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales": {
+      "decision": "accept"
+    },
+    "tpcds.customer": {
+      "decision": "accept"
+    },
+    "tpcds.customer_address": {
+      "decision": "accept"
+    },
+    "tpcds.customer_demographics": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim": {
+      "decision": "accept"
+    },
+    "tpcds.household_demographics": {
+      "decision": "accept"
+    },
+    "tpcds.income_band": {
+      "decision": "accept"
+    },
+    "tpcds.inventory": {
+      "decision": "accept"
+    },
+    "tpcds.item": {
+      "decision": "accept"
+    },
+    "tpcds.promotion": {
+      "decision": "accept"
+    },
+    "tpcds.web_site": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns": {
+      "decision": "accept"
+    },
+    "tpcds.web_page": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse": {
+      "decision": "accept"
+    },
+    "tpcds.time_dim": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns": {
+      "decision": "accept"
+    },
+    "tpcds.store": {
+      "decision": "accept"
+    },
+    "tpcds.ship_mode": {
+      "decision": "accept"
+    },
+    "tpcds.reason": {
+      "decision": "accept"
+    }
+  },
+  "fields": {
+    "tpcds.call_center.cc_call_center_sk": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_call_center_id": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_rec_start_date": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_rec_end_date": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_closed_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_open_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_name": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_class": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_employees": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_sq_ft": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_hours": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_manager": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_mkt_id": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_mkt_class": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_mkt_desc": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_market_manager": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_division": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_division_name": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_company": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_company_name": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_street_number": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_street_name": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_street_type": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_suite_number": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_city": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_county": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_state": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_zip": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_country": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_gmt_offset": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_tax_percentage": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_page.cp_catalog_page_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_page.cp_catalog_page_id": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_page.cp_start_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_page.cp_end_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_page.cp_department": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_page.cp_catalog_number": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_page.cp_catalog_page_number": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_page.cp_description": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_page.cp_type": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_returned_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_returned_time_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_refunded_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_refunded_cdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_refunded_hdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_refunded_addr_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_returning_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_returning_cdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_returning_hdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_returning_addr_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_call_center_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_catalog_page_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_ship_mode_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_warehouse_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_reason_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_order_number": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_return_quantity": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_return_amount": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_return_tax": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_return_amt_inc_tax": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_fee": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_return_ship_cost": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_refunded_cash": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_reversed_charge": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_store_credit": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_net_loss": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_sold_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_sold_time_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ship_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_bill_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_bill_cdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_bill_hdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_bill_addr_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ship_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ship_cdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ship_hdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ship_addr_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_call_center_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_catalog_page_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ship_mode_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_warehouse_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_promo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_order_number": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_quantity": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_wholesale_cost": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_list_price": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_sales_price": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ext_discount_amt": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ext_sales_price": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ext_wholesale_cost": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ext_list_price": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ext_tax": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_coupon_amt": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ext_ship_cost": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_net_paid": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_net_paid_inc_tax": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_net_paid_inc_ship": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_net_paid_inc_ship_tax": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_net_profit": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_customer_id": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_current_cdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_current_hdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_current_addr_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_first_shipto_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_first_sales_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_salutation": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_first_name": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_last_name": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_preferred_cust_flag": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_birth_day": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_birth_month": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_birth_year": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_birth_country": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_login": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_email_address": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_last_review_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer_address.ca_address_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer_address.ca_address_id": {
+      "decision": "accept"
+    },
+    "tpcds.customer_address.ca_street_number": {
+      "decision": "accept"
+    },
+    "tpcds.customer_address.ca_street_name": {
+      "decision": "accept"
+    },
+    "tpcds.customer_address.ca_street_type": {
+      "decision": "accept"
+    },
+    "tpcds.customer_address.ca_suite_number": {
+      "decision": "accept"
+    },
+    "tpcds.customer_address.ca_city": {
+      "decision": "accept"
+    },
+    "tpcds.customer_address.ca_county": {
+      "decision": "accept"
+    },
+    "tpcds.customer_address.ca_state": {
+      "decision": "accept"
+    },
+    "tpcds.customer_address.ca_zip": {
+      "decision": "accept"
+    },
+    "tpcds.customer_address.ca_country": {
+      "decision": "accept"
+    },
+    "tpcds.customer_address.ca_gmt_offset": {
+      "decision": "accept"
+    },
+    "tpcds.customer_address.ca_location_type": {
+      "decision": "accept"
+    },
+    "tpcds.customer_demographics.cd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer_demographics.cd_gender": {
+      "decision": "accept"
+    },
+    "tpcds.customer_demographics.cd_marital_status": {
+      "decision": "accept"
+    },
+    "tpcds.customer_demographics.cd_education_status": {
+      "decision": "accept"
+    },
+    "tpcds.customer_demographics.cd_purchase_estimate": {
+      "decision": "accept"
+    },
+    "tpcds.customer_demographics.cd_credit_rating": {
+      "decision": "accept"
+    },
+    "tpcds.customer_demographics.cd_dep_count": {
+      "decision": "accept"
+    },
+    "tpcds.customer_demographics.cd_dep_employed_count": {
+      "decision": "accept"
+    },
+    "tpcds.customer_demographics.cd_dep_college_count": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_date_id": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_date": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_month_seq": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_week_seq": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_quarter_seq": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_year": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_dow": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_moy": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_dom": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_qoy": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_fy_year": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_fy_quarter_seq": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_fy_week_seq": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_day_name": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_quarter_name": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_holiday": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_weekend": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_following_holiday": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_first_dom": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_last_dom": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_same_day_ly": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_same_day_lq": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_current_day": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_current_week": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_current_month": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_current_quarter": {
+      "decision": "accept"
+    },
+    "tpcds.date_dim.d_current_year": {
+      "decision": "accept"
+    },
+    "tpcds.household_demographics.hd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.household_demographics.hd_income_band_sk": {
+      "decision": "accept"
+    },
+    "tpcds.household_demographics.hd_buy_potential": {
+      "decision": "accept"
+    },
+    "tpcds.household_demographics.hd_dep_count": {
+      "decision": "accept"
+    },
+    "tpcds.household_demographics.hd_vehicle_count": {
+      "decision": "accept"
+    },
+    "tpcds.income_band.ib_income_band_sk": {
+      "decision": "accept"
+    },
+    "tpcds.income_band.ib_lower_bound": {
+      "decision": "accept"
+    },
+    "tpcds.income_band.ib_upper_bound": {
+      "decision": "accept"
+    },
+    "tpcds.inventory.inv_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.inventory.inv_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.inventory.inv_warehouse_sk": {
+      "decision": "accept"
+    },
+    "tpcds.inventory.inv_quantity_on_hand": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_item_id": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_rec_start_date": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_rec_end_date": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_item_desc": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_current_price": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_wholesale_cost": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_brand_id": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_brand": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_class_id": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_class": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_category_id": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_category": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_manufact_id": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_manufact": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_size": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_formulation": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_color": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_units": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_container": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_manager_id": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_product_name": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_promo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_promo_id": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_start_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_end_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_cost": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_response_target": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_promo_name": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_channel_dmail": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_channel_email": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_channel_catalog": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_channel_tv": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_channel_radio": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_channel_press": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_channel_event": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_channel_demo": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_channel_details": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_purpose": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_discount_active": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_site_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_site_id": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_rec_start_date": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_rec_end_date": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_name": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_open_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_close_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_class": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_manager": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_mkt_id": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_mkt_class": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_mkt_desc": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_market_manager": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_company_id": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_company_name": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_street_number": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_street_name": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_street_type": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_suite_number": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_city": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_county": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_state": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_zip": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_country": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_gmt_offset": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_tax_percentage": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_sold_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_sold_time_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ship_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_bill_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_bill_cdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_bill_hdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_bill_addr_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ship_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ship_cdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ship_hdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ship_addr_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_web_page_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_web_site_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ship_mode_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_warehouse_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_promo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_order_number": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_quantity": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_wholesale_cost": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_list_price": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_sales_price": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ext_discount_amt": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ext_sales_price": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ext_wholesale_cost": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ext_list_price": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ext_tax": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_coupon_amt": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ext_ship_cost": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_net_paid": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_net_paid_inc_tax": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_net_paid_inc_ship": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_net_paid_inc_ship_tax": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_net_profit": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_returned_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_returned_time_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_refunded_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_refunded_cdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_refunded_hdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_refunded_addr_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_returning_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_returning_cdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_returning_hdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_returning_addr_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_web_page_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_reason_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_order_number": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_return_quantity": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_return_amt": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_return_tax": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_return_amt_inc_tax": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_fee": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_return_ship_cost": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_refunded_cash": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_reversed_charge": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_account_credit": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_net_loss": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_web_page_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_web_page_id": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_rec_start_date": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_rec_end_date": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_creation_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_access_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_autogen_flag": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_url": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_type": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_char_count": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_link_count": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_image_count": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_max_ad_count": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse.w_warehouse_sk": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse.w_warehouse_id": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse.w_warehouse_name": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse.w_warehouse_sq_ft": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse.w_street_number": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse.w_street_name": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse.w_street_type": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse.w_suite_number": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse.w_city": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse.w_county": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse.w_state": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse.w_zip": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse.w_country": {
+      "decision": "accept"
+    },
+    "tpcds.warehouse.w_gmt_offset": {
+      "decision": "accept"
+    },
+    "tpcds.time_dim.t_time_sk": {
+      "decision": "accept"
+    },
+    "tpcds.time_dim.t_time_id": {
+      "decision": "accept"
+    },
+    "tpcds.time_dim.t_time": {
+      "decision": "accept"
+    },
+    "tpcds.time_dim.t_hour": {
+      "decision": "accept"
+    },
+    "tpcds.time_dim.t_minute": {
+      "decision": "accept"
+    },
+    "tpcds.time_dim.t_second": {
+      "decision": "accept"
+    },
+    "tpcds.time_dim.t_am_pm": {
+      "decision": "accept"
+    },
+    "tpcds.time_dim.t_shift": {
+      "decision": "accept"
+    },
+    "tpcds.time_dim.t_sub_shift": {
+      "decision": "accept"
+    },
+    "tpcds.time_dim.t_meal_time": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_sold_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_sold_time_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_cdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_hdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_addr_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_store_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_promo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_ticket_number": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_quantity": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_wholesale_cost": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_list_price": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_sales_price": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_ext_discount_amt": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_ext_sales_price": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_ext_wholesale_cost": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_ext_list_price": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_ext_tax": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_coupon_amt": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_net_paid": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_net_paid_inc_tax": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_net_profit": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_returned_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_return_time_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_cdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_hdemo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_addr_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_store_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_reason_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_ticket_number": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_return_quantity": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_return_amt": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_return_tax": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_return_amt_inc_tax": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_fee": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_return_ship_cost": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_refunded_cash": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_reversed_charge": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_store_credit": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_net_loss": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_store_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_store_id": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_rec_start_date": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_rec_end_date": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_closed_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_store_name": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_number_employees": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_floor_space": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_hours": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_manager": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_market_id": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_geography_class": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_market_desc": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_market_manager": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_division_id": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_division_name": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_company_id": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_company_name": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_street_number": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_street_name": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_street_type": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_suite_number": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_city": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_county": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_state": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_zip": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_country": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_gmt_offset": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_tax_percentage": {
+      "decision": "accept"
+    },
+    "tpcds.ship_mode.sm_ship_mode_sk": {
+      "decision": "accept"
+    },
+    "tpcds.ship_mode.sm_ship_mode_id": {
+      "decision": "accept"
+    },
+    "tpcds.ship_mode.sm_type": {
+      "decision": "accept"
+    },
+    "tpcds.ship_mode.sm_code": {
+      "decision": "accept"
+    },
+    "tpcds.ship_mode.sm_carrier": {
+      "decision": "accept"
+    },
+    "tpcds.ship_mode.sm_contract": {
+      "decision": "accept"
+    },
+    "tpcds.reason.r_reason_sk": {
+      "decision": "accept"
+    },
+    "tpcds.reason.r_reason_id": {
+      "decision": "accept"
+    },
+    "tpcds.reason.r_reason_desc": {
+      "decision": "accept"
+    }
+  },
+  "relationships": {
+    "tpcds.call_center.cc_open_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.call_center.cc_mkt_id->tpcds.store.s_store_sk": {
+      "decision": "accept"
+    },
+    "tpcds.item.i_manager_id->tpcds.promotion.p_promo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_page.cp_start_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_page.cp_end_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_returned_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_returned_time_sk->tpcds.time_dim.t_time_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_item_sk->tpcds.item.i_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_refunded_customer_sk->tpcds.customer.c_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_refunded_cdemo_sk->tpcds.customer_demographics.cd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_refunded_hdemo_sk->tpcds.household_demographics.hd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_refunded_addr_sk->tpcds.customer_address.ca_address_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_returning_customer_sk->tpcds.customer.c_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_returning_cdemo_sk->tpcds.customer_demographics.cd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_returning_hdemo_sk->tpcds.household_demographics.hd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_returning_addr_sk->tpcds.customer_address.ca_address_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_call_center_sk->tpcds.call_center.cc_call_center_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_catalog_page_sk->tpcds.catalog_page.cp_catalog_page_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_ship_mode_sk->tpcds.ship_mode.sm_ship_mode_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_warehouse_sk->tpcds.warehouse.w_warehouse_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns.cr_reason_sk->tpcds.reason.r_reason_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_sold_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_sold_time_sk->tpcds.time_dim.t_time_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ship_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_bill_customer_sk->tpcds.customer.c_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_bill_cdemo_sk->tpcds.customer_demographics.cd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_bill_hdemo_sk->tpcds.household_demographics.hd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_bill_addr_sk->tpcds.customer_address.ca_address_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ship_customer_sk->tpcds.customer.c_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ship_cdemo_sk->tpcds.customer_demographics.cd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ship_hdemo_sk->tpcds.household_demographics.hd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ship_addr_sk->tpcds.customer_address.ca_address_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_call_center_sk->tpcds.call_center.cc_call_center_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_catalog_page_sk->tpcds.catalog_page.cp_catalog_page_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_ship_mode_sk->tpcds.ship_mode.sm_ship_mode_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_warehouse_sk->tpcds.warehouse.w_warehouse_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_item_sk->tpcds.item.i_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales.cs_promo_sk->tpcds.promotion.p_promo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_current_cdemo_sk->tpcds.customer_demographics.cd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_current_hdemo_sk->tpcds.household_demographics.hd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_current_addr_sk->tpcds.customer_address.ca_address_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_first_shipto_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_first_sales_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.customer.c_last_review_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.household_demographics.hd_income_band_sk->tpcds.income_band.ib_income_band_sk": {
+      "decision": "accept"
+    },
+    "tpcds.inventory.inv_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.inventory.inv_item_sk->tpcds.item.i_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.inventory.inv_warehouse_sk->tpcds.warehouse.w_warehouse_sk": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_start_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_end_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.promotion.p_item_sk->tpcds.item.i_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store.s_closed_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_returned_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_return_time_sk->tpcds.time_dim.t_time_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_item_sk->tpcds.item.i_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_customer_sk->tpcds.customer.c_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_cdemo_sk->tpcds.customer_demographics.cd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_hdemo_sk->tpcds.household_demographics.hd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_addr_sk->tpcds.customer_address.ca_address_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_store_sk->tpcds.store.s_store_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns.sr_reason_sk->tpcds.reason.r_reason_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_sold_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_sold_time_sk->tpcds.time_dim.t_time_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_item_sk->tpcds.item.i_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_customer_sk->tpcds.customer.c_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_cdemo_sk->tpcds.customer_demographics.cd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_hdemo_sk->tpcds.household_demographics.hd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_addr_sk->tpcds.customer_address.ca_address_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_store_sk->tpcds.store.s_store_sk": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales.ss_promo_sk->tpcds.promotion.p_promo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_creation_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_access_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_page.wp_customer_sk->tpcds.customer.c_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_returned_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_returned_time_sk->tpcds.time_dim.t_time_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_item_sk->tpcds.item.i_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_refunded_customer_sk->tpcds.customer.c_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_refunded_cdemo_sk->tpcds.customer_demographics.cd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_refunded_hdemo_sk->tpcds.household_demographics.hd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_refunded_addr_sk->tpcds.customer_address.ca_address_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_returning_customer_sk->tpcds.customer.c_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_returning_cdemo_sk->tpcds.customer_demographics.cd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_returning_hdemo_sk->tpcds.household_demographics.hd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_returning_addr_sk->tpcds.customer_address.ca_address_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_web_page_sk->tpcds.web_page.wp_web_page_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns.wr_reason_sk->tpcds.reason.r_reason_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_sold_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_sold_time_sk->tpcds.time_dim.t_time_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ship_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_item_sk->tpcds.item.i_item_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_bill_customer_sk->tpcds.customer.c_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_bill_cdemo_sk->tpcds.customer_demographics.cd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_bill_hdemo_sk->tpcds.household_demographics.hd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_bill_addr_sk->tpcds.customer_address.ca_address_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ship_customer_sk->tpcds.customer.c_customer_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ship_cdemo_sk->tpcds.customer_demographics.cd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ship_hdemo_sk->tpcds.household_demographics.hd_demo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ship_addr_sk->tpcds.customer_address.ca_address_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_web_page_sk->tpcds.web_page.wp_web_page_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_web_site_sk->tpcds.web_site.web_site_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_ship_mode_sk->tpcds.ship_mode.sm_ship_mode_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_warehouse_sk->tpcds.warehouse.w_warehouse_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales.ws_promo_sk->tpcds.promotion.p_promo_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_open_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    },
+    "tpcds.web_site.web_close_date_sk->tpcds.date_dim.d_date_sk": {
+      "decision": "accept"
+    }
+  },
+  "metrics": {
+    "tpcds.store_sales::Store Sales Revenue": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales::Store Sales Quantity": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales::Store Sales Profit": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales::Store Sales Profit Margin": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales::Catalog Sales Revenue": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales::Catalog Sales Quantity": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales::Catalog Sales Profit": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales::Catalog Sales Profit Margin": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales::Web Sales Revenue": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales::Web Sales Quantity": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales::Web Sales Profit": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales::Web Sales Profit Margin": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns::Store Returns Quantity": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns::Store Returns Amount": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns::Store Returns Net Loss": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns::Catalog Returns Quantity": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns::Catalog Returns Amount": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns::Catalog Returns Net Loss": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns::Web Returns Quantity": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns::Web Returns Amount": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns::Web Returns Net Loss": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales::Store Sales Return Rate": {
+      "decision": "reject"
+    },
+    "tpcds.catalog_sales::Catalog Sales Return Rate": {
+      "decision": "reject"
+    },
+    "tpcds.web_sales::Web Sales Return Rate": {
+      "decision": "reject"
+    },
+    "tpcds.store_sales::Store Sales Discount Amount": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales::Catalog Sales Discount Amount": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales::Web Sales Discount Amount": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales::Store Sales Coupon Amount": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales::Catalog Sales Coupon Amount": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales::Web Sales Coupon Amount": {
+      "decision": "accept"
+    },
+    "tpcds.store_sales::Store Sales Tax": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales::Catalog Sales Tax": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales::Web Sales Tax": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_sales::Catalog Sales Shipping Cost": {
+      "decision": "accept"
+    },
+    "tpcds.web_sales::Web Sales Shipping Cost": {
+      "decision": "accept"
+    },
+    "tpcds.inventory::Inventory On Hand": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns::Store Returns Refunded Cash": {
+      "decision": "accept"
+    },
+    "tpcds.store_returns::Store Returns Store Credit": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns::Catalog Returns Refunded Cash": {
+      "decision": "accept"
+    },
+    "tpcds.catalog_returns::Catalog Returns Store Credit": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns::Web Returns Refunded Cash": {
+      "decision": "accept"
+    },
+    "tpcds.web_returns::Web Returns Store Credit": {
+      "decision": "accept"
+    }
+  },
+  "glossary_terms": {
+    "Street Type": {
+      "decision": "accept"
+    },
+    "Suite Number": {
+      "decision": "accept"
+    }
+  }
+}
