@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "helios": {
+      "url": "https://helios-mcp.ml-bba677be-716.applied.jmgjgh.a0.cloudera.site/mcp",
+      "headers": {
+        "Authorization": "Bearer supersecret"
+      }
+    }
+  }
+}
