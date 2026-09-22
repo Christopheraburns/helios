@@ -23,5 +23,6 @@ run_id = os.environ.get("HELIOS_RUN_ID") or new_run_id()
 print(f"harvest run {run_id}: databases={databases} glossaries={glossaries or 'all'}")
 snapshot = Harvester(engine(), atlas()).run(databases, glossaries, os.environ.get("HELIOS_QUERY_DIR"))
 print(f"tables={len(snapshot['tables'])} glossary_terms={len(snapshot['glossary_terms'])} "
-      f"queries={len(snapshot['queries']['statements'])} ({'; '.join(snapshot['queries']['sources'])})")
+      f"queries={len(snapshot['queries']['statements'])} kept, {snapshot['queries']['stats']} "
+      f"({'; '.join(snapshot['queries']['sources'])})")
 write_json(run_path(run_id, "harvest.json"), snapshot)
