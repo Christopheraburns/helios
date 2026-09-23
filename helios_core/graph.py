@@ -84,6 +84,16 @@ class ArtifactGraphRepository:
                     return json.load(handle), "proposed"
         return None, "configured"
 
+    def detail_for_element(
+        self, model: Model, element_id: str
+    ) -> dict[str, Any]:
+        document, _ = self._document(model.id)
+        if document is None:
+            return {}
+        if any("table" in dataset for dataset in document.get("datasets", [])):
+            return _proposal_detail(document, element_id)
+        return _ossie_detail(document, element_id)
+
 
 def authorize_graph(
     graph: ModelGraph,
@@ -176,6 +186,218 @@ def graph_response(graph: ModelGraph) -> dict[str, Any]:
     }
 
 
+def navigation_graph_response(
+    graph: ModelGraph,
+    *,
+    lens: str | None = None,
+    focus_node_id: str | None = None,
+    depth: int = 1,
+    include_attributes: bool = False,
+    limit: int = 100,
+    edge_limit: int = 500,
+    query: str | None = None,
+) -> dict[str, Any]:
+    """Return a bounded projection of an already-authorized graph."""
+    if lens is not None:
+        graph = project_graph_lens(graph, lens)
+    nodes_by_id = {node.id: node for node in graph.nodes}
+    searchable = [
+        node
+        for node in graph.nodes
+        if include_attributes or node.kind not in {"attribute", "column"}
+    ]
+    normalized_query = (query or "").strip().casefold()
+    total_matches: int | None = None
+
+    if normalized_query:
+        matches = [
+            node
+            for node in searchable
+            if normalized_query
+            in " ".join(
+                (
+                    node.id,
+                    node.kind,
+                    node.label,
+                    json.dumps(node.metadata, sort_keys=True, default=str),
+                )
+            ).casefold()
+        ]
+        matches.sort(key=lambda node: (node.label.casefold(), node.id))
+        total_matches = len(matches)
+        selected_ids = {node.id for node in matches[:limit]}
+    else:
+        if focus_node_id is not None and focus_node_id not in nodes_by_id:
+            raise KeyError(focus_node_id)
+        roots = (
+            [focus_node_id]
+            if focus_node_id
+            else sorted(
+                (
+                    node.id
+                    for node in searchable
+                    if node.kind == "domain"
+                ),
+                key=lambda node_id: (
+                    nodes_by_id[node_id].label.casefold(),
+                    node_id,
+                ),
+            )
+        )
+        if not roots and searchable:
+            roots = [min(searchable, key=lambda node: node.label.casefold()).id]
+
+        adjacency: dict[str, set[str]] = {
+            node.id: set() for node in graph.nodes
+        }
+        for edge in graph.edges:
+            adjacency.setdefault(edge.source, set()).add(edge.target)
+            adjacency.setdefault(edge.target, set()).add(edge.source)
+
+        selected_ids: set[str] = set()
+        frontier = list(roots)
+        for level in range(depth + 1):
+            next_frontier: list[str] = []
+            for node_id in sorted(
+                frontier,
+                key=lambda item: (
+                    nodes_by_id[item].label.casefold(),
+                    item,
+                ),
+            ):
+                node = nodes_by_id[node_id]
+                if (
+                    node.kind in {"attribute", "column"}
+                    and not include_attributes
+                    and node_id != focus_node_id
+                ):
+                    continue
+                if len(selected_ids) >= limit:
+                    break
+                selected_ids.add(node_id)
+                if level < depth:
+                    next_frontier.extend(
+                        neighbor
+                        for neighbor in adjacency.get(node_id, ())
+                        if neighbor not in selected_ids
+                    )
+            if len(selected_ids) >= limit:
+                break
+            frontier = next_frontier
+
+    selected_nodes = tuple(
+        node for node in graph.nodes if node.id in selected_ids
+    )
+    all_selected_edges = tuple(
+        edge
+        for edge in graph.edges
+        if edge.source in selected_ids and edge.target in selected_ids
+    )
+    selected_edges = all_selected_edges[:edge_limit]
+    selected_graph = ModelGraph(
+        graph.model_id,
+        graph.organization_id,
+        selected_nodes,
+        selected_edges,
+    )
+    response = graph_response(selected_graph)
+
+    all_adjacency: dict[str, set[str]] = {
+        node.id: set() for node in graph.nodes
+    }
+    for edge in graph.edges:
+        all_adjacency.setdefault(edge.source, set()).add(edge.target)
+        all_adjacency.setdefault(edge.target, set()).add(edge.source)
+    hidden_neighbors = {
+        node_id: len(all_adjacency.get(node_id, set()) - selected_ids)
+        for node_id in selected_ids
+    }
+    nodes_truncated = (
+        total_matches > len(selected_ids)
+        if total_matches is not None
+        else any(hidden_neighbors.values())
+    )
+    response["navigation"] = {
+        "focus_node_id": focus_node_id,
+        "truncated": (
+            nodes_truncated
+            or len(all_selected_edges) > len(selected_edges)
+        ),
+        "authorized_node_count": len(graph.nodes),
+        "authorized_edge_count": len(graph.edges),
+        "returned_node_count": len(selected_nodes),
+        "returned_edge_count": len(selected_edges),
+        "total_match_count": total_matches,
+        "hidden_neighbor_count": hidden_neighbors,
+        "expandable_node_ids": sorted(
+            node_id
+            for node_id, count in hidden_neighbors.items()
+            if count > 0
+        ),
+    }
+    return response
+
+
+def project_graph_lens(graph: ModelGraph, lens: str) -> ModelGraph:
+    """Project one authorized graph without changing its model identity."""
+    normalized = lens.strip().lower()
+    node_kinds = {
+        "physical": {
+            "domain",
+            "data_source",
+            "dataset",
+            "table",
+            "view",
+            "attribute",
+            "column",
+        },
+        "semantic": {
+            "domain",
+            "concept",
+            "dimension",
+            "metric",
+            "measure",
+            "dataset",
+        },
+        "ontology": {
+            "domain",
+            "concept",
+            "ontology_concept",
+            "property",
+            "ontology_property",
+        },
+    }
+    if normalized not in node_kinds:
+        raise ValueError(f"unknown graph lens {lens!r}")
+
+    nodes = tuple(
+        node for node in graph.nodes if node.kind in node_kinds[normalized]
+    )
+    node_ids = {node.id for node in nodes}
+    allowed_edges = {
+        "physical": {"physical_relationship", "inferred_relationship"},
+        "semantic": {"semantic_relationship", "inferred_relationship"},
+        "ontology": {"ontology_relationship", "conceptual_relationship"},
+    }[normalized]
+    edges = tuple(
+        edge
+        for edge in graph.edges
+        if edge.source in node_ids
+        and edge.target in node_ids
+        and (
+            edge.kind in allowed_edges
+            or edge.id.startswith("contains:")
+            or edge.id.startswith("uses:")
+        )
+    )
+    return ModelGraph(
+        graph.model_id,
+        graph.organization_id,
+        nodes,
+        edges,
+    )
+
+
 def _base_graph(model: Model) -> ModelGraph:
     root = GraphNode(
         id=f"model:{model.id}",
@@ -223,6 +445,7 @@ def _proposal_graph(
     base = _base_graph(model)
     nodes = list(base.nodes)
     edges = list(base.edges)
+    root = base.nodes[0]
     datasets: dict[str, str] = {}
     for dataset in document.get("datasets", []):
         table = dataset["table"]
@@ -241,7 +464,19 @@ def _proposal_graph(
                 metadata={
                     "physical_name": table,
                     "dataset_kind": dataset.get("kind", "other"),
+                    "semantic_role": dataset.get("kind"),
                 },
+            )
+        )
+        edges.append(
+            GraphEdge(
+                f"contains:{root.id}:{dataset_id}",
+                "semantic_relationship",
+                root.id,
+                dataset_id,
+                model.organization_id,
+                model.id,
+                status=status,
             )
         )
         for item in dataset.get("fields", []):
@@ -290,6 +525,17 @@ def _proposal_graph(
                 metadata={"description": metric.get("description", "")},
             )
         )
+        edges.append(
+            GraphEdge(
+                f"contains:{root.id}:{metric_id}",
+                "semantic_relationship",
+                root.id,
+                metric_id,
+                model.organization_id,
+                model.id,
+                status=status,
+            )
+        )
     for relationship in document.get("relationships", []):
         source = datasets.get(relationship.get("from"))
         target = datasets.get(relationship.get("to"))
@@ -320,10 +566,12 @@ def _ossie_graph(
     base = _base_graph(model)
     nodes = list(base.nodes)
     edges = list(base.edges)
+    root = base.nodes[0]
     datasets: dict[str, str] = {}
     for dataset in document.get("datasets", []):
         name = dataset["name"]
         dataset_id = f"dataset:{name}"
+        dataset_extension = _helios_extension(dataset)
         datasets[name] = dataset_id
         nodes.append(
             GraphNode(
@@ -333,7 +581,21 @@ def _ossie_graph(
                 model.organization_id,
                 model.id,
                 status=status,
-                metadata={"physical_name": dataset.get("source")},
+                metadata={
+                    "physical_name": dataset.get("source"),
+                    "semantic_role": dataset_extension.get("kind"),
+                },
+            )
+        )
+        edges.append(
+            GraphEdge(
+                f"contains:{root.id}:{dataset_id}",
+                "semantic_relationship",
+                root.id,
+                dataset_id,
+                model.organization_id,
+                model.id,
+                status=status,
             )
         )
         for item in dataset.get("fields", []):
@@ -364,15 +626,27 @@ def _ossie_graph(
                 )
             )
     for metric in document.get("metrics", []):
+        metric_id = f"metric:{metric['name']}"
         nodes.append(
             GraphNode(
-                f"metric:{metric['name']}",
+                metric_id,
                 "metric",
                 metric["name"],
                 model.organization_id,
                 model.id,
                 status=status,
                 metadata={"description": metric.get("description", "")},
+            )
+        )
+        edges.append(
+            GraphEdge(
+                f"contains:{root.id}:{metric_id}",
+                "semantic_relationship",
+                root.id,
+                metric_id,
+                model.organization_id,
+                model.id,
+                status=status,
             )
         )
     for relationship in document.get("relationships", []):
@@ -393,6 +667,133 @@ def _ossie_graph(
     return ModelGraph(
         model.id, model.organization_id, tuple(nodes), tuple(edges)
     )
+
+
+def _proposal_detail(
+    document: dict[str, Any], element_id: str
+) -> dict[str, Any]:
+    for dataset in document.get("datasets", []):
+        table = dataset["table"]
+        if element_id == f"dataset:{table}":
+            return _compact(
+                {
+                    "description": dataset.get("description"),
+                    "physical_identity": table,
+                    "semantic_role": dataset.get("kind"),
+                    "primary_key": dataset.get("primary_key"),
+                }
+            )
+        for field in dataset.get("fields", []):
+            if element_id == f"attribute:{table}:{field['column']}":
+                return _compact(
+                    {
+                        "description": field.get("description"),
+                        "physical_identity": f"{table}.{field['column']}",
+                        "dataset_physical_identity": table,
+                        "physical_name": field["column"],
+                        "physical_type": field.get("type"),
+                        "semantic_role": field.get("role"),
+                        "business_terms": field.get("glossary_terms"),
+                        "proposed_term": field.get("proposed_term"),
+                        "refers_to": field.get("refers_to"),
+                    }
+                )
+    for relationship in document.get("relationships", []):
+        source = f"dataset:{relationship.get('from')}"
+        target = f"dataset:{relationship.get('to')}"
+        relationship_id = (
+            f"relationship:{source}:{target}:"
+            f"{relationship.get('from_column', '')}"
+        )
+        if element_id == relationship_id:
+            return _compact(
+                {
+                    "source_physical_identity": relationship.get("from"),
+                    "source_column": relationship.get("from_column"),
+                    "target_physical_identity": relationship.get("to"),
+                    "target_column": relationship.get("to_column"),
+                    "relationship_type": relationship.get("source"),
+                    "target_rows": relationship.get("to_rows"),
+                    "distinct_values": relationship.get("distinct_values"),
+                    "unmatched_values": relationship.get("unmatched"),
+                    "match_ratio": relationship.get("match_ratio"),
+                    "accepted": relationship.get("accepted"),
+                }
+            )
+    return {}
+
+
+def _ossie_detail(
+    document: dict[str, Any], element_id: str
+) -> dict[str, Any]:
+    for dataset in document.get("datasets", []):
+        name = dataset["name"]
+        source = dataset.get("source")
+        dataset_extension = _helios_extension(dataset)
+        if element_id == f"dataset:{name}":
+            return _compact(
+                {
+                    "description": dataset.get("description"),
+                    "physical_identity": source,
+                    "semantic_role": dataset_extension.get("kind"),
+                    "primary_key": dataset.get("primary_key"),
+                }
+            )
+        for field in dataset.get("fields", []):
+            if element_id != f"attribute:{name}:{field['name']}":
+                continue
+            extension = _helios_extension(field)
+            return _compact(
+                {
+                    "description": field.get("description"),
+                    "physical_identity": (
+                        f"{source}.{field['name']}" if source else field["name"]
+                    ),
+                    "dataset_physical_identity": source,
+                    "physical_name": field["name"],
+                    "physical_type": (
+                        extension.get("engine_type")
+                        or field.get("datatype")
+                    ),
+                    "semantic_role": extension.get("role"),
+                    "business_terms": extension.get("glossary_terms"),
+                    "refers_to": extension.get("refers_to"),
+                }
+            )
+    for relationship in document.get("relationships", []):
+        if element_id != f"relationship:{relationship['name']}":
+            continue
+        extension = _helios_extension(relationship)
+        return _compact(
+            {
+                "source_physical_identity": relationship.get("from"),
+                "source_columns": relationship.get("from_columns"),
+                "target_physical_identity": relationship.get("to"),
+                "target_columns": relationship.get("to_columns"),
+                "relationship_type": extension.get("source"),
+                "match_ratio": extension.get("match_ratio"),
+            }
+        )
+    return {}
+
+
+def _helios_extension(document: dict[str, Any]) -> dict[str, Any]:
+    for extension in document.get("custom_extensions") or []:
+        if extension.get("vendor_name") != "HELIOS":
+            continue
+        try:
+            return json.loads(extension.get("data") or "{}")
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _compact(document: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in document.items()
+        if value is not None and value != [] and value != ""
+    }
 
 
 def _read_action(kind: str) -> authz.Action:

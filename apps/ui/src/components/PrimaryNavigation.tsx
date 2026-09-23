@@ -27,10 +27,14 @@ function NavigationIcon({ name }: { name: (typeof navigation)[number]["icon"] })
 
 interface PrimaryNavigationProps {
   context: ApplicationContextState;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }
 
 export default function PrimaryNavigation({
   context,
+  collapsed,
+  onToggleCollapsed,
 }: PrimaryNavigationProps) {
   const contextParams = new URLSearchParams();
   if (context.selectedOrganizationId) {
@@ -42,20 +46,41 @@ export default function PrimaryNavigation({
   const search = contextParams.toString();
 
   return (
-    <nav className="primary-nav" aria-label="Primary navigation">
-      <p className="primary-nav__label">Workspace</p>
+    <nav
+      className={`primary-nav${collapsed ? " primary-nav--collapsed" : ""}`}
+      aria-label="Primary navigation"
+      id="workspace-navigation"
+    >
+      <div className="primary-nav__header">
+        <p className="primary-nav__label">Workspace</p>
+        <button
+          className="primary-nav__toggle"
+          type="button"
+          aria-controls="workspace-navigation"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "Expand workspace" : "Collapse workspace"}
+          title={collapsed ? "Expand workspace" : "Collapse workspace"}
+          onClick={onToggleCollapsed}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d={collapsed ? "m9 5 7 7-7 7" : "m15 5-7 7 7 7"} />
+          </svg>
+        </button>
+      </div>
       <ul>
         {navigation.map((item) => (
           <li key={item.to}>
             <NavLink
               to={{ pathname: item.to, search: search ? `?${search}` : "" }}
               end={item.to === "/"}
+              aria-label={collapsed ? item.label : undefined}
+              title={collapsed ? item.label : undefined}
               className={({ isActive }) =>
                 `primary-nav__link${isActive ? " primary-nav__link--active" : ""}`
               }
             >
               <NavigationIcon name={item.icon} />
-              <span>{item.label}</span>
+              <span className="primary-nav__link-label">{item.label}</span>
             </NavLink>
           </li>
         ))}

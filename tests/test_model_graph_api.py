@@ -190,3 +190,74 @@ def test_hidden_nodes_cannot_be_inferred_from_dangling_edges(client):
     assert "metric:draft-score" not in serialized
     assert "edge:value:draft" not in serialized
     assert "dataset:restricted-finance" not in serialized
+
+
+def test_navigation_graph_returns_bounded_authorized_neighbors(client):
+    response = client.get(
+        f"/api/v1/models/{MODEL.id}/graph",
+        params={
+            "navigation": "true",
+            "focus_node_id": "dataset:customers",
+            "depth": 1,
+            "limit": 2,
+        },
+        headers={"x-forwarded-user": "viewer"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert {node["id"] for node in body["nodes"]} == {
+        "dataset:customers",
+        "metric:lifetime-value",
+    }
+    assert body["navigation"]["focus_node_id"] == "dataset:customers"
+    assert body["navigation"]["authorized_node_count"] == 3
+    assert body["navigation"]["returned_node_count"] == 2
+
+
+def test_navigation_search_is_authorized_before_matching(client):
+    visible = client.get(
+        f"/api/v1/models/{MODEL.id}/graph",
+        params={"navigation": "true", "query": "lifetime"},
+        headers={"x-forwarded-user": "viewer"},
+    )
+    hidden = client.get(
+        f"/api/v1/models/{MODEL.id}/graph",
+        params={"navigation": "true", "query": "draft"},
+        headers={"x-forwarded-user": "viewer"},
+    )
+
+    assert [node["id"] for node in visible.json()["nodes"]] == [
+        "metric:lifetime-value"
+    ]
+    assert hidden.json()["nodes"] == []
+
+
+def test_lenses_project_the_same_authorized_model_graph(client):
+    physical = client.get(
+        f"/api/v1/models/{MODEL.id}/graph",
+        params={
+            "navigation": "true",
+            "lens": "physical",
+            "focus_node_id": "dataset:customers",
+        },
+        headers={"x-forwarded-user": "viewer"},
+    )
+    semantic = client.get(
+        f"/api/v1/models/{MODEL.id}/graph",
+        params={
+            "navigation": "true",
+            "lens": "semantic",
+            "focus_node_id": "dataset:customers",
+        },
+        headers={"x-forwarded-user": "viewer"},
+    )
+
+    assert physical.status_code == 200
+    assert {node["id"] for node in physical.json()["nodes"]} == {
+        "dataset:customers"
+    }
+    assert {node["id"] for node in semantic.json()["nodes"]} == {
+        "dataset:customers",
+        "metric:lifetime-value",
+    }

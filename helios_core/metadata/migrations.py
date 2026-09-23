@@ -94,4 +94,13 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON model_memberships (principal_id);
         """,
     ),
+    (
+        2,
+        """
+        ALTER TABLE models
+            ADD COLUMN version_ids_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE models
+            ADD COLUMN discovery_run_ids_json TEXT NOT NULL DEFAULT '[]';
+        """,
+    ),
 )

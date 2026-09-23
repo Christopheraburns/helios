@@ -94,8 +94,8 @@ the UI authorization contract.
 
 ## Current REST API
 
-The router prefix is `/api/v1`. All current operations are GET requests and
-have no query parameters. `GET /api/v1/healthz` is an unauthenticated process
+The router prefix is `/api/v1`. All current operations are GET requests;
+the model collection accepts an organization filter. `GET /api/v1/healthz` is an unauthenticated process
 readiness check. `GET /api/v1/diagnostics` returns authenticated principal
 identity and accessible organization count. An authenticated principal with no
 Helios grants receives a successful response with a count of zero.
@@ -138,6 +138,16 @@ Helios grants receives a successful response with a count of zero.
 - Requires `model.read`.
 - Returns the same model shape used by the organization model list.
 
+`GET /api/v1/models/{model_id}/overview`
+
+- Requires `model.read`.
+- Returns persisted status, creator and timestamps; data-source summaries;
+  permission-filtered dataset, relationship, concept, and metric counts; and
+  publication, discovery, and review state.
+- `unresolved_review_items` is `null` when no review information exists.
+- Counts come from the backend's authorized graph projection. The UI must not
+  inspect model artifacts to recreate them.
+
 `GET /api/v1/models/{model_id}/glossary`
 
 - Requires `glossary.read`.
@@ -168,10 +178,6 @@ Helios grants receives a successful response with a count of zero.
 - Returns `model_id`, `versions`, and `available_actions`.
 - Versions come from `Model.version_ids`.
 
-The SQLite model loader currently does not populate `discovery_run_ids` or
-`version_ids`, so the two list responses are normally empty when using the
-production repository.
-
 ### Authorized model graph
 
 `GET /api/v1/models/{model_id}/graph`
@@ -190,6 +196,31 @@ The server projects that graph through authorization before serialization:
 - draft, proposed, and rejected objects also require `model.edit`;
 - edges with a hidden endpoint are removed; and
 - permitted actions are computed independently for every returned object.
+
+The full response remains available for compatibility. Canvas clients should
+request bounded navigation responses with `navigation=true`, optionally using:
+
+- `focus_node_id` and `depth` (0–3) for a local neighborhood;
+- `lens=physical|semantic|ontology` to project the same authorized model graph
+  for a particular navigation purpose;
+- `include_attributes=true` when a dataset is explicitly expanded;
+- `limit` (maximum 500) and `edge_limit` (maximum 2,000) to bound the
+  response; or
+- `query` for server-side authorized node search.
+
+Authorization is applied to the complete graph before neighborhood traversal
+or search. Navigation responses add authorized/returned counts, truncation,
+hidden-neighbor counts, and expandable node IDs under `navigation`.
+
+`GET /api/v1/models/{model_id}/graph/detail?element_id={id}`
+
+- Lazily returns detail for one node or edge after applying the same graph
+  authorization projection.
+- May include physical identity, source, schema, profile statistics, semantic
+  role, business terms, relationship evidence, and governance state when those
+  values exist in model or discovery artifacts.
+- Missing values are omitted rather than inferred.
+- `available_actions` contains only server-authorized actions for that element.
 
 The response shape is:
 

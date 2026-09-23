@@ -30,6 +30,12 @@ npm run build
 Vite writes the static production application to `apps/ui/dist`. Build output
 is intentionally ignored by git and should be produced by the deployment
 pipeline or copied into the Cloudera AI project workspace as a build artifact.
+Each build displays a UTC timestamp-based build number beneath the Helios
+wordmark. CI can supply its own identifier:
+
+```bash
+HELIOS_UI_BUILD_NUMBER="$CI_BUILD_NUMBER" npm run build
+```
 
 `npm run preview` is available for checking a production build locally. It is
 not the Cloudera AI production server.

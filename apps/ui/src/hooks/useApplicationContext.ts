@@ -12,6 +12,10 @@ import {
   AuthorizationError,
   HeliosApi,
   HeliosApiClient,
+  HeliosGraphDto,
+  GraphNavigationOptions,
+  GraphElementDetail,
+  ModelOverview,
   ModelSummary,
   OrganizationSummary,
 } from "../api/client";
@@ -25,16 +29,27 @@ export type ApplicationErrorKind =
 export interface ApplicationContextState {
   status: LoadStatus;
   modelStatus: LoadStatus;
+  overviewStatus: LoadStatus;
   errorKind?: ApplicationErrorKind;
   errorMessage?: string;
   diagnostics?: ApiDiagnostics;
   organizations: OrganizationSummary[];
   models: ModelSummary[];
+  modelOverview?: ModelOverview;
   selectedOrganizationId: string;
   selectedModelId: string;
   selectOrganization: (organizationId: string) => void;
   selectModel: (modelId: string) => void;
   retry: () => void;
+  applicationUrl?: (path: string) => string;
+  loadModelGraph: (
+    modelId: string,
+    options?: GraphNavigationOptions,
+  ) => Promise<HeliosGraphDto>;
+  loadGraphElementDetail: (
+    modelId: string,
+    elementId: string,
+  ) => Promise<GraphElementDetail>;
 }
 
 function describeError(error: unknown): {
@@ -47,6 +62,7 @@ function describeError(error: unknown): {
   if (error instanceof AuthorizationError) {
     return { kind: "authorization", message: error.message };
   }
+
   return {
     kind: "unavailable",
     message:
@@ -67,11 +83,13 @@ export function useApplicationContext(
   locationRef.current = location;
   const [status, setStatus] = useState<LoadStatus>("loading");
   const [modelStatus, setModelStatus] = useState<LoadStatus>("idle");
+  const [overviewStatus, setOverviewStatus] = useState<LoadStatus>("idle");
   const [errorKind, setErrorKind] = useState<ApplicationErrorKind>();
   const [errorMessage, setErrorMessage] = useState<string>();
   const [diagnostics, setDiagnostics] = useState<ApiDiagnostics>();
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
   const [loadedModels, setLoadedModels] = useState<ModelSummary[]>([]);
+  const [modelOverview, setModelOverview] = useState<ModelOverview>();
   const [modelsOrganizationId, setModelsOrganizationId] = useState("");
   const [loadVersion, setLoadVersion] = useState(0);
 
@@ -152,6 +170,7 @@ export function useApplicationContext(
         setDiagnostics(undefined);
         setOrganizations([]);
         setLoadedModels([]);
+        setModelOverview(undefined);
         setErrorKind(described.kind);
         setErrorMessage(described.message);
         setStatus("error");
@@ -229,6 +248,58 @@ export function useApplicationContext(
   }, [client, selectedOrganizationId, status]);
 
   useEffect(() => {
+    let active = true;
+    setModelOverview(undefined);
+    if (
+      status !== "ready" ||
+      effectiveModelStatus !== "ready" ||
+      !selectedModelId
+    ) {
+      setOverviewStatus("idle");
+      return () => {
+        active = false;
+      };
+    }
+
+    setOverviewStatus("loading");
+    async function loadOverview() {
+      try {
+        const result = await client().modelOverview(selectedModelId);
+        if (!active) return;
+        setModelOverview(result);
+        setOverviewStatus("ready");
+      } catch (error) {
+        if (!active) return;
+        const described = describeError(error);
+        setModelOverview(undefined);
+        setErrorKind(described.kind);
+        setErrorMessage(described.message);
+        if (
+          described.kind === "authentication" ||
+          described.kind === "authorization"
+        ) {
+          setOrganizations([]);
+          setLoadedModels([]);
+          setStatus("error");
+        } else {
+          setOverviewStatus("error");
+        }
+      }
+    }
+
+    void loadOverview();
+    return () => {
+      active = false;
+    };
+  }, [
+    client,
+    effectiveModelStatus,
+    selectedModelId,
+    status,
+    loadVersion,
+  ]);
+
+  useEffect(() => {
     if (
       status === "ready" &&
       effectiveModelStatus === "ready" &&
@@ -270,18 +341,37 @@ export function useApplicationContext(
     [models, selectedOrganizationId, writeContext],
   );
 
+  const loadModelGraph = useCallback(
+    (modelId: string, options?: GraphNavigationOptions) =>
+      client().modelGraph(modelId, options),
+    [client],
+  );
+  const loadGraphElementDetail = useCallback(
+    (modelId: string, elementId: string) =>
+      client().modelGraphDetail(modelId, elementId),
+    [client],
+  );
+  const applicationUrl = client().applicationUrl;
+
   return {
     status,
     modelStatus: effectiveModelStatus,
+    overviewStatus,
     errorKind,
     errorMessage,
     diagnostics,
     organizations,
     models,
+    modelOverview,
     selectedOrganizationId,
     selectedModelId,
     selectOrganization,
     selectModel,
     retry: () => setLoadVersion((version) => version + 1),
+    applicationUrl: applicationUrl
+      ? (path: string) => applicationUrl.call(client(), path)
+      : undefined,
+    loadModelGraph,
+    loadGraphElementDetail,
   };
 }

@@ -9,17 +9,21 @@ import os
 from dataclasses import dataclass
 from typing import Annotated, Callable
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from helios_core import authz
+from helios_core import review as review_store
 from helios_core import runs as runstore
 from helios_core.artifacts import ArtifactStore
 from helios_core.domain import Model, Organization
 from helios_core.graph import (
     ArtifactGraphRepository,
+    GraphEdge,
+    GraphNode,
     GraphRepository,
     authorize_graph,
     graph_response,
+    navigation_graph_response,
 )
 from helios_core.metadata import MetadataRepository
 
@@ -229,6 +233,162 @@ def _model_metadata(context: AuthorizedModel) -> dict:
     }
 
 
+def _model_overview(
+    context: AuthorizedModel,
+    metadata: MetadataRepository,
+    graphs: GraphRepository,
+) -> dict:
+    model = context.model
+    stored = metadata.stored_model(model.id)
+    if stored is None:
+        raise HTTPException(404, "model not found")
+
+    graph = authorize_graph(
+        graphs.graph_for_model(model),
+        model,
+        context.principal,
+        context.policy,
+    )
+    nodes = {node.id: node for node in graph.nodes}
+    semantic_nodes = [
+        node for node in graph.nodes if node.status != "configured"
+    ]
+    publication_state = (
+        "published"
+        if any(node.status == "published" for node in semantic_nodes)
+        else "proposed"
+        if any(node.status == "proposed" for node in semantic_nodes)
+        else "configured"
+    )
+    relationships = [
+        edge
+        for edge in graph.edges
+        if edge.kind in {"semantic_relationship", "inferred_relationship"}
+        and nodes.get(edge.source)
+        and nodes.get(edge.target)
+        and nodes[edge.source].kind == "dataset"
+        and nodes[edge.target].kind == "dataset"
+    ]
+
+    known_runs = {run["id"]: run for run in runstore.list_runs()}
+    latest_run_id = model.discovery_run_ids[-1] if model.discovery_run_ids else None
+    latest_run = known_runs.get(latest_run_id) if latest_run_id else None
+    unresolved_review_items: int | None = None
+    review_status = "not_available"
+    if latest_run_id:
+        proposal = runstore.load(latest_run_id, "propose")
+        if proposal is not None:
+            review = review_store.load(
+                os.path.join(runstore.RUNS_DIR, latest_run_id, "review.json"),
+                latest_run_id,
+            )
+            review_summary = review_store.summary(review, proposal)
+            unresolved_review_items = sum(
+                section["pending"] for section in review_summary.values()
+            )
+            review_status = (
+                "pending" if unresolved_review_items else "complete"
+            )
+
+    stages = latest_run.get("stages", {}) if latest_run else {}
+    discovery_status = (
+        "not_started"
+        if latest_run_id is None
+        else "unavailable"
+        if latest_run is None
+        else "proposals_ready"
+        if stages.get("propose")
+        else "profile_complete"
+        if stages.get("profile")
+        else "harvest_complete"
+        if stages.get("harvest")
+        else "started"
+    )
+    creator = metadata.principal(stored.created_by)
+
+    return {
+        **_model_metadata(context),
+        "status": stored.status,
+        "creator": {
+            "id": stored.created_by,
+            "display_name": (
+                creator.display_name if creator else stored.created_by
+            ),
+        },
+        "created_at": stored.created_at.isoformat(),
+        "updated_at": stored.updated_at.isoformat(),
+        "data_sources": [
+            {
+                "data_source_id": reference.data_source_id,
+                "name": (
+                    source.name if source is not None else reference.data_source_id
+                ),
+                "connector": source.connector if source is not None else None,
+                "selected_assets": list(reference.selected_assets),
+            }
+            for reference in model.data_sources
+            for source in [metadata.data_source(reference.data_source_id)]
+        ],
+        "summary": {
+            "dataset_count": sum(
+                node.kind == "dataset" for node in graph.nodes
+            ),
+            "relationship_count": len(relationships),
+            "concept_count": sum(
+                node.kind == "concept" for node in graph.nodes
+            ),
+            "metric_count": sum(
+                node.kind == "metric" for node in graph.nodes
+            ),
+        },
+        "lifecycle": {
+            "publication_state": publication_state,
+            "discovery_status": discovery_status,
+            "review_status": review_status,
+            "unresolved_review_items": unresolved_review_items,
+            "latest_run_id": latest_run_id,
+        },
+    }
+
+
+def _profile_details(model: Model, details: dict) -> dict:
+    dataset_identity = details.get("dataset_physical_identity")
+    if dataset_identity is None and details.get("physical_name") is None:
+        dataset_identity = details.get("physical_identity")
+    if not dataset_identity:
+        return {}
+
+    profile = None
+    for run_id in reversed(model.discovery_run_ids):
+        profile = runstore.load(run_id, "profile")
+        if profile is not None:
+            break
+    if profile is None:
+        return {}
+    table = (profile.get("tables") or {}).get(dataset_identity)
+    if not isinstance(table, dict):
+        return {}
+    stats = table.get("stats") or {}
+    result = {}
+    if stats.get("row_count") is not None:
+        result["row_count"] = stats["row_count"]
+
+    physical_name = details.get("physical_name")
+    column = (stats.get("columns") or {}).get(physical_name)
+    if isinstance(column, dict):
+        if column.get("type") is not None:
+            result["physical_type"] = column["type"]
+        if column.get("null_rate") is not None:
+            result["null_percentage"] = column["null_rate"] * 100
+        if column.get("ndv") is not None:
+            result["distinct_values"] = column["ndv"]
+        if column.get("min") is not None:
+            result["minimum"] = column["min"]
+        if column.get("max") is not None:
+            result["maximum"] = column["max"]
+    return result
+
+
 @api_router.get("/healthz")
 def api_health() -> dict:
     return {"status": "ok"}
@@ -378,6 +538,22 @@ def get_model(
     return _model_metadata(context)
 
 
+@api_router.get("/models/{model_id}/overview")
+def get_model_overview(
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+    graphs: Annotated[GraphRepository, Depends(graph_repository)],
+) -> dict:
+    return _model_overview(
+        context,
+        request.app.state.metadata_repository,
+        graphs,
+    )
+
+
 @api_router.get("/models/{model_id}/graph")
 def get_model_graph(
     context: Annotated[
@@ -385,6 +561,17 @@ def get_model_graph(
         Depends(authorize_model(authz.Action.MODEL_READ)),
     ],
     repository: Annotated[GraphRepository, Depends(graph_repository)],
+    navigation: bool = False,
+    lens: Annotated[
+        str | None,
+        Query(pattern="^(physical|semantic|ontology)$"),
+    ] = None,
+    focus_node_id: str | None = None,
+    depth: Annotated[int, Query(ge=0, le=3)] = 1,
+    include_attributes: bool = False,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    edge_limit: Annotated[int, Query(ge=1, le=2000)] = 500,
+    query: Annotated[str | None, Query(max_length=200)] = None,
 ) -> dict:
     graph = repository.graph_for_model(context.model)
     try:
@@ -393,7 +580,105 @@ def get_model_graph(
         )
     except ValueError as exc:
         raise HTTPException(404, "model graph not found") from exc
+    if navigation or lens or focus_node_id or query:
+        try:
+            return navigation_graph_response(
+                authorized,
+                lens=lens,
+                focus_node_id=focus_node_id,
+                depth=depth,
+                include_attributes=include_attributes,
+                limit=limit,
+                edge_limit=edge_limit,
+                query=query,
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "graph node not found") from exc
     return graph_response(authorized)
+
+
+@api_router.get("/models/{model_id}/graph/detail")
+def get_model_graph_detail(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+    repository: Annotated[GraphRepository, Depends(graph_repository)],
+    element_id: Annotated[str, Query(min_length=1, max_length=500)],
+) -> dict:
+    graph = authorize_graph(
+        repository.graph_for_model(context.model),
+        context.model,
+        context.principal,
+        context.policy,
+    )
+    element: GraphNode | GraphEdge | None = next(
+        (node for node in graph.nodes if node.id == element_id),
+        None,
+    )
+    element_type = "node"
+    if element is None:
+        element = next(
+            (edge for edge in graph.edges if edge.id == element_id),
+            None,
+        )
+        element_type = "edge"
+    if element is None:
+        raise HTTPException(404, "graph element not found")
+
+    detail_loader = getattr(repository, "detail_for_element", None)
+    details = (
+        dict(detail_loader(context.model, element_id))
+        if callable(detail_loader)
+        else {}
+    )
+    dataset_identity = (
+        details.get("dataset_physical_identity")
+        or (
+            details.get("physical_identity")
+            if isinstance(element, GraphNode) and element.kind == "dataset"
+            else None
+        )
+    )
+    if isinstance(dataset_identity, str):
+        parts = dataset_identity.split(".")
+        if len(parts) >= 2:
+            details.setdefault("schema", parts[-2])
+        if len(parts) >= 3:
+            details.setdefault("catalog", ".".join(parts[:-2]))
+    details.update(_profile_details(context.model, details))
+    if isinstance(element, GraphNode) and element.kind == "dataset":
+        details["relationship_count"] = sum(
+            edge.source == element.id or edge.target == element.id
+            for edge in graph.edges
+            if edge.kind
+            in {
+                "physical_relationship",
+                "inferred_relationship",
+                "semantic_relationship",
+                "ontology_relationship",
+            }
+            and not edge.id.startswith("contains:")
+        )
+    if isinstance(element, GraphNode) and context.model.data_sources:
+        details["data_source_ids"] = [
+            reference.data_source_id
+            for reference in context.model.data_sources
+        ]
+
+    return {
+        "element_type": element_type,
+        "id": element.id,
+        "kind": element.kind,
+        "label": element.label if isinstance(element, GraphNode) else None,
+        "source": element.source if isinstance(element, GraphEdge) else None,
+        "target": element.target if isinstance(element, GraphEdge) else None,
+        "status": element.status,
+        "confidence": element.confidence,
+        "evidence": element.evidence,
+        "details": details,
+        "available_actions": list(element.permitted_actions),
+    }
 
 
 @api_router.get("/models/{model_id}/glossary")
