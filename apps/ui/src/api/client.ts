@@ -140,6 +140,7 @@ export interface GraphNavigationOptions {
   includeAttributes?: boolean;
   limit?: number;
   query?: string;
+  reviewRunId?: string;
 }
 
 export interface GraphElementDetail {
@@ -154,6 +155,34 @@ export interface GraphElementDetail {
   evidence: string | null;
   details: Record<string, unknown>;
   available_actions: string[];
+}
+
+export interface ReviewDecisionRequest {
+  section:
+    | "datasets"
+    | "fields"
+    | "relationships"
+    | "metrics"
+    | "glossary_terms";
+  element_id: string;
+  decision: "accept" | "reject" | "edit";
+  overrides?: Record<string, unknown>;
+  note?: string;
+}
+
+export interface ReviewDecisionResponse {
+  ok: true;
+  run_id: string;
+  section: string;
+  element_id: string;
+  entry: {
+    decision: "accept" | "reject" | "edit";
+    overrides?: Record<string, unknown>;
+    note?: string;
+  };
+  reviewed_at: string;
+  reviewed_by: string;
+  summary: Record<string, Record<string, number>>;
 }
 
 export class AuthenticationError extends Error {}
@@ -178,7 +207,13 @@ export interface HeliosApi {
   modelGraphDetail(
     modelId: string,
     elementId: string,
+    reviewRunId?: string,
   ): Promise<GraphElementDetail>;
+  decideModelProposal(
+    modelId: string,
+    runId: string,
+    decision: ReviewDecisionRequest,
+  ): Promise<ReviewDecisionResponse>;
   applicationUrl?(path: string): string;
 }
 
@@ -261,6 +296,9 @@ export class HeliosApiClient implements HeliosApi {
       query.set("limit", String(options.limit));
     }
     if (options.query) query.set("query", options.query);
+    if (options.reviewRunId) {
+      query.set("review_run_id", options.reviewRunId);
+    }
     const suffix = query.size ? `?${query}` : "";
     return this.get<HeliosGraphDto>(
       `/api/v1/models/${encodeURIComponent(modelId)}/graph${suffix}`,
@@ -270,10 +308,23 @@ export class HeliosApiClient implements HeliosApi {
   modelGraphDetail(
     modelId: string,
     elementId: string,
+    reviewRunId?: string,
   ): Promise<GraphElementDetail> {
     const query = new URLSearchParams({ element_id: elementId });
+    if (reviewRunId) query.set("review_run_id", reviewRunId);
     return this.get<GraphElementDetail>(
       `/api/v1/models/${encodeURIComponent(modelId)}/graph/detail?${query}`,
+    );
+  }
+
+  decideModelProposal(
+    modelId: string,
+    runId: string,
+    decision: ReviewDecisionRequest,
+  ): Promise<ReviewDecisionResponse> {
+    return this.post<ReviewDecisionResponse>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/reviews/${encodeURIComponent(runId)}/decisions`,
+      decision,
     );
   }
 
@@ -282,13 +333,31 @@ export class HeliosApiClient implements HeliosApi {
   }
 
   private async get<T>(path: string): Promise<T> {
+    return this.request<T>(path, { method: "GET" });
+  }
+
+  private async post<T>(path: string, body: unknown): Promise<T> {
+    return this.request<T>(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  private async request<T>(
+    path: string,
+    init: RequestInit,
+  ): Promise<T> {
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}${path}`, {
-        method: "GET",
         mode: "cors",
         credentials: "include",
-        headers: { Accept: "application/json" },
+        ...init,
+        headers: {
+          Accept: "application/json",
+          ...init.headers,
+        },
       });
     } catch (error) {
       throw new ApiUnavailableError("The Helios API is unavailable.", error);

@@ -68,6 +68,11 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     "medium",
   );
   const [lens, setLens] = useState<GraphLens>("semantic");
+  const [reviewMode, setReviewMode] = useState(false);
+  const [mutationStatus, setMutationStatus] = useState<
+    "idle" | "saving" | "error"
+  >("idle");
+  const [mutationError, setMutationError] = useState("");
   const [breadcrumbs, setBreadcrumbs] = useState<
     Array<{ id: string | null; label: string }>
   >([]);
@@ -77,6 +82,13 @@ export default function CanvasPage({ context }: CanvasPageProps) {
   const model = context.models.find(
     (item) => item.id === context.selectedModelId,
   );
+  const reviewRunId =
+    context.modelOverview?.lifecycle.latest_run_id ?? undefined;
+  const canReview =
+    Boolean(reviewRunId) &&
+    Boolean(
+      context.modelOverview?.available_actions.includes("model.edit"),
+    );
 
   useEffect(() => {
     let active = true;
@@ -87,6 +99,8 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     setExpandedNodeIds(new Set());
     setExpansionChildren(new Map());
     setBreadcrumbs(model ? [{ id: null, label: model.name }] : []);
+    setReviewMode(false);
+    setMutationStatus("idle");
     if (!context.selectedModelId) {
       setStatus("idle");
       return () => {
@@ -147,6 +161,7 @@ export default function CanvasPage({ context }: CanvasPageProps) {
         .loadModelGraph(context.selectedModelId, {
           navigation: true,
           lens,
+          ...(reviewMode && reviewRunId ? { reviewRunId } : {}),
           query: searchTerm.trim(),
           limit: 20,
         })
@@ -165,7 +180,14 @@ export default function CanvasPage({ context }: CanvasPageProps) {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [context.loadModelGraph, context.selectedModelId, lens, searchTerm]);
+  }, [
+    context.loadModelGraph,
+    context.selectedModelId,
+    lens,
+    reviewMode,
+    reviewRunId,
+    searchTerm,
+  ]);
 
   useEffect(() => {
     const elementId = selectedNode?.id ?? selectedEdge?.id;
@@ -178,7 +200,11 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     setSelectedDetail(undefined);
     setDetailStatus("loading");
     void context
-      .loadGraphElementDetail(context.selectedModelId, elementId)
+      .loadGraphElementDetail(
+        context.selectedModelId,
+        elementId,
+        reviewMode ? reviewRunId : undefined,
+      )
       .then((detail) => {
         if (!active) return;
         setSelectedDetail(detail);
@@ -194,6 +220,8 @@ export default function CanvasPage({ context }: CanvasPageProps) {
   }, [
     context.loadGraphElementDetail,
     context.selectedModelId,
+    reviewMode,
+    reviewRunId,
     selectedEdge?.id,
     selectedNode?.id,
   ]);
@@ -212,6 +240,7 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     const result = await context.loadModelGraph(context.selectedModelId, {
       navigation: true,
       lens,
+      ...(reviewMode && reviewRunId ? { reviewRunId } : {}),
       focusNodeId: node.id,
       depth: 1,
       includeAttributes: node.category === "dataset",
@@ -272,6 +301,7 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     const result = await context.loadModelGraph(context.selectedModelId, {
       navigation: true,
       lens,
+      ...(reviewMode && reviewRunId ? { reviewRunId } : {}),
       focusNodeId: node.id,
       depth: 1,
       includeAttributes: node.category === "dataset",
@@ -298,6 +328,7 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     const result = await context.loadModelGraph(context.selectedModelId, {
       navigation: true,
       lens,
+      ...(reviewMode && reviewRunId ? { reviewRunId } : {}),
       focusNodeId: crumb.id ?? undefined,
       depth: 1,
       limit: 120,
@@ -320,6 +351,7 @@ export default function CanvasPage({ context }: CanvasPageProps) {
         result = await context.loadModelGraph(context.selectedModelId, {
           navigation: true,
           lens: nextLens,
+          ...(reviewMode && reviewRunId ? { reviewRunId } : {}),
           focusNodeId: currentFocus,
           depth: 1,
           limit: 120,
@@ -329,6 +361,7 @@ export default function CanvasPage({ context }: CanvasPageProps) {
         result = await context.loadModelGraph(context.selectedModelId, {
           navigation: true,
           lens: nextLens,
+          ...(reviewMode && reviewRunId ? { reviewRunId } : {}),
           depth: 1,
           limit: 120,
         });
@@ -347,6 +380,107 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     } catch (error) {
       setErrorMessage(describeGraphError(error));
       setStatus("error");
+    }
+  }
+
+  async function toggleReviewMode() {
+    if (!context.selectedModelId || !reviewRunId) return;
+    const nextReviewMode = !reviewMode;
+    const currentFocus = breadcrumbs.at(-1)?.id ?? undefined;
+    try {
+      let result: HeliosGraphDto;
+      try {
+        result = await context.loadModelGraph(context.selectedModelId, {
+          navigation: true,
+          lens,
+          reviewRunId: nextReviewMode ? reviewRunId : undefined,
+          focusNodeId: currentFocus,
+          depth: 1,
+          limit: 120,
+        });
+      } catch {
+        result = await context.loadModelGraph(context.selectedModelId, {
+          navigation: true,
+          lens,
+          reviewRunId: nextReviewMode ? reviewRunId : undefined,
+          depth: 1,
+          limit: 120,
+        });
+        setBreadcrumbs(model ? [{ id: null, label: model.name }] : []);
+        setSelectedNode(undefined);
+        setSelectedEdge(undefined);
+      }
+      setReviewMode(nextReviewMode);
+      setDto(result);
+      setExpandedNodeIds(new Set());
+      setExpandedDatasetIds(new Set());
+      setExpansionChildren(new Map());
+      fitNodeIds(result.nodes.map((item) => item.id));
+    } catch (error) {
+      setErrorMessage(describeGraphError(error));
+      setStatus("error");
+    }
+  }
+
+  async function decideSelectedProposal(
+    decision: "accept" | "reject" | "edit",
+    overrides?: Record<string, unknown>,
+    note = "",
+  ) {
+    if (
+      !context.selectedModelId ||
+      !reviewRunId ||
+      !selectedDetail
+    ) {
+      return;
+    }
+    const section = selectedDetail.details.review_section;
+    const elementId = selectedDetail.details.review_element_id;
+    if (typeof section !== "string" || typeof elementId !== "string") return;
+
+    setMutationStatus("saving");
+    setMutationError("");
+    try {
+      await context.decideModelProposal(
+        context.selectedModelId,
+        reviewRunId,
+        {
+          section: section as
+            | "datasets"
+            | "fields"
+            | "relationships"
+            | "metrics"
+            | "glossary_terms",
+          element_id: elementId,
+          decision,
+          overrides,
+          note,
+        },
+      );
+      const refreshed = await context.loadModelGraph(
+        context.selectedModelId,
+        {
+          navigation: true,
+          lens,
+          reviewRunId,
+          focusNodeId: selectedDetail.id,
+          depth: 1,
+          includeAttributes: selectedNode?.category === "dataset",
+          limit: 120,
+        },
+      );
+      const detail = await context.loadGraphElementDetail(
+        context.selectedModelId,
+        selectedDetail.id,
+        reviewRunId,
+      );
+      setDto(refreshed);
+      setSelectedDetail(detail);
+      setMutationStatus("idle");
+      fitNodeIds(refreshed.nodes.map((item) => item.id));
+    } catch (error) {
+      setMutationStatus("error");
+      setMutationError(describeGraphError(error));
     }
   }
 
@@ -410,6 +544,16 @@ export default function CanvasPage({ context }: CanvasPageProps) {
               </button>
             ))}
           </div>
+          {canReview ? (
+            <button
+              className="canvas-review-toggle"
+              type="button"
+              aria-pressed={reviewMode}
+              onClick={() => void toggleReviewMode()}
+            >
+              {reviewMode ? "Reviewing proposals" : "Review proposals"}
+            </button>
+          ) : null}
           <nav className="canvas-breadcrumbs" aria-label="Canvas focus">
             {breadcrumbs.map((crumb, index) => (
               <span key={`${crumb.id ?? "root"}:${index}`}>
@@ -533,6 +677,8 @@ export default function CanvasPage({ context }: CanvasPageProps) {
               edge={selectedEdge}
               detail={selectedDetail}
               detailStatus={detailStatus}
+              mutationStatus={mutationStatus}
+              mutationError={mutationError}
               datasetExpanded={
                 selectedNode
                   ? expandedNodeIds.has(selectedNode.id)
@@ -550,6 +696,7 @@ export default function CanvasPage({ context }: CanvasPageProps) {
                 }
                 fitNodeIds(connected);
               }}
+              onDecision={decideSelectedProposal}
             />
           </div>
         </>
@@ -575,26 +722,68 @@ function CanvasInspector({
   edge,
   detail,
   detailStatus,
+  mutationStatus,
+  mutationError,
   datasetExpanded: expanded,
   onExpand,
   onCollapse,
   onFocus,
   onShowConnected,
   onFitSubgraph,
+  onDecision,
 }: {
   node?: CanvasGraphNode;
   edge?: CanvasGraphEdge;
   detail?: GraphElementDetail;
   detailStatus: "idle" | "loading" | "ready" | "error";
+  mutationStatus: "idle" | "saving" | "error";
+  mutationError: string;
   datasetExpanded: boolean;
   onExpand: (node: CanvasGraphNode) => void;
   onCollapse: (nodeId: string) => void;
   onFocus: (nodeId: string) => void;
   onShowConnected: (node: CanvasGraphNode) => void;
   onFitSubgraph: (nodeId: string) => void;
+  onDecision: (
+    decision: "accept" | "reject" | "edit",
+    overrides?: Record<string, unknown>,
+    note?: string,
+  ) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [editNote, setEditNote] = useState("");
+  const [editOverrides, setEditOverrides] = useState("{}");
+  const [editError, setEditError] = useState("");
   const item = node ?? edge;
   if (!item) return null;
+  const canMutateProposal =
+    detail?.available_actions.includes("model.edit") &&
+    typeof detail.details.review_section === "string" &&
+    typeof detail.details.review_element_id === "string";
+
+  function submitEdit() {
+    try {
+      const parsed = JSON.parse(editOverrides) as unknown;
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        throw new Error("Overrides must be a JSON object.");
+      }
+      setEditError("");
+      onDecision(
+        "edit",
+        parsed as Record<string, unknown>,
+        editNote,
+      );
+      setEditing(false);
+    } catch (error) {
+      setEditError(
+        error instanceof Error ? error.message : "Overrides are invalid.",
+      );
+    }
+  }
 
   return (
     <aside className="canvas-inspector" aria-label="Graph selection">
@@ -656,6 +845,71 @@ function CanvasInspector({
               />
             ))}
           </dl>
+        </div>
+      ) : null}
+
+      {canMutateProposal ? (
+        <div className="canvas-inspector__review-actions">
+          <h3>Review proposal</h3>
+          <div>
+            <button
+              className="button button--primary"
+              type="button"
+              disabled={mutationStatus === "saving"}
+              onClick={() => onDecision("accept")}
+            >
+              Approve
+            </button>
+            <button
+              className="button button--secondary"
+              type="button"
+              disabled={mutationStatus === "saving"}
+              onClick={() => onDecision("reject")}
+            >
+              Reject
+            </button>
+            <button
+              className="button button--secondary"
+              type="button"
+              disabled={mutationStatus === "saving"}
+              onClick={() => setEditing((current) => !current)}
+            >
+              Edit
+            </button>
+          </div>
+          {editing ? (
+            <div className="canvas-inspector__edit-form">
+              <label>
+                Note
+                <textarea
+                  value={editNote}
+                  onChange={(event) => setEditNote(event.target.value)}
+                />
+              </label>
+              <label>
+                Overrides (JSON)
+                <textarea
+                  value={editOverrides}
+                  onChange={(event) => setEditOverrides(event.target.value)}
+                />
+              </label>
+              {editError ? <p>{editError}</p> : null}
+              <button
+                className="button button--primary"
+                type="button"
+                disabled={mutationStatus === "saving"}
+                onClick={submitEdit}
+              >
+                Save edit
+              </button>
+            </div>
+          ) : null}
+          {mutationStatus === "saving" ? (
+            <span role="status">Saving decision…</span>
+          ) : null}
+          {mutationStatus === "error" ? (
+            <p className="canvas-inspector__error">{mutationError}</p>
+          ) : null}
         </div>
       ) : null}
 

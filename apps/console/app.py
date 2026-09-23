@@ -15,7 +15,8 @@ import subprocess
 import sys
  
 # Repo root: HELIOS_ROOT if set, else the conventional checkout location in the project.
-ROOT = os.environ.get("HELIOS_ROOT") or os.path.join(os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios")
+PROJECT_DIR = os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw")
+ROOT = os.environ.get("HELIOS_ROOT") or os.path.join(PROJECT_DIR, "helios")
 if not os.path.isdir(os.path.join(ROOT, "helios_core")):
     raise SystemExit(f"helios checkout not found at {ROOT}; set HELIOS_ROOT to the repo directory")
  
@@ -26,5 +27,15 @@ if os.environ.get("HELIOS_DEV") == "1":
     cmd.append("--reload")
  
 print("starting helios console:", " ".join(cmd), flush=True)
-env = dict(os.environ, PYTHONPATH=ROOT + os.pathsep + os.environ.get("PYTHONPATH", ""))
+python_paths = [ROOT]
+dependency_dir = os.environ.get("HELIOS_PYTHON_DEPS") or os.path.join(
+    PROJECT_DIR, ".helios-python"
+)
+if os.path.isdir(dependency_dir):
+    python_paths.append(dependency_dir)
+    print(f"using project-local Python dependencies: {dependency_dir}", flush=True)
+existing_pythonpath = os.environ.get("PYTHONPATH")
+if existing_pythonpath:
+    python_paths.append(existing_pythonpath)
+env = dict(os.environ, PYTHONPATH=os.pathsep.join(python_paths))
 raise SystemExit(subprocess.call(cmd, cwd=ROOT, env=env))

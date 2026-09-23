@@ -173,6 +173,16 @@ function successfulClient(): HeliosApi {
       },
       available_actions: ["datasource.read"],
     }),
+    decideModelProposal: vi.fn().mockResolvedValue({
+      ok: true,
+      run_id: "run-1",
+      section: "datasets",
+      element_id: "sales.orders",
+      entry: { decision: "accept" },
+      reviewed_at: "2026-09-23T00:00:00+00:00",
+      reviewed_by: "cloudera-workbench:analyst",
+      summary: {},
+    }),
     applicationUrl: vi.fn(
       (path: string) => `https://helios-api.example.test${path}`,
     ),
@@ -190,6 +200,7 @@ describe("Helios application shell", () => {
       modelOverview: vi.fn(() => pending),
       modelGraph: vi.fn(() => pending),
       modelGraphDetail: vi.fn(() => pending),
+      decideModelProposal: vi.fn(() => pending),
     };
 
     render(<App client={client} />);
@@ -287,6 +298,16 @@ describe("Helios application shell", () => {
         details: {},
         available_actions: [],
       }),
+      decideModelProposal: vi.fn().mockResolvedValue({
+        ok: true,
+        run_id: "run-1",
+        section: "datasets",
+        element_id: "sales.orders",
+        entry: { decision: "accept" },
+        reviewed_at: "2026-09-23T00:00:00+00:00",
+        reviewed_by: "cloudera-workbench:analyst",
+        summary: {},
+      }),
     };
 
     render(<App client={client} />);
@@ -382,6 +403,119 @@ describe("Helios application shell", () => {
       .toHaveAttribute("aria-pressed", "true");
     expect(window.location.search).toContain("organization=north");
     expect(window.location.search).toContain("model=north-model");
+  });
+
+  it("reviews a proposal and reconciles it with the API response", async () => {
+    const client = successfulClient();
+    let approved = false;
+    const reviewGraph = () => ({
+      ...graph,
+      nodes: graph.nodes.map((node) =>
+        node.id === "dataset:orders"
+          ? {
+              ...node,
+              status: approved ? "approved" : "needs_review",
+              confidence: 0.92,
+              metadata: {
+                ...node.metadata,
+                review_section: "datasets",
+                review_element_id: "sales.orders",
+              },
+              permitted_actions: ["datasource.read", "model.edit"],
+            }
+          : node,
+      ),
+    });
+    vi.mocked(client.modelGraph).mockImplementation((_modelId, options) =>
+      Promise.resolve(options?.reviewRunId ? reviewGraph() : graph),
+    );
+    vi.mocked(client.modelGraphDetail).mockImplementation(
+      (_modelId, _elementId, reviewRunId) =>
+        Promise.resolve({
+          element_type: "node",
+          id: "dataset:orders",
+          kind: "dataset",
+          label: "Orders",
+          source: null,
+          target: null,
+          status:
+            reviewRunId && approved ? "approved" : "needs_review",
+          confidence: 0.92,
+          evidence: "Catalog metadata and profile evidence",
+          details: {
+            physical_identity: "sales.orders",
+            review_section: "datasets",
+            review_element_id: "sales.orders",
+            ...(approved
+              ? {
+                  review_decision: "accept",
+                  reviewed_by: "cloudera-workbench:analyst",
+                }
+              : {}),
+          },
+          available_actions: ["datasource.read", "model.edit"],
+        }),
+    );
+    vi.mocked(client.decideModelProposal).mockImplementation(
+      async (_modelId, runId, request) => {
+        approved = true;
+        return {
+          ok: true,
+          run_id: runId,
+          section: request.section,
+          element_id: request.element_id,
+          entry: { decision: request.decision },
+          reviewed_at: "2026-09-23T00:00:00+00:00",
+          reviewed_by: "cloudera-workbench:analyst",
+          summary: {},
+        };
+      },
+    );
+
+    render(<App client={client} />);
+    await screen.findByRole("heading", { name: "North Model" });
+    fireEvent.click(screen.getByRole("link", { name: "Canvas" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Review proposals" }),
+    );
+    await waitFor(() =>
+      expect(client.modelGraph).toHaveBeenCalledWith(
+        "north-model",
+        expect.objectContaining({ reviewRunId: "run-1" }),
+      ),
+    );
+
+    const reviewStatus = await screen.findByText("Needs Review");
+    const reviewNode = reviewStatus.closest(".react-flow__node");
+    if (!reviewNode) throw new Error("Review node was not rendered.");
+    fireEvent.click(reviewNode);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Approve" }),
+    );
+
+    await waitFor(() =>
+      expect(client.decideModelProposal).toHaveBeenCalledWith(
+        "north-model",
+        "run-1",
+        {
+          section: "datasets",
+          element_id: "sales.orders",
+          decision: "accept",
+          overrides: undefined,
+          note: "",
+        },
+      ),
+    );
+    await waitFor(() =>
+      expect(client.modelGraphDetail).toHaveBeenLastCalledWith(
+        "north-model",
+        "dataset:orders",
+        "run-1",
+      ),
+    );
+    expect(await screen.findAllByText("Approved")).not.toHaveLength(0);
+    expect(screen.getByText("cloudera-workbench:analyst"))
+      .toBeInTheDocument();
   });
 
   it("restores authorized context from a deep link", async () => {

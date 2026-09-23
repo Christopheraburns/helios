@@ -896,6 +896,26 @@ a:focus-visible {
   box-shadow: var(--shadow-sm);
 }
 
+.canvas-review-toggle {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 5px 10px;
+  color: #765714;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 750;
+  cursor: pointer;
+  background: #fff8df;
+  border: 1px solid #e4cf88;
+  border-radius: 7px;
+}
+
+.canvas-review-toggle[aria-pressed="true"] {
+  color: #fff;
+  background: #8a6412;
+  border-color: #8a6412;
+}
+
 .canvas-breadcrumbs {
   flex: 1 1 auto;
   display: flex;
@@ -1085,6 +1105,30 @@ a:focus-visible {
   box-shadow: 0 0 0 3px rgb(8 127 140 / 16%);
 }
 
+.canvas-node--state-proposed,
+.canvas-node--state-needs-review {
+  border-style: dashed;
+}
+
+.canvas-node--state-approved {
+  border-style: double;
+  border-width: 3px;
+}
+
+.canvas-node--state-rejected {
+  text-decoration: line-through;
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 7px,
+      rgb(191 59 67 / 5%) 7px,
+      rgb(191 59 67 / 5%) 14px
+    ),
+    #fff;
+  opacity: 0.72;
+}
+
 .canvas-node__kind {
   color: var(--slate-500);
   font-size: 0.62rem;
@@ -1141,6 +1185,26 @@ a:focus-visible {
 
 .react-flow__edge.canvas-edge--ontology path {
   stroke: #7d5abb;
+}
+
+.react-flow__edge.canvas-edge--state-proposed path,
+.react-flow__edge.canvas-edge--state-needs-review path {
+  stroke-dasharray: 7 5;
+}
+
+.react-flow__edge.canvas-edge--state-approved path {
+  stroke-width: 2.5;
+}
+
+.react-flow__edge.canvas-edge--state-rejected path {
+  stroke: var(--red-600);
+  stroke-dasharray: 3 5;
+  opacity: 0.65;
+}
+
+.react-flow__edge-text {
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .react-flow__edge.selected path {
@@ -1207,6 +1271,66 @@ a:focus-visible {
   display: grid;
   gap: 7px;
   margin-top: 20px;
+}
+
+.canvas-inspector__review-actions {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--slate-100);
+}
+
+.canvas-inspector__review-actions h3 {
+  margin: 0 0 10px;
+  color: var(--navy-900);
+  font-size: 0.85rem;
+}
+
+.canvas-inspector__review-actions > div:first-of-type {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.canvas-inspector__review-actions .button {
+  margin: 0;
+}
+
+.canvas-inspector__review-actions > span {
+  display: block;
+  margin-top: 10px;
+  color: var(--slate-500);
+  font-size: 0.75rem;
+}
+
+.canvas-inspector__edit-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.canvas-inspector__edit-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--slate-700);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.canvas-inspector__edit-form textarea {
+  width: 100%;
+  min-height: 62px;
+  padding: 7px;
+  color: var(--navy-900);
+  font: 0.72rem/1.4 "IBM Plex Mono", ui-monospace, monospace;
+  border: 1px solid var(--slate-300);
+  border-radius: 6px;
+  resize: vertical;
+}
+
+.canvas-inspector__edit-form p {
+  margin: 0;
+  color: var(--red-600);
+  font-size: 0.72rem;
 }
 
 .canvas-inspector__actions .button {

@@ -5,9 +5,15 @@ from fastapi.testclient import TestClient
 
 from apps.console.api import ResourceStore
 from apps.console.main import app
-from helios_core import authz
+from helios_core import authz, runs as runstore
+from helios_core.artifacts import ArtifactStore
 from helios_core.domain import DataSourceReference, Model, Organization
-from helios_core.graph import GraphEdge, GraphNode, ModelGraph
+from helios_core.graph import (
+    ArtifactGraphRepository,
+    GraphEdge,
+    GraphNode,
+    ModelGraph,
+)
 
 
 ORGANIZATION = Organization("acme", "Acme")
@@ -261,3 +267,154 @@ def test_lenses_project_the_same_authorized_model_graph(client):
         "dataset:customers",
         "metric:lifetime-value",
     }
+
+
+@pytest.fixture
+def review_client(tmp_path, monkeypatch):
+    run_id = "review-run"
+    model = Model(
+        "review-model",
+        ORGANIZATION.id,
+        "Review model",
+        (DataSourceReference("warehouse"),),
+        discovery_run_ids=(run_id,),
+    )
+    run_directory = tmp_path / "runs" / run_id
+    run_directory.mkdir(parents=True)
+    proposal = {
+        "datasets": [
+            {
+                "table": "sales.orders",
+                "kind": "fact",
+                "confidence": 0.88,
+                "source": "catalog",
+                "fields": [
+                    {
+                        "column": "customer_id",
+                        "type": "bigint",
+                        "role": "dimension_key",
+                        "confidence": 0.81,
+                    }
+                ],
+            }
+        ],
+        "relationships": [],
+        "metrics": [],
+        "glossary_terms": [],
+    }
+    (run_directory / "propose.json").write_text(json.dumps(proposal))
+    monkeypatch.setattr(runstore, "ROOT", str(tmp_path))
+    monkeypatch.setattr(runstore, "RUNS_DIR", str(tmp_path / "runs"))
+    app.state.resource_store = ResourceStore((ORGANIZATION,), (model,))
+    app.state.authorization_policy = authz.Policy(
+        [
+            authz.Grant(
+                "cloudera-workbench:owner",
+                authz.Role.MODEL_OWNER,
+                authz.Resource("model", model.id, ORGANIZATION.id),
+            ),
+            authz.Grant(
+                "cloudera-workbench:viewer",
+                authz.Role.MODEL_VIEWER,
+                authz.Resource("model", model.id, ORGANIZATION.id),
+            ),
+        ]
+    )
+    app.state.graph_repository = ArtifactGraphRepository(ArtifactStore(tmp_path))
+    with TestClient(app) as test_client:
+        yield test_client, model, run_id, run_directory
+
+
+def test_review_graph_requires_edit_permission(review_client):
+    client, model, run_id, _ = review_client
+
+    owner = client.get(
+        f"/api/v1/models/{model.id}/graph",
+        params={"review_run_id": run_id},
+        headers={"x-forwarded-user": "owner"},
+    )
+    viewer = client.get(
+        f"/api/v1/models/{model.id}/graph",
+        params={"review_run_id": run_id},
+        headers={"x-forwarded-user": "viewer"},
+    )
+
+    assert owner.status_code == 200
+    dataset = next(
+        node
+        for node in owner.json()["nodes"]
+        if node["id"] == "dataset:sales.orders"
+    )
+    assert dataset["status"] == "needs_review"
+    assert "model.edit" in dataset["permitted_actions"]
+    assert viewer.status_code == 403
+
+
+def test_review_decision_persists_audit_and_reconciles_graph(review_client):
+    client, model, run_id, run_directory = review_client
+    response = client.post(
+        f"/api/v1/models/{model.id}/reviews/{run_id}/decisions",
+        headers={"x-forwarded-user": "owner"},
+        json={
+            "section": "datasets",
+            "element_id": "sales.orders",
+            "decision": "reject",
+            "note": "Not part of this model",
+        },
+    )
+
+    assert response.status_code == 200
+    decision = response.json()
+    assert decision["entry"] == {
+        "decision": "reject",
+        "note": "Not part of this model",
+    }
+    assert decision["reviewed_by"] == "cloudera-workbench:owner"
+    assert decision["reviewed_at"]
+    persisted = json.loads((run_directory / "review.json").read_text())
+    assert persisted["datasets"]["sales.orders"] == decision["entry"]
+
+    graph = client.get(
+        f"/api/v1/models/{model.id}/graph",
+        params={"review_run_id": run_id},
+        headers={"x-forwarded-user": "owner"},
+    ).json()
+    dataset = next(
+        node
+        for node in graph["nodes"]
+        if node["id"] == "dataset:sales.orders"
+    )
+    assert dataset["status"] == "rejected"
+
+    detail = client.get(
+        f"/api/v1/models/{model.id}/graph/detail",
+        params={
+            "element_id": "dataset:sales.orders",
+            "review_run_id": run_id,
+        },
+        headers={"x-forwarded-user": "owner"},
+    )
+    assert detail.status_code == 200
+    assert detail.json()["details"]["review_note"] == "Not part of this model"
+    assert detail.json()["details"]["reviewed_by"] == "cloudera-workbench:owner"
+
+
+def test_review_decision_rejects_unauthorized_or_unknown_elements(review_client):
+    client, model, run_id, _ = review_client
+    endpoint = f"/api/v1/models/{model.id}/reviews/{run_id}/decisions"
+    body = {
+        "section": "datasets",
+        "element_id": "missing.dataset",
+        "decision": "accept",
+    }
+
+    assert client.post(
+        endpoint,
+        headers={"x-forwarded-user": "viewer"},
+        json=body,
+    ).status_code == 403
+    assert client.post(
+        endpoint,
+        headers={"x-forwarded-user": "owner"},
+        json=body,
+    ).status_code == 404

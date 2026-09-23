@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Annotated, Callable
+from typing import Annotated, Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 
 from helios_core import authz
 from helios_core import review as review_store
@@ -28,6 +29,20 @@ from helios_core.graph import (
 from helios_core.metadata import MetadataRepository
 
 api_router = APIRouter(prefix="/api/v1", tags=["api-v1"])
+
+
+class ReviewDecisionRequest(BaseModel):
+    section: Literal[
+        "datasets",
+        "fields",
+        "relationships",
+        "metrics",
+        "glossary_terms",
+    ]
+    element_id: str = Field(min_length=1, max_length=500)
+    decision: Literal["accept", "reject", "edit"]
+    overrides: dict[str, Any] | None = None
+    note: str = Field(default="", max_length=2000)
 
 
 class ResourceStore:
@@ -389,6 +404,36 @@ def _profile_details(model: Model, details: dict) -> dict:
     return result
 
 
+def _proposal_element_ids(proposal: dict, section: str) -> set[str]:
+    if section == "datasets":
+        return {
+            review_store.dataset_id(dataset)
+            for dataset in proposal.get("datasets", [])
+        }
+    if section == "fields":
+        return {
+            review_store.field_id(dataset, field)
+            for dataset in proposal.get("datasets", [])
+            for field in dataset.get("fields", [])
+        }
+    if section == "relationships":
+        return {
+            review_store.relationship_id(relationship)
+            for relationship in proposal.get("relationships", [])
+        }
+    if section == "metrics":
+        return {
+            review_store.metric_id(metric)
+            for metric in proposal.get("metrics", [])
+        }
+    if section == "glossary_terms":
+        return {
+            review_store.term_id(term)
+            for term in proposal.get("glossary_terms", [])
+        }
+    return set()
+
+
 @api_router.get("/healthz")
 def api_health() -> dict:
     return {"status": "ok"}
@@ -566,6 +611,7 @@ def get_model_graph(
         str | None,
         Query(pattern="^(physical|semantic|ontology)$"),
     ] = None,
+    review_run_id: Annotated[str | None, Query(max_length=200)] = None,
     focus_node_id: str | None = None,
     depth: Annotated[int, Query(ge=0, le=3)] = 1,
     include_attributes: bool = False,
@@ -573,7 +619,22 @@ def get_model_graph(
     edge_limit: Annotated[int, Query(ge=1, le=2000)] = 500,
     query: Annotated[str | None, Query(max_length=200)] = None,
 ) -> dict:
-    graph = repository.graph_for_model(context.model)
+    if review_run_id:
+        _require(
+            context.policy,
+            context.principal,
+            authz.Action.MODEL_EDIT,
+            _resource_for_action(context.model, authz.Action.MODEL_EDIT),
+        )
+        review_loader = getattr(repository, "review_graph_for_model", None)
+        if not callable(review_loader):
+            raise HTTPException(404, "review graph not available")
+        try:
+            graph = review_loader(context.model, review_run_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "review run not found") from exc
+    else:
+        graph = repository.graph_for_model(context.model)
     try:
         authorized = authorize_graph(
             graph, context.model, context.principal, context.policy
@@ -605,9 +666,30 @@ def get_model_graph_detail(
     ],
     repository: Annotated[GraphRepository, Depends(graph_repository)],
     element_id: Annotated[str, Query(min_length=1, max_length=500)],
+    review_run_id: Annotated[str | None, Query(max_length=200)] = None,
 ) -> dict:
+    if review_run_id:
+        _require(
+            context.policy,
+            context.principal,
+            authz.Action.MODEL_EDIT,
+            _resource_for_action(context.model, authz.Action.MODEL_EDIT),
+        )
+        review_graph_loader = getattr(
+            repository, "review_graph_for_model", None
+        )
+        if not callable(review_graph_loader):
+            raise HTTPException(404, "review graph not available")
+        try:
+            source_graph = review_graph_loader(
+                context.model, review_run_id
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "review run not found") from exc
+    else:
+        source_graph = repository.graph_for_model(context.model)
     graph = authorize_graph(
-        repository.graph_for_model(context.model),
+        source_graph,
         context.model,
         context.principal,
         context.policy,
@@ -626,11 +708,40 @@ def get_model_graph_detail(
     if element is None:
         raise HTTPException(404, "graph element not found")
 
-    detail_loader = getattr(repository, "detail_for_element", None)
+    detail_loader = getattr(
+        repository,
+        (
+            "review_detail_for_element"
+            if review_run_id
+            else "detail_for_element"
+        ),
+        None,
+    )
     details = (
-        dict(detail_loader(context.model, element_id))
+        dict(
+            detail_loader(context.model, review_run_id, element_id)
+            if review_run_id
+            else detail_loader(context.model, element_id)
+        )
         if callable(detail_loader)
         else {}
+    )
+    details.update(
+        {
+            key: value
+            for key, value in element.metadata.items()
+            if key
+            in {
+                "review_section",
+                "review_element_id",
+                "review_decision",
+                "review_note",
+                "review_overrides",
+                "reviewed_at",
+                "reviewed_by",
+            }
+            and value is not None
+        }
     )
     dataset_identity = (
         details.get("dataset_physical_identity")
@@ -678,6 +789,55 @@ def get_model_graph_detail(
         "evidence": element.evidence,
         "details": details,
         "available_actions": list(element.permitted_actions),
+    }
+
+
+@api_router.post("/models/{model_id}/reviews/{run_id}/decisions")
+def decide_model_proposal(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_EDIT)),
+    ],
+    body: ReviewDecisionRequest,
+    run_id: str,
+) -> dict:
+    if (
+        run_id not in context.model.discovery_run_ids
+        or "/" in run_id
+        or ".." in run_id
+    ):
+        raise HTTPException(404, "review run not found")
+    proposal = runstore.load(run_id, "propose")
+    if proposal is None:
+        raise HTTPException(404, "review run not found")
+    if body.element_id not in _proposal_element_ids(proposal, body.section):
+        raise HTTPException(404, "proposal element not found")
+
+    path = os.path.join(runstore.RUNS_DIR, run_id, "review.json")
+    review = review_store.load(path, run_id)
+    review_store.decide(
+        review,
+        body.section,
+        body.element_id,
+        body.decision,
+        body.overrides,
+        body.note,
+    )
+    review_store.save(
+        path,
+        review,
+        reviewed_by=context.principal.id,
+    )
+    entry = review[body.section][body.element_id]
+    return {
+        "ok": True,
+        "run_id": run_id,
+        "section": body.section,
+        "element_id": body.element_id,
+        "entry": entry,
+        "reviewed_at": review["reviewed_at"],
+        "reviewed_by": review["reviewed_by"],
+        "summary": review_store.summary(review, proposal),
     }
 
 

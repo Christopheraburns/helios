@@ -15,6 +15,8 @@ import {
   HeliosGraphDto,
   GraphNavigationOptions,
   GraphElementDetail,
+  ReviewDecisionRequest,
+  ReviewDecisionResponse,
   ModelOverview,
   ModelSummary,
   OrganizationSummary,
@@ -49,7 +51,13 @@ export interface ApplicationContextState {
   loadGraphElementDetail: (
     modelId: string,
     elementId: string,
+    reviewRunId?: string,
   ) => Promise<GraphElementDetail>;
+  decideModelProposal: (
+    modelId: string,
+    runId: string,
+    decision: ReviewDecisionRequest,
+  ) => Promise<ReviewDecisionResponse>;
 }
 
 function describeError(error: unknown): {
@@ -347,8 +355,16 @@ export function useApplicationContext(
     [client],
   );
   const loadGraphElementDetail = useCallback(
-    (modelId: string, elementId: string) =>
-      client().modelGraphDetail(modelId, elementId),
+    (modelId: string, elementId: string, reviewRunId?: string) =>
+      client().modelGraphDetail(modelId, elementId, reviewRunId),
+    [client],
+  );
+  const decideModelProposal = useCallback(
+    (
+      modelId: string,
+      runId: string,
+      decision: ReviewDecisionRequest,
+    ) => client().decideModelProposal(modelId, runId, decision),
     [client],
   );
   const applicationUrl = client().applicationUrl;
@@ -373,5 +389,6 @@ export function useApplicationContext(
       : undefined,
     loadModelGraph,
     loadGraphElementDetail,
+    decideModelProposal,
   };
 }
