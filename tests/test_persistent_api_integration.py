@@ -75,6 +75,85 @@ def test_persisted_roles_drive_available_actions(persistent_client):
     assert "model.delete" not in editor["available_actions"]
 
 
+def test_model_overview_combines_authorized_graph_and_operational_metadata(
+    persistent_client,
+):
+    response = persistent_client.get(
+        "/api/v1/models/customer360/overview",
+        headers=headers("owner"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "active"
+    assert body["creator"] == {
+        "id": "cloudera-workbench:owner",
+        "display_name": "Owner",
+    }
+    assert body["data_sources"] == [
+        {
+            "data_source_id": "shared-warehouse",
+            "name": "Shared warehouse",
+            "connector": "impala",
+            "selected_assets": ["crm.customers", "sales.orders"],
+        }
+    ]
+    assert body["summary"] == {
+        "dataset_count": 1,
+        "relationship_count": 0,
+        "concept_count": 0,
+        "metric_count": 1,
+    }
+    assert body["lifecycle"] == {
+        "publication_state": "published",
+        "discovery_status": "unavailable",
+        "review_status": "not_available",
+        "unresolved_review_items": None,
+        "latest_run_id": "customer-run",
+    }
+    assert "model.publish" in body["available_actions"]
+
+
+def test_model_overview_uses_model_authorization(persistent_client):
+    response = persistent_client.get(
+        "/api/v1/models/customer360/overview",
+        headers=headers("outsider"),
+    )
+
+    assert response.status_code == 403
+
+
+def test_graph_detail_is_lazy_and_uses_element_authorization(
+    persistent_client,
+):
+    dataset = persistent_client.get(
+        "/api/v1/models/customer360/graph/detail",
+        params={"element_id": "dataset:customers"},
+        headers=headers("viewer"),
+    )
+    attribute = persistent_client.get(
+        "/api/v1/models/customer360/graph/detail",
+        params={"element_id": "attribute:customers:customer_id"},
+        headers=headers("viewer"),
+    )
+    denied = persistent_client.get(
+        "/api/v1/models/customer360/graph/detail",
+        params={"element_id": "dataset:customers"},
+        headers=headers("outsider"),
+    )
+
+    assert dataset.status_code == 200
+    assert dataset.json()["details"] == {
+        "physical_identity": "warehouse.customers",
+        "schema": "warehouse",
+        "relationship_count": 0,
+        "data_source_ids": ["shared-warehouse"],
+    }
+    assert attribute.status_code == 200
+    assert attribute.json()["details"]["physical_type"] == "String"
+    assert denied.status_code == 403
+
+
 def test_org_admin_inherits_only_within_persisted_organization(
     persistent_client,
 ):

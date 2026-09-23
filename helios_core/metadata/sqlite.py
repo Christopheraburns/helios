@@ -266,8 +266,9 @@ class SQLiteMetadataRepository:
                     INSERT INTO models (
                         id, organization_id, name, description, status,
                         created_by, created_at, updated_at,
-                        glossary_id, semantic_model_id, ontology_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        glossary_id, semantic_model_id, ontology_id,
+                        version_ids_json, discovery_run_ids_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         name = excluded.name,
                         description = excluded.description,
@@ -275,7 +276,9 @@ class SQLiteMetadataRepository:
                         updated_at = excluded.updated_at,
                         glossary_id = excluded.glossary_id,
                         semantic_model_id = excluded.semantic_model_id,
-                        ontology_id = excluded.ontology_id
+                        ontology_id = excluded.ontology_id,
+                        version_ids_json = excluded.version_ids_json,
+                        discovery_run_ids_json = excluded.discovery_run_ids_json
                     WHERE models.organization_id = excluded.organization_id
                     """,
                     (
@@ -290,6 +293,8 @@ class SQLiteMetadataRepository:
                         model.glossary_id,
                         model.semantic_model_id,
                         model.ontology_id,
+                        json.dumps(list(model.version_ids)),
+                        json.dumps(list(model.discovery_run_ids)),
                     ),
                 )
                 owner = connection.execute(
@@ -463,6 +468,10 @@ class SQLiteMetadataRepository:
             name=row["name"],
             description=row["description"],
             data_sources=references,
+            version_ids=tuple(json.loads(row["version_ids_json"])),
+            discovery_run_ids=tuple(
+                json.loads(row["discovery_run_ids_json"])
+            ),
             glossary_id=row["glossary_id"],
             semantic_model_id=row["semantic_model_id"],
             ontology_id=row["ontology_id"],

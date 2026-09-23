@@ -44,7 +44,12 @@ export default function TopNavigation({ context }: TopNavigationProps) {
         <span className="brand__mark" aria-hidden="true">
           H
         </span>
-        <span className="brand__wordmark">Helios</span>
+        <span className="brand__identity">
+          <span className="brand__wordmark">Helios</span>
+          <span className="brand__build">
+            Build {__HELIOS_BUILD_NUMBER__}
+          </span>
+        </span>
       </Link>
 
       <div className="resource-selectors" aria-label="Current workspace">

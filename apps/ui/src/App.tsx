@@ -1,10 +1,17 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import {
+  BrowserRouter,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
+import { useEffect, useState } from "react";
 
 import { EmptyState, ErrorState, LoadingState } from "./components/AsyncState";
 import PrimaryNavigation from "./components/PrimaryNavigation";
 import TopNavigation from "./components/TopNavigation";
 import { HeliosApi } from "./api/client";
 import { useApplicationContext } from "./hooks/useApplicationContext";
+import CanvasPage from "./pages/CanvasPage";
 import OverviewPage from "./pages/OverviewPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 
@@ -20,9 +27,29 @@ const errorTitles = {
 
 function ApplicationShell({ client }: AppProps) {
   const context = useApplicationContext(client);
+  const location = useLocation();
+  const canvasActive = location.pathname === "/canvas";
+  const [workspaceCollapsed, setWorkspaceCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem("helios.workspace.collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
   const errorTitle = context.errorKind
     ? errorTitles[context.errorKind]
     : "Helios could not be loaded";
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        "helios.workspace.collapsed",
+        String(workspaceCollapsed),
+      );
+    } catch {
+      // The shell remains usable when browser storage is unavailable.
+    }
+  }, [workspaceCollapsed]);
 
   return (
     <div className="app">
@@ -31,9 +58,22 @@ function ApplicationShell({ client }: AppProps) {
       </a>
       <TopNavigation context={context} />
 
-      <div className="app__body">
-        <PrimaryNavigation context={context} />
-        <main className="app__main" id="main-content">
+      <div
+        className={`app__body${
+          workspaceCollapsed ? " app__body--workspace-collapsed" : ""
+        }`}
+      >
+        <PrimaryNavigation
+          context={context}
+          collapsed={workspaceCollapsed}
+          onToggleCollapsed={() =>
+            setWorkspaceCollapsed((collapsed) => !collapsed)
+          }
+        />
+        <main
+          className={`app__main${canvasActive ? " app__main--canvas" : ""}`}
+          id="main-content"
+        >
           {context.status === "loading" ? (
             <LoadingState />
           ) : context.status === "error" ? (
@@ -47,12 +87,7 @@ function ApplicationShell({ client }: AppProps) {
               <Route path="/" element={<OverviewPage context={context} />} />
               <Route
                 path="/canvas"
-                element={
-                  <PlaceholderPage
-                    title="Canvas"
-                    description="Explore the authorized semantic model visually."
-                  />
-                }
+                element={<CanvasPage context={context} />}
               />
               <Route
                 path="/models"

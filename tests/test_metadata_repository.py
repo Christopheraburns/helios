@@ -37,7 +37,7 @@ def seed_organizations_and_principals(repository):
 def test_migrations_are_versioned_and_idempotent(repository):
     repository.migrate()
 
-    assert repository.schema_version() == 1
+    assert repository.schema_version() == 2
     with sqlite3.connect(repository.path) as connection:
         tables = {
             row[0]
@@ -101,6 +101,8 @@ def test_operational_metadata_persists_across_repository_instances(
     assert loaded.status == "active"
     assert loaded.created_by == principal("alice").id
     assert loaded.model.data_sources == model.data_sources
+    assert loaded.model.version_ids == model.version_ids
+    assert loaded.model.discovery_run_ids == model.discovery_run_ids
     assert reopened.data_source("warehouse") == warehouse
     assert reopened.data_sources_for_organization("acme") == [warehouse]
     assert reopened.stored_organization("acme").slug == "acme"
