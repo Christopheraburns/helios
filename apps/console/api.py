@@ -5,6 +5,7 @@ Resource policy remains in ``helios_core.authz`` and can be reused by MCP or job
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Annotated, Callable
 
@@ -80,7 +81,16 @@ class AuthorizedModel:
 
 def current_principal(request: Request) -> authz.Principal:
     """Translate trusted Workbench identity context into a core Principal."""
-    subject = request.headers.get("x-forwarded-user")
+    development_subject = (
+        os.environ.get("HELIOS_DEV_USER")
+        if os.environ.get("HELIOS_DEV") == "1"
+        else None
+    )
+    subject = (
+        request.headers.get("remote-user")
+        or request.headers.get("x-forwarded-user")
+        or development_subject
+    )
     if not subject:
         raise HTTPException(401, "authenticated principal is required")
     return authz.Principal(
@@ -216,6 +226,112 @@ def _model_metadata(context: AuthorizedModel) -> dict:
             for reference in model.data_sources
         ],
         "available_actions": context.available_actions,
+    }
+
+
+@api_router.get("/healthz")
+def api_health() -> dict:
+    return {"status": "ok"}
+
+
+@api_router.get("/diagnostics")
+def api_diagnostics(
+    request: Request,
+    principal: Annotated[authz.Principal, Depends(current_principal)],
+) -> dict:
+    repository: MetadataRepository = request.app.state.metadata_repository
+    grants = repository.grants_for_principal(principal.id)
+    organization_ids = {grant.organization_id for grant in grants}
+    return {
+        "status": "ok",
+        "principal": {
+            "id": principal.id,
+            "issuer": principal.issuer,
+            "subject": principal.subject,
+            "display_name": principal.display_name,
+            "kind": principal.kind.value,
+        },
+        "accessible_organization_count": len(organization_ids),
+    }
+
+
+@api_router.get("/organizations")
+def list_accessible_organizations(
+    request: Request,
+    principal: Annotated[authz.Principal, Depends(current_principal)],
+    policy: Annotated[authz.Policy, Depends(authorization_policy)],
+) -> dict:
+    repository: MetadataRepository = request.app.state.metadata_repository
+    organization_ids = {
+        grant.organization_id
+        for grant in repository.grants_for_principal(principal.id)
+    }
+    organizations = []
+    for organization_id in organization_ids:
+        organization = repository.organization(organization_id)
+        if organization is None:
+            continue
+        resource = authz.Resource(
+            "organization",
+            organization.id,
+            organization_id=organization.id,
+        )
+        available_actions = [
+            action.value
+            for action in (
+                authz.Action.ORGANIZATION_READ,
+                authz.Action.ORGANIZATION_MANAGE,
+            )
+            if policy.can(principal, action, resource).allowed
+        ]
+        organizations.append(
+            {
+                "id": organization.id,
+                "name": organization.name,
+                "available_actions": available_actions,
+            }
+        )
+    organizations.sort(key=lambda item: item["name"].lower())
+    return {
+        "organizations": organizations,
+        "count": len(organizations),
+    }
+
+
+@api_router.get("/models")
+def list_accessible_models(
+    request: Request,
+    principal: Annotated[authz.Principal, Depends(current_principal)],
+    policy: Annotated[authz.Policy, Depends(authorization_policy)],
+    organization_id: str | None = None,
+) -> dict:
+    repository: MetadataRepository = request.app.state.metadata_repository
+    candidates: dict[str, Model] = {}
+    for grant in repository.grants_for_principal(principal.id):
+        if organization_id and grant.organization_id != organization_id:
+            continue
+        if grant.resource.resource_type == "organization":
+            for model in repository.models_for_organization(grant.organization_id):
+                candidates[model.id] = model
+        elif grant.model_id:
+            model = repository.model(grant.model_id)
+            if model is not None:
+                candidates[model.id] = model
+
+    models = [
+        _model_metadata(AuthorizedModel(model, principal, policy))
+        for model in candidates.values()
+        if policy.can(
+            principal,
+            authz.Action.MODEL_READ,
+            authz.Resource("model", model.id, model.organization_id),
+        ).allowed
+    ]
+    models.sort(key=lambda item: item["name"].lower())
+    return {
+        "organization_id": organization_id,
+        "models": models,
+        "count": len(models),
     }
 
 

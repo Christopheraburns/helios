@@ -52,8 +52,10 @@ settings, and LLM provider settings.
 
 ## Authentication and authorization
 
-All current `/api/v1` routes require the trusted `x-forwarded-user` header.
-Missing identity returns HTTP 401 with:
+Resource routes require Cloudera's trusted `REMOTE-USER` header. The legacy
+`x-forwarded-user` header remains a fallback, and `HELIOS_DEV_USER` is an
+explicit local-development fallback when `HELIOS_DEV=1`. Missing identity
+returns HTTP 401 with:
 
 ```json
 {"detail": "authenticated principal is required"}
@@ -93,7 +95,10 @@ the UI authorization contract.
 ## Current REST API
 
 The router prefix is `/api/v1`. All current operations are GET requests and
-have no query parameters.
+have no query parameters. `GET /api/v1/healthz` is an unauthenticated process
+readiness check. `GET /api/v1/diagnostics` returns authenticated principal
+identity and accessible organization count. An authenticated principal with no
+Helios grants receives a successful response with a count of zero.
 
 ### Organizations
 
@@ -111,10 +116,22 @@ have no query parameters.
   `data_sources`, and `available_actions`.
 - Each data-source reference has only `data_source_id` and `selected_assets`.
 
-There is no endpoint that lists organizations available to the current
-principal.
+`GET /api/v1/organizations`
+
+- Returns organization summaries reachable through any organization- or
+  model-scoped grant held by the current principal.
+- Each summary contains `id`, `name`, and `available_actions`.
+- Model-scoped users receive the organization context required for navigation
+  without being granted `organization.read`.
 
 ### Models
+
+`GET /api/v1/models?organization_id={org_id}`
+
+- Returns only models for which the current principal has `model.read`.
+- Organization administrators receive accessible models in their
+  organization; model-scoped grants return only their explicit models.
+- Returns the standard model summary and `available_actions`.
 
 `GET /api/v1/models/{model_id}`
 
@@ -243,15 +260,11 @@ Only gaps that block or materially limit the requested UI are listed here.
 Existing APIs need not be redesigned.
 
 1. **Organization selector**
-   - No endpoint lists organizations visible to the current principal.
-   - Organization slug is not exposed.
-   - A caller must already know an organization ID.
+   - Addressed by `GET /api/v1/organizations`.
+   - Organization slug remains internal and is not needed by the selector.
 
 2. **Model selector**
-   - The only model list requires a known organization ID and
-     `organization.read`.
-   - A principal with only model-scoped access cannot discover those models.
-   - There is no current-principal model list or grant-filtered model search.
+   - Addressed by the grant-filtered `GET /api/v1/models` collection.
 
 3. **Model overview**
    - Model status, creator, and creation/update timestamps are persisted but
