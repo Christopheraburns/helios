@@ -175,7 +175,8 @@ def build_metrics(metrics: list[dict], datasets: list[dict]) -> tuple[list[dict]
     return out, problems
 
 
-def build(proposal: dict, model_name: str, description: str = "", run_id: str | None = None) -> tuple[dict, list[str]]:
+def build(proposal: dict, model_name: str, description: str = "",
+          run_id: str | None = None, model_id: str | None = None) -> tuple[dict, list[str]]:
     """Return (ossie_document, problems). problems are non-fatal things dropped along the way."""
     datasets = [build_dataset(d, run_id) for d in proposal["datasets"]]
     relationships = build_relationships(proposal.get("relationships", []))
@@ -189,7 +190,8 @@ def build(proposal: dict, model_name: str, description: str = "", run_id: str | 
         "datasets": datasets,
         "relationships": relationships,
         "metrics": metrics,
-        "custom_extensions": _ext({"run_id": run_id, "llm": proposal.get("llm"), "review": proposal.get("review")}),
+        "custom_extensions": _ext({"model_id": model_id, "run_id": run_id,
+                                   "llm": proposal.get("llm"), "review": proposal.get("review")}),
     }
     return doc, problems
 
