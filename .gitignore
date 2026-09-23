@@ -4,3 +4,6 @@ __pycache__/
 .env
 .env.sh
 requirements.lock
+state/
+*.db-wal
+*.db-shm

@@ -37,7 +37,9 @@ def load(run_id: str, stage: str) -> dict | None:
 
 def summary(run_id: str) -> dict:
     h, p = load(run_id, "harvest"), load(run_id, "profile")
-    s = {"id": run_id, "harvest": None, "profile": None, "propose": os.path.exists(os.path.join(RUNS_DIR, run_id, "propose.json"))}
+    s = {"id": run_id, "model_id": (h or {}).get("model_id") or (p or {}).get("model_id"),
+         "harvest": None, "profile": None,
+         "propose": os.path.exists(os.path.join(RUNS_DIR, run_id, "propose.json"))}
     if h:
         s["harvest"] = {"at": h.get("harvested_at", ""), "engine": h.get("engine", ""), "databases": h.get("databases", []),
                         "tables": len(h.get("tables", [])), "columns": sum(len(t["columns"]) for t in h.get("tables", [])),

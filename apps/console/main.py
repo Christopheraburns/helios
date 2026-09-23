@@ -17,12 +17,17 @@ from helios_core.engines import ImpalaEngine
 from helios_core import runs as runstore
 from fastapi import HTTPException
 
+from helios_core.metadata import SQLiteMetadataRepository
+from .api import api_router
 from .review import review_router
 
 HERE = Path(__file__).parent
 app = FastAPI(title="helios console")
+app.state.metadata_repository = SQLiteMetadataRepository()
+app.state.metadata_repository.migrate()
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 tpl = Jinja2Templates(directory=HERE / "templates")
+app.include_router(api_router)
 app.include_router(review_router)
 
 

@@ -7,11 +7,12 @@ console) works with. helios provenance is read back from `custom_extensions` whe
 from __future__ import annotations
 
 import json
-import os
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 
 import yaml
+
+from helios_core.artifacts import ArtifactStore
 
 VENDOR = "HELIOS"
 
@@ -150,15 +151,14 @@ class SemanticModel:
         return cls(doc)
 
     @classmethod
-    def load_published(cls, name: str, root: str | None = None) -> "SemanticModel":
-        root = root or os.environ.get("HELIOS_ROOT") or os.path.join(os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios")
-        return cls.load(os.path.join(root, "models", "published", f"{name}.ossie.yaml"))
+    def load_published(cls, model_id: str, root: str | None = None) -> "SemanticModel":
+        """Load by stable Helios Model ID, with legacy flat-layout fallback."""
+        return cls.load(str(ArtifactStore(root).published_ossie_path(model_id)))
 
     @staticmethod
     def list_published(root: str | None = None) -> list[str]:
-        root = root or os.environ.get("HELIOS_ROOT") or os.path.join(os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios")
-        d = os.path.join(root, "models", "published")
-        return sorted(f[: -len(".ossie.yaml")] for f in os.listdir(d) if f.endswith(".ossie.yaml")) if os.path.isdir(d) else []
+        """Return stable Model IDs with published semantic artifacts."""
+        return ArtifactStore(root).published_model_ids()
 
     # ------------------------------------------------------------ lookups
     def _infer_metric_dataset(self, expression: str) -> str:

@@ -20,7 +20,6 @@ Environment:
 """
 from __future__ import annotations
 
-import glob
 import json
 import os
 import re
@@ -34,10 +33,24 @@ from starlette.responses import JSONResponse
 
 from helios_core import __version__
 from helios_core import runs as runstore
+from helios_core.artifacts import ArtifactStore
 from helios_core.config import atlas_config, impala_config
+from helios_core.data_authorization import (
+    DataAction,
+    DataPolicy,
+    DataResource,
+)
+from helios_core.identity import Principal, PrincipalKind
 
 ROOT = runstore.ROOT
-PUBLISHED_DIR = os.path.join(ROOT, "models", "published")
+artifact_store = ArtifactStore(ROOT)
+data_policy = DataPolicy()
+_UNPROPAGATED_MCP_PRINCIPAL = Principal(
+    issuer="helios-mcp",
+    subject="unpropagated-caller",
+    kind=PrincipalKind.AGENT,
+    display_name="MCP caller without platform identity propagation",
+)
 
 ENGINE_DIALECT = {"impala": "hive", "hive": "hive", "spark": "spark"}   # sqlglot write dialects
 
@@ -49,12 +62,22 @@ class ModelStore:
         self._cache: dict[str, tuple[float, dict]] = {}
 
     def sources(self) -> list[dict]:
-        out = [{"name": os.path.splitext(os.path.basename(p))[0], "path": p, "status": "published"}
-               for p in sorted(glob.glob(os.path.join(PUBLISHED_DIR, "*.json")))]
+        out = [
+            {
+                "name": model_id,
+                "path": str(artifact_store.published_ossie_path(model_id, "json")),
+                "status": "published",
+            }
+            for model_id in artifact_store.published_model_ids()
+        ]
         if not out:
             for r in runstore.list_runs():
                 if r["stages"].get("propose"):
-                    out.append({"name": f"run-{r['id']}", "path": os.path.join(runstore.RUNS_DIR, r["id"], "propose.json"),
+                    proposal_path = os.path.join(runstore.RUNS_DIR, r["id"], "propose.json")
+                    with open(proposal_path) as handle:
+                        proposal = json.load(handle)
+                    model_id = proposal.get("model_id") or f"run-{r['id']}"
+                    out.append({"name": model_id, "path": proposal_path,
                                 "status": "proposed (unreviewed)"})
                     break
         return out
@@ -317,10 +340,24 @@ def compile_query(metrics: list[str], dimensions: list[str] | None = None, filte
 def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: list[dict] | None = None,
               limit: int = 100, model: str | None = None) -> dict:
     from helios_core.engines import ImpalaEngine
+    src, m = store.load(model)
+    data_resource = DataResource(
+        data_source_id="unresolved",
+        asset=f"model:{src['name']}",
+    )
+    access = data_policy.can_access(
+        _UNPROPAGATED_MCP_PRINCIPAL,
+        data_resource,
+        DataAction.QUERY_EXECUTE,
+    )
+    if not access.allowed:
+        return {
+            "error": "data_authorization_denied",
+            "reason": access.reason,
+        }
     cfg = impala_config()
     if cfg is None:
         return {"error": "IMPALA_HOST / credentials not configured on the server"}
-    _, m = store.load(model)
     c = compile_sql(m, metrics, dimensions or [], filters or [], limit, "impala")
     res = ImpalaEngine(cfg).query(c["sql"], limit)
     return {"sql": c["sql"], "columns": res.columns, "rows": [[_json(v) for v in r] for r in res.rows]}
