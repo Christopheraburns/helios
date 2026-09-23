@@ -7,3 +7,6 @@ requirements.lock
 state/
 *.db-wal
 *.db-shm
+node_modules/
+apps/ui/dist/
+*.tsbuildinfo
