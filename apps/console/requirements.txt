@@ -1,0 +1,12 @@
+# Direct dependencies for the Helios API Application on PBJ Python 3.12.
+# Install into the project-local directory documented in docs/ui-deployment.md.
+fastapi==0.141.1
+httpx==0.28.1
+impyla==0.24.0
+Jinja2==3.1.6
+jsonschema==4.23.0
+pydantic==2.13.5
+python-multipart==0.0.32
+PyYAML==6.0.2
+requests==2.32.5
+uvicorn[standard]==0.53.0

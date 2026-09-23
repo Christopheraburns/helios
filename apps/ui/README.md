@@ -60,8 +60,9 @@ The server binds to `127.0.0.1:$CDSW_APP_PORT`, which is the address and port
 used by the Cloudera AI Application proxy. It serves the Vite build, supports
 single-page-application route fallback, and exposes `/healthz`.
 
-See `docs/ui-api-networking.md` for API CORS, transparent authentication, and
-Cloudera AI configuration.
+See `docs/ui-deployment.md` for the complete two-Application deployment
+runbook and `docs/ui-api-networking.md` for additional API CORS and transparent
+authentication background.
 
 ## Workspace context links
 

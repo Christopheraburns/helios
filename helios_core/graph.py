@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
 from helios_core import authz
+from helios_core import review as review_store
 from helios_core.artifacts import ArtifactStore
 from helios_core.domain import Model
 
@@ -93,6 +94,45 @@ class ArtifactGraphRepository:
         if any("table" in dataset for dataset in document.get("datasets", [])):
             return _proposal_detail(document, element_id)
         return _ossie_detail(document, element_id)
+
+    def review_graph_for_model(
+        self, model: Model, run_id: str
+    ) -> ModelGraph:
+        if (
+            run_id not in model.discovery_run_ids
+            or "/" in run_id
+            or ".." in run_id
+        ):
+            raise FileNotFoundError(run_id)
+        run_directory = self.artifacts.root / "runs" / run_id
+        proposal_path = run_directory / "propose.json"
+        if not proposal_path.is_file():
+            raise FileNotFoundError(run_id)
+        with proposal_path.open() as handle:
+            proposal = json.load(handle)
+        review = review_store.load(
+            str(run_directory / "review.json"),
+            run_id,
+        )
+        graph = _proposal_graph(model, proposal, "needs_review")
+        return _apply_review_states(graph, review)
+
+    def review_detail_for_element(
+        self, model: Model, run_id: str, element_id: str
+    ) -> dict[str, Any]:
+        if (
+            run_id not in model.discovery_run_ids
+            or "/" in run_id
+            or ".." in run_id
+        ):
+            raise FileNotFoundError(run_id)
+        proposal_path = (
+            self.artifacts.root / "runs" / run_id / "propose.json"
+        )
+        if not proposal_path.is_file():
+            raise FileNotFoundError(run_id)
+        with proposal_path.open() as handle:
+            return _proposal_detail(json.load(handle), element_id)
 
 
 def authorize_graph(
@@ -465,6 +505,9 @@ def _proposal_graph(
                     "physical_name": table,
                     "dataset_kind": dataset.get("kind", "other"),
                     "semantic_role": dataset.get("kind"),
+                    "description": dataset.get("description"),
+                    "review_section": "datasets",
+                    "review_element_id": review_store.dataset_id(dataset),
                 },
             )
         )
@@ -496,6 +539,12 @@ def _proposal_graph(
                         "physical_name": column,
                         "datatype": item.get("type"),
                         "role": item.get("role"),
+                        "description": item.get("description"),
+                        "business_terms": item.get("glossary_terms"),
+                        "review_section": "fields",
+                        "review_element_id": review_store.field_id(
+                            dataset, item
+                        ),
                     },
                 )
             )
@@ -522,7 +571,11 @@ def _proposal_graph(
                 status=status,
                 confidence=metric.get("confidence"),
                 evidence=_evidence(metric.get("source")),
-                metadata={"description": metric.get("description", "")},
+                metadata={
+                    "description": metric.get("description", ""),
+                    "review_section": "metrics",
+                    "review_element_id": review_store.metric_id(metric),
+                },
             )
         )
         edges.append(
@@ -553,6 +606,45 @@ def _proposal_graph(
                 status=status,
                 confidence=relationship.get("confidence"),
                 evidence=_evidence(relationship.get("source")),
+                metadata={
+                    "review_section": "relationships",
+                    "review_element_id": review_store.relationship_id(
+                        relationship
+                    ),
+                    "match_ratio": relationship.get("match_ratio"),
+                    "distinct_values": relationship.get("distinct_values"),
+                    "unmatched_values": relationship.get("unmatched"),
+                },
+            )
+        )
+    for term in document.get("glossary_terms", []):
+        term_id = f"concept:{term['name']}"
+        nodes.append(
+            GraphNode(
+                term_id,
+                "concept",
+                term["name"],
+                model.organization_id,
+                model.id,
+                status=status,
+                confidence=term.get("confidence"),
+                evidence=_evidence(term.get("source")),
+                metadata={
+                    "description": term.get("description"),
+                    "review_section": "glossary_terms",
+                    "review_element_id": review_store.term_id(term),
+                },
+            )
+        )
+        edges.append(
+            GraphEdge(
+                f"contains:{root.id}:{term_id}",
+                "semantic_relationship",
+                root.id,
+                term_id,
+                model.organization_id,
+                model.id,
+                status=status,
             )
         )
     return ModelGraph(
@@ -723,6 +815,46 @@ def _proposal_detail(
     return {}
 
 
+def _apply_review_states(
+    graph: ModelGraph, review: dict[str, Any]
+) -> ModelGraph:
+    status_by_decision = {
+        "accept": "approved",
+        "edit": "approved",
+        "reject": "rejected",
+        "pending": "needs_review",
+    }
+
+    def apply(element: GraphNode | GraphEdge):
+        section = element.metadata.get("review_section")
+        element_id = element.metadata.get("review_element_id")
+        if not section or not element_id:
+            return element
+        entry = review.get(section, {}).get(element_id, {})
+        decision = entry.get("decision", "pending")
+        audit = _compact(
+            {
+                "review_decision": decision,
+                "review_note": entry.get("note"),
+                "review_overrides": entry.get("overrides"),
+                "reviewed_at": review.get("reviewed_at"),
+                "reviewed_by": review.get("reviewed_by"),
+            }
+        )
+        return replace(
+            element,
+            status=status_by_decision.get(decision, "needs_review"),
+            metadata={**element.metadata, **audit},
+        )
+
+    return ModelGraph(
+        graph.model_id,
+        graph.organization_id,
+        tuple(apply(node) for node in graph.nodes),
+        tuple(apply(edge) for edge in graph.edges),
+    )
+
+
 def _ossie_detail(
     document: dict[str, Any], element_id: str
 ) -> dict[str, Any]:
@@ -852,7 +984,13 @@ def _permitted_actions(
 
 
 def _is_unpublished(status: str) -> bool:
-    return status.lower() in {"draft", "proposed", "rejected"}
+    return status.lower() in {
+        "draft",
+        "proposed",
+        "needs_review",
+        "approved",
+        "rejected",
+    }
 
 
 def _evidence(source: Any) -> str | None:

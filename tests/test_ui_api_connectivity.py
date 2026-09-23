@@ -188,6 +188,36 @@ def test_api_allows_only_configured_credentialed_origin(connectivity_client):
     assert "access-control-allow-origin" not in denied.headers
 
 
+def test_api_allows_review_posts_only_from_configured_origin(
+    connectivity_client,
+):
+    allowed = connectivity_client.options(
+        "/api/v1/models/customer/reviews/run-1/decisions",
+        headers={
+            "origin": "https://helios-ui.example.test",
+            "access-control-request-method": "POST",
+            "access-control-request-headers": "content-type",
+        },
+    )
+    denied = connectivity_client.options(
+        "/api/v1/models/customer/reviews/run-1/decisions",
+        headers={
+            "origin": "https://attacker.example.test",
+            "access-control-request-method": "POST",
+            "access-control-request-headers": "content-type",
+        },
+    )
+
+    assert allowed.status_code == 200
+    assert (
+        allowed.headers["access-control-allow-origin"]
+        == "https://helios-ui.example.test"
+    )
+    assert allowed.headers["access-control-allow-credentials"] == "true"
+    assert denied.status_code == 400
+    assert "access-control-allow-origin" not in denied.headers
+
+
 def test_navigation_collections_return_only_accessible_resources(
     connectivity_client,
 ):

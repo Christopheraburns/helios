@@ -70,7 +70,15 @@ export function adaptCanvasGraphToReactFlow(
       source: edge.source,
       target: edge.target,
       data: { graphEdge: edge },
-      className: `canvas-edge canvas-edge--${edge.category}`,
+      className: `canvas-edge canvas-edge--${edge.category} canvas-edge--state-${edge.status.toLowerCase().replaceAll("_", "-")}`,
+      label:
+        edge.status === "published"
+          ? undefined
+          : `${formatState(edge.status)}${
+              edge.confidence !== null
+                ? ` · ${Math.round(edge.confidence * 100)}%`
+                : ""
+            }`,
       markerEnd: {
         type: MarkerType.ArrowClosed,
         width: 14,
@@ -79,4 +87,11 @@ export function adaptCanvasGraphToReactFlow(
       selectable: true,
     })),
   };
+}
+
+function formatState(status: string): string {
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }

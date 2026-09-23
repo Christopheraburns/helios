@@ -3,7 +3,8 @@ tpcds/
 __pycache__/
 .env
 .env.sh
-requirements.lock
+/requirements.lock
+.helios-python/
 state/
 *.db-wal
 *.db-shm

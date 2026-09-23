@@ -1,7 +1,7 @@
 # Helios UI backend contract (current state)
 
 This document records the backend interfaces available to a future Helios UI as
-of 2026-09-22. It describes the current implementation; it is not a replacement
+of 2026-09-23. It describes the current implementation; it is not a replacement
 API design.
 
 ## Contract boundary
@@ -21,7 +21,7 @@ only when the API returns the corresponding `available_actions` or
 
 ## Application and startup
 
-The UI-facing application is the FastAPI app `apps.console.main:app`.
+The UI-facing API application is the FastAPI app `apps.console.main:app`.
 `apps/console/main.py` creates the app, migrates a
 `SQLiteMetadataRepository`, mounts `/static`, configures Jinja templates, and
 includes the `/api/v1` and review routers.
@@ -38,6 +38,12 @@ The checkout is resolved from `HELIOS_ROOT`, or from
 The repository also contains a separate MCP Application. `apps/mcp/app.py`
 starts `apps.mcp.server:app` in the same manner. MCP is an agent-facing
 interface, not the browser UI contract.
+
+The separate React/TypeScript UI lives under `apps/ui`. Its Cloudera
+Application entry point, `apps/ui/app.py`, serves the Vite production build
+through `apps.ui.server:app`. Browser requests use the configured
+`HELIOS_API_URL`; credentials are included so Cloudera's authenticated browser
+identity, rather than the UI Application's service identity, reaches the API.
 
 The custom runtime is built by `runtime/Dockerfile` and `runtime/build.sh` on a
 Cloudera PBJ Workbench Python 3.12 base. `runtime/requirements.txt` includes
@@ -94,8 +100,9 @@ the UI authorization contract.
 
 ## Current REST API
 
-The router prefix is `/api/v1`. All current operations are GET requests;
-the model collection accepts an organization filter. `GET /api/v1/healthz` is an unauthenticated process
+The router prefix is `/api/v1`. Read operations use GET and proposal review
+decisions use POST. The model collection accepts an organization filter.
+`GET /api/v1/healthz` is an unauthenticated process
 readiness check. `GET /api/v1/diagnostics` returns authenticated principal
 identity and accessible organization count. An authenticated principal with no
 Helios grants receives a successful response with a count of zero.
@@ -193,7 +200,8 @@ The server projects that graph through authorization before serialization:
 
 - cross-organization and cross-model objects are removed;
 - each object requires the read action associated with its kind;
-- draft, proposed, and rejected objects also require `model.edit`;
+- draft, proposed, needs-review, approved, and rejected objects also require
+  `model.edit`;
 - edges with a hidden endpoint are removed; and
 - permitted actions are computed independently for every returned object.
 
@@ -221,6 +229,28 @@ hidden-neighbor counts, and expandable node IDs under `navigation`.
   values exist in model or discovery artifacts.
 - Missing values are omitted rather than inferred.
 - `available_actions` contains only server-authorized actions for that element.
+
+### Proposal review graph and decisions
+
+Editors can add `review_run_id={run_id}` to graph and graph-detail requests.
+The run must belong to the requested model and both routes require
+`model.edit`. The projection represents proposal elements from that discovery
+run with statuses `needs_review`, `approved`, or `rejected`. Proposal metadata
+contains opaque `review_section` and `review_element_id` values for authorized
+mutation requests. Detail responses include review note, overrides, reviewer,
+and review timestamp when available.
+
+`POST /api/v1/models/{model_id}/reviews/{run_id}/decisions`
+
+- Requires `model.edit`.
+- Accepts `section`, `element_id`, and `decision` (`accept`, `reject`, or
+  `edit`), plus optional `overrides` and `note`.
+- Verifies that the run belongs to the model and that the element exists in
+  that run's immutable proposal.
+- Persists the review decision and authenticated principal ID, then returns
+  the entry, review timestamp, reviewer, and updated summary.
+- Clients wait for success and then refetch the affected graph and detail; the
+  API does not provide an optimistic-state contract.
 
 The response shape is:
 
@@ -262,10 +292,11 @@ The response shape is:
 }
 ```
 
-Known node kinds include `domain`, `data_source`, `dataset`, `attribute`, and
-`metric`. Known edge kinds include `physical_relationship`,
-`semantic_relationship`, and `inferred_relationship`. The DTO is deliberately
-schema-agnostic: details vary by kind inside `metadata`.
+Known node kinds include `domain`, `concept`, `data_source`, `dataset`,
+`attribute`, and `metric`. Known edge kinds include `physical_relationship`,
+`semantic_relationship`, `inferred_relationship`, and
+`ontology_relationship`. The DTO is deliberately schema-agnostic: details vary
+by kind inside `metadata`.
 
 Physical kinds require `datasource.read`; concepts and ontology relationships
 require `ontology.read`; the domain root requires `model.read`; remaining
@@ -273,22 +304,25 @@ semantic kinds require `semantic.read`. A `model_consumer` does not have
 `datasource.read`, so its authorized graph can omit datasets, attributes, and
 physical edges even though it can read semantic and ontology resources.
 
-## Existing server-rendered UI
+## User interfaces
 
-The current console is Jinja2 HTML with CSS in `apps/console/static`. It
+The primary visual UI is the React/TypeScript application in `apps/ui`. It
+uses only this HTTP contract for selectors, overview, Canvas navigation,
+Inspector details, and proposal review.
+
+The legacy console also includes Jinja2 HTML with CSS in
+`apps/console/static`. It
 contains health, Atlas glossary/term CRUD, discovery run browsing, proposal
 display, review, and publish pages. Review interactions use inline JavaScript
 `fetch`; despite the module docstring, the current templates do not use HTMX.
 
 These routes predate the future API-only frontend boundary. Their server-side
 handlers call Atlas clients and filesystem run/artifact helpers directly.
-They are implementation code, not reusable browser contracts. There is no
-React, Vue, or other separate frontend package.
+They are implementation code, not reusable browser contracts.
 
-## UI-enabling gaps
+## Current UI coverage and remaining limits
 
-Only gaps that block or materially limit the requested UI are listed here.
-Existing APIs need not be redesigned.
+Existing APIs need not be redesigned for the covered capabilities.
 
 1. **Organization selector**
    - Addressed by `GET /api/v1/organizations`.
@@ -298,33 +332,35 @@ Existing APIs need not be redesigned.
    - Addressed by the grant-filtered `GET /api/v1/models` collection.
 
 3. **Model overview**
-   - Model status, creator, and creation/update timestamps are persisted but
-     not exposed.
-   - Data-source display metadata is absent; only IDs and selected assets are
-     returned.
-   - Glossary, semantic, and ontology endpoints return IDs, not summaries.
-   - Persistent run and version associations are not loaded into `Model`.
+   - Addressed by `GET /api/v1/models/{model_id}/overview`.
+   - Glossary, semantic, and ontology endpoints still return IDs rather than
+     rich summaries.
 
 4. **Authorized semantic canvas**
-   - The graph endpoint is the correct authorized topology source.
-   - It provides no layout coordinates, filtering, pagination, or incremental
-     expansion.
+   - Addressed by authorized bounded navigation, search, lenses, and
+     incremental neighborhood requests.
+   - Layout remains a frontend concern; the API intentionally does not expose
+     React Flow structures or coordinates.
    - Published Ossie metric formulas, field expressions, dimensions, and
      relationship details are not currently projected into graph metadata.
    - Consumers without `datasource.read` can receive a sparse graph with
      semantic objects but no physical dataset/attribute context.
 
 5. **Node inspector**
-   - There is no node-detail endpoint.
-   - The UI can inspect only the metadata already included in the full graph
-     response.
-   - There is no API mapping a graph node to richer Ossie, proposal, Atlas
-     term, profile, or evidence details.
+   - Addressed by the authorized graph-detail endpoint for available artifact
+     and profile data.
+   - Atlas term enrichment and several artifact-specific details remain
+     unavailable through this endpoint.
+
+6. **Proposal review**
+   - Dataset, field/semantic-role, relationship, metric, and glossary-term
+     proposals can be reviewed.
+   - There is no separate concept-mapping proposal type in the current
+     discovery contract, so the UI does not fabricate one.
 
 ## Verification baseline
 
-The complete existing suite passed before this document was added:
-`75 passed, 1 warning`. The warning is a Starlette `TestClient` deprecation
-for AnyIO's `BlockingPortal` alias. Pytest was supplied from an isolated
-temporary install because it is not part of the repository runtime
-requirements.
+The backend and frontend suites cover the API authorization boundary, review
+mutation/reconciliation, CORS preflights, graph adapters, and application
+shell. The only known backend warning is a Starlette `TestClient` deprecation
+for AnyIO's `BlockingPortal` alias.

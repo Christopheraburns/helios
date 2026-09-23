@@ -59,7 +59,7 @@ def configure_cors(application: FastAPI, value: str | None = None) -> list[str]:
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["GET"],
+        allow_methods=["GET", "POST"],
         allow_headers=["Accept", "Content-Type"],
     )
     return origins
