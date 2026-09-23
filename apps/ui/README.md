@@ -14,7 +14,9 @@ npm run dev
 ```
 
 Vite prints the local development URL, normally `http://localhost:5173`.
-The initial shell does not call the Helios API yet.
+Copy `.env.example` to `.env.local` and set `VITE_HELIOS_API_URL` to the
+locally running API origin. The API must allow the Vite origin through
+`HELIOS_UI_ORIGINS`.
 
 ## Production build
 
@@ -40,7 +42,8 @@ Create a separate Cloudera AI Application with:
 - **Subdomain:** for example, `helios-ui`
 - **Runtime:** a standard PBJ Workbench Python 3.12 runtime
 - **Environment:** set `HELIOS_ROOT` only if the checkout is not at
-  `$CDSW_PROJECT_DIR/helios`
+  `$CDSW_PROJECT_DIR/helios`; set `HELIOS_API_URL` to the API Application's
+  stable HTTPS URL
 
 Build the UI before starting the Application and ensure `apps/ui/dist` exists
 in the project workspace. The Application entry point uses only Python's
@@ -50,3 +53,15 @@ serve the production build.
 The server binds to `127.0.0.1:$CDSW_APP_PORT`, which is the address and port
 used by the Cloudera AI Application proxy. It serves the Vite build, supports
 single-page-application route fallback, and exposes `/healthz`.
+
+See `docs/ui-api-networking.md` for API CORS, transparent authentication, and
+Cloudera AI configuration.
+
+## Workspace context links
+
+The selected workspace is represented with `organization` and `model` query
+parameters. Primary navigation preserves both values, so routes such as
+`/canvas?organization=<id>&model=<id>` can be shared or reloaded. Values are
+accepted only when they are present in the authenticated API collections;
+inaccessible or stale values are removed or replaced with an authorized
+selection.

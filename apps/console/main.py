@@ -4,11 +4,13 @@ from __future__ import annotations
 import os
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 
 from helios_core import __version__
 from helios_core.atlas import AtlasClient, AtlasError
@@ -23,6 +25,47 @@ from .review import review_router
 
 HERE = Path(__file__).parent
 app = FastAPI(title="helios console")
+
+
+def configured_cors_origins(value: str | None = None) -> list[str]:
+    configured = value if value is not None else os.environ.get(
+        "HELIOS_UI_ORIGINS", ""
+    )
+    origins = [origin.strip().rstrip("/") for origin in configured.split(",")]
+    origins = [origin for origin in origins if origin]
+    if "*" in origins:
+        raise ValueError("HELIOS_UI_ORIGINS must contain exact origins, not '*'")
+    for origin in origins:
+        parsed = urlparse(origin)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.path
+            or parsed.params
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError(
+                "HELIOS_UI_ORIGINS entries must be exact HTTP(S) origins"
+            )
+    return origins
+
+
+def configure_cors(application: FastAPI, value: str | None = None) -> list[str]:
+    origins = configured_cors_origins(value)
+    if not origins:
+        return origins
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["GET"],
+        allow_headers=["Accept", "Content-Type"],
+    )
+    return origins
+
+
+configure_cors(app)
 app.state.metadata_repository = SQLiteMetadataRepository()
 app.state.metadata_repository.migrate()
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
