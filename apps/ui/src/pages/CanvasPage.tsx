@@ -10,6 +10,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import {
   ApiUnavailableError,
@@ -19,6 +20,8 @@ import {
   GraphLens,
   HeliosGraphDto,
   HeliosGraphNodeDto,
+  ReviewSection,
+  ReviewSummary,
 } from "../api/client";
 import { EmptyState, ErrorState } from "../components/AsyncState";
 import HeliosNode from "../features/canvas/HeliosNode";
@@ -43,6 +46,7 @@ type CanvasStatus = "idle" | "loading" | "ready" | "error";
 const nodeTypes: NodeTypes = { helios: HeliosNode };
 
 export default function CanvasPage({ context }: CanvasPageProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [status, setStatus] = useState<CanvasStatus>("idle");
   const [dto, setDto] = useState<HeliosGraphDto>();
   const [errorMessage, setErrorMessage] = useState("");
@@ -70,9 +74,12 @@ export default function CanvasPage({ context }: CanvasPageProps) {
   const [lens, setLens] = useState<GraphLens>("semantic");
   const [reviewMode, setReviewMode] = useState(false);
   const [mutationStatus, setMutationStatus] = useState<
-    "idle" | "saving" | "error"
+    "idle" | "saving" | "success" | "error"
   >("idle");
   const [mutationError, setMutationError] = useState("");
+  const [reviewSummary, setReviewSummary] = useState<ReviewSummary>();
+  const [reviewStatus, setReviewStatus] = useState<CanvasStatus>("idle");
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.85);
   const [breadcrumbs, setBreadcrumbs] = useState<
     Array<{ id: string | null; label: string }>
   >([]);
@@ -89,6 +96,7 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     Boolean(
       context.modelOverview?.available_actions.includes("model.edit"),
     );
+  const requestedReviewRunId = searchParams.get("review_run_id") ?? "";
 
   useEffect(() => {
     let active = true;
@@ -100,6 +108,8 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     setExpansionChildren(new Map());
     setBreadcrumbs(model ? [{ id: null, label: model.name }] : []);
     setReviewMode(false);
+    setReviewSummary(undefined);
+    setReviewStatus("idle");
     setMutationStatus("idle");
     if (!context.selectedModelId) {
       setStatus("idle");
@@ -136,6 +146,59 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     context.selectedModelId,
     model?.name,
     retryVersion,
+  ]);
+
+  useEffect(() => {
+    if (
+      context.overviewStatus !== "ready" ||
+      !requestedReviewRunId ||
+      reviewMode
+    ) {
+      return;
+    }
+    if (!canReview || requestedReviewRunId !== reviewRunId) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("review_run_id");
+      setSearchParams(next, { replace: true });
+      return;
+    }
+    void toggleReviewMode(true, false);
+  }, [
+    canReview,
+    context.overviewStatus,
+    requestedReviewRunId,
+    reviewMode,
+    reviewRunId,
+  ]);
+
+  useEffect(() => {
+    if (!reviewMode || !reviewRunId || !context.selectedModelId) {
+      setReviewSummary(undefined);
+      setReviewStatus("idle");
+      return;
+    }
+    let active = true;
+    setReviewStatus("loading");
+    void context
+      .loadModelReview(context.selectedModelId, reviewRunId)
+      .then((summary) => {
+        if (!active) return;
+        setReviewSummary(summary);
+        setReviewStatus("ready");
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setReviewStatus("error");
+        setMutationError(describeGraphError(error));
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    context.loadModelReview,
+    context.selectedModelId,
+    reviewMode,
+    reviewRunId,
   ]);
 
   const graph = useMemo(
@@ -383,9 +446,12 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     }
   }
 
-  async function toggleReviewMode() {
+  async function toggleReviewMode(
+    enabled = !reviewMode,
+    updateUrl = true,
+  ) {
     if (!context.selectedModelId || !reviewRunId) return;
-    const nextReviewMode = !reviewMode;
+    const nextReviewMode = enabled;
     const currentFocus = breadcrumbs.at(-1)?.id ?? undefined;
     try {
       let result: HeliosGraphDto;
@@ -415,6 +481,15 @@ export default function CanvasPage({ context }: CanvasPageProps) {
       setExpandedNodeIds(new Set());
       setExpandedDatasetIds(new Set());
       setExpansionChildren(new Map());
+      if (updateUrl) {
+        const next = new URLSearchParams(searchParams);
+        if (nextReviewMode) {
+          next.set("review_run_id", reviewRunId);
+        } else {
+          next.delete("review_run_id");
+        }
+        setSearchParams(next);
+      }
       fitNodeIds(result.nodes.map((item) => item.id));
     } catch (error) {
       setErrorMessage(describeGraphError(error));
@@ -441,43 +516,147 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     setMutationStatus("saving");
     setMutationError("");
     try {
-      await context.decideModelProposal(
+      const response = await context.decideModelProposal(
         context.selectedModelId,
         reviewRunId,
         {
-          section: section as
-            | "datasets"
-            | "fields"
-            | "relationships"
-            | "metrics"
-            | "glossary_terms",
+          section: section as ReviewSection,
           element_id: elementId,
           decision,
           overrides,
           note,
         },
       );
-      const refreshed = await context.loadModelGraph(
-        context.selectedModelId,
-        {
-          navigation: true,
-          lens,
-          reviewRunId,
-          focusNodeId: selectedDetail.id,
-          depth: 1,
-          includeAttributes: selectedNode?.category === "dataset",
-          limit: 120,
-        },
-      );
+      setReviewSummary(response.summary);
+      await reconcileReviewSurface();
+      setMutationStatus("idle");
+    } catch (error) {
+      setMutationStatus("error");
+      setMutationError(describeGraphError(error));
+    }
+  }
+
+  async function reconcileReviewSurface() {
+    if (!context.selectedModelId || !reviewRunId) return;
+    const focusNodeId = selectedNode?.id;
+    const detailId = selectedDetail?.id;
+    const refreshed = await context.loadModelGraph(
+      context.selectedModelId,
+      {
+        navigation: true,
+        lens,
+        reviewRunId,
+        focusNodeId,
+        depth: 1,
+        includeAttributes: selectedNode?.category === "dataset",
+        limit: 120,
+      },
+    );
+    setDto(refreshed);
+    if (detailId) {
       const detail = await context.loadGraphElementDetail(
         context.selectedModelId,
-        selectedDetail.id,
+        detailId,
         reviewRunId,
       );
-      setDto(refreshed);
       setSelectedDetail(detail);
+    }
+    context.refreshModelOverview();
+    fitNodeIds(refreshed.nodes.map((item) => item.id));
+  }
+
+  async function cascadeSelectedDataset(
+    decision: "accept" | "reject",
+  ) {
+    if (
+      !context.selectedModelId ||
+      !reviewRunId ||
+      !selectedDetail ||
+      selectedDetail.details.review_section !== "datasets"
+    ) {
+      return;
+    }
+    const table = selectedDetail.details.review_element_id;
+    if (typeof table !== "string") return;
+    setMutationStatus("saving");
+    setMutationError("");
+    try {
+      const response = await context.decideModelDataset(
+        context.selectedModelId,
+        reviewRunId,
+        table,
+        decision,
+      );
+      setReviewSummary(response.summary);
+      await reconcileReviewSurface();
       setMutationStatus("idle");
-      fitNodeIds(refreshed.nodes.map((item) => item.id));
+    } catch (error) {
+      setMutationStatus("error");
+      setMutationError(describeGraphError(error));
+    }
+  }
+
+  async function bulkAccept() {
+    if (!context.selectedModelId || !reviewRunId) return;
+    setMutationStatus("saving");
+    setMutationError("");
+    try {
+      const response = await context.bulkAcceptModelProposals(
+        context.selectedModelId,
+        reviewRunId,
+        confidenceThreshold,
+      );
+      setReviewSummary(response.summary);
+      await reconcileReviewSurface();
+      setMutationStatus("idle");
+    } catch (error) {
+      setMutationStatus("error");
+      setMutationError(describeGraphError(error));
+    }
+  }
+
+  async function resetReview(section?: ReviewSection) {
+    if (
+      !context.selectedModelId ||
+      !reviewRunId ||
+      !window.confirm(
+        section
+          ? `Reset all ${section.replaceAll("_", " ")} decisions?`
+          : "Reset all review decisions?",
+      )
+    ) {
+      return;
+    }
+    setMutationStatus("saving");
+    setMutationError("");
+    try {
+      const response = await context.resetModelReview(
+        context.selectedModelId,
+        reviewRunId,
+        section,
+      );
+      setReviewSummary(response.summary);
+      await reconcileReviewSurface();
+      setMutationStatus("idle");
+    } catch (error) {
+      setMutationStatus("error");
+      setMutationError(describeGraphError(error));
+    }
+  }
+
+  async function publishReview() {
+    if (!context.selectedModelId || !reviewRunId) return;
+    setMutationStatus("saving");
+    setMutationError("");
+    try {
+      await context.publishModelReview(context.selectedModelId, reviewRunId);
+      const summary = await context.loadModelReview(
+        context.selectedModelId,
+        reviewRunId,
+      );
+      setReviewSummary(summary);
+      await reconcileReviewSurface();
+      setMutationStatus("success");
     } catch (error) {
       setMutationStatus("error");
       setMutationError(describeGraphError(error));
@@ -608,6 +787,131 @@ export default function CanvasPage({ context }: CanvasPageProps) {
         </div>
       ) : null}
 
+      {reviewMode ? (
+        <section className="review-toolbar" aria-label="Proposal review">
+          <div className="review-toolbar__summary">
+            <div>
+              <p className="section-eyebrow">Review run</p>
+              <strong>{reviewRunId}</strong>
+            </div>
+            {reviewStatus === "loading" ? (
+              <span role="status">Loading review summary…</span>
+            ) : reviewSummary ? (
+              <ul aria-label="Review decision counts">
+                {(
+                  Object.entries(reviewSummary.sections) as Array<
+                    [ReviewSection, ReviewSummary["sections"][ReviewSection]]
+                  >
+                ).map(([section, counts]) => (
+                  <li key={section}>
+                    <strong>{section.replaceAll("_", " ")}</strong>
+                    <span>
+                      {counts.pending} pending · {counts.accept} accepted ·{" "}
+                      {counts.reject} rejected · {counts.edit} edited
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+          {reviewSummary ? (
+            <>
+              <div className="review-toolbar__audit">
+                {reviewSummary.reviewed_at ? (
+                  <span>
+                    Last reviewed by{" "}
+                    {reviewSummary.reviewed_by ?? "an authorized user"} ·{" "}
+                    {formatReviewDate(reviewSummary.reviewed_at)}
+                  </span>
+                ) : (
+                  <span>No review decisions recorded yet.</span>
+                )}
+                {reviewSummary.validation_errors.length ? (
+                  <span>
+                    {reviewSummary.validation_errors.length} publication{" "}
+                    {reviewSummary.validation_errors.length === 1
+                      ? "issue"
+                      : "issues"}
+                  </span>
+                ) : (
+                  <span>Publication validation passed.</span>
+                )}
+              </div>
+              <div className="review-toolbar__actions">
+                {reviewSummary.available_actions.includes("bulk_accept") ? (
+                  <label>
+                    Minimum confidence
+                    <input
+                      aria-label="Minimum confidence"
+                      max="1"
+                      min="0"
+                      step="0.05"
+                      type="number"
+                      value={confidenceThreshold}
+                      onChange={(event) =>
+                        setConfidenceThreshold(
+                          Math.min(
+                            1,
+                            Math.max(0, Number(event.target.value)),
+                          ),
+                        )
+                      }
+                    />
+                    <button
+                      className="button button--secondary"
+                      disabled={mutationStatus === "saving"}
+                      onClick={() => void bulkAccept()}
+                      type="button"
+                    >
+                      Accept above threshold
+                    </button>
+                  </label>
+                ) : null}
+                {reviewSummary.available_actions.includes("reset") ? (
+                  <button
+                    className="button button--secondary"
+                    disabled={mutationStatus === "saving"}
+                    onClick={() => void resetReview()}
+                    type="button"
+                  >
+                    Reset review
+                  </button>
+                ) : null}
+                {reviewSummary.available_actions.includes("publish") ? (
+                  <button
+                    className="button button--primary"
+                    disabled={
+                      mutationStatus === "saving" ||
+                      !reviewSummary.publish_ready
+                    }
+                    onClick={() => void publishReview()}
+                    title={
+                      reviewSummary.publish_ready
+                        ? undefined
+                        : "Resolve publication validation issues first."
+                    }
+                    type="button"
+                  >
+                    {mutationStatus === "saving"
+                      ? "Saving…"
+                      : "Publish model"}
+                  </button>
+                ) : null}
+              </div>
+              {mutationStatus === "success" ? (
+                <p role="status">Model published successfully.</p>
+              ) : mutationError ? (
+                <p role="alert">{mutationError}</p>
+              ) : null}
+            </>
+          ) : reviewStatus === "error" ? (
+            <p role="alert">
+              {mutationError || "The review summary could not be loaded."}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
       {!model ? (
         <EmptyState
           title="Select a model"
@@ -697,6 +1001,10 @@ export default function CanvasPage({ context }: CanvasPageProps) {
                 fitNodeIds(connected);
               }}
               onDecision={decideSelectedProposal}
+              onDatasetDecision={cascadeSelectedDataset}
+              canCascadeDataset={
+                reviewSummary?.available_actions.includes("cascade") ?? false
+              }
             />
           </div>
         </>
@@ -731,12 +1039,14 @@ function CanvasInspector({
   onShowConnected,
   onFitSubgraph,
   onDecision,
+  onDatasetDecision,
+  canCascadeDataset,
 }: {
   node?: CanvasGraphNode;
   edge?: CanvasGraphEdge;
   detail?: GraphElementDetail;
   detailStatus: "idle" | "loading" | "ready" | "error";
-  mutationStatus: "idle" | "saving" | "error";
+  mutationStatus: "idle" | "saving" | "success" | "error";
   mutationError: string;
   datasetExpanded: boolean;
   onExpand: (node: CanvasGraphNode) => void;
@@ -749,6 +1059,8 @@ function CanvasInspector({
     overrides?: Record<string, unknown>,
     note?: string,
   ) => void;
+  onDatasetDecision: (decision: "accept" | "reject") => void;
+  canCascadeDataset: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [editNote, setEditNote] = useState("");
@@ -877,6 +1189,27 @@ function CanvasInspector({
               Edit
             </button>
           </div>
+          {canCascadeDataset &&
+          detail?.details.review_section === "datasets" ? (
+            <div>
+              <button
+                className="button button--secondary"
+                disabled={mutationStatus === "saving"}
+                onClick={() => onDatasetDecision("accept")}
+                type="button"
+              >
+                Approve dataset and attributes
+              </button>
+              <button
+                className="button button--secondary"
+                disabled={mutationStatus === "saving"}
+                onClick={() => onDatasetDecision("reject")}
+                type="button"
+              >
+                Reject dataset and attributes
+              </button>
+            </div>
+          ) : null}
           {editing ? (
             <div className="canvas-inspector__edit-form">
               <label>
@@ -968,6 +1301,16 @@ function InspectorDetail({ label, value }: { label: string; value: string }) {
       <dd>{value}</dd>
     </div>
   );
+}
+
+function formatReviewDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(date);
 }
 
 function inspectorSectionTitle(kind: string, elementType: "node" | "edge") {
@@ -1103,5 +1446,6 @@ function describeGraphError(error: unknown): string {
     return "You no longer have permission to view this model graph.";
   }
   if (error instanceof ApiUnavailableError) return error.message;
+  if (error instanceof Error && error.message) return error.message;
   return "The Helios graph API could not be reached.";
 }

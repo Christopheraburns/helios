@@ -1,7 +1,11 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
 from apps.console.main import app
+from helios_core import health as system_health
+from helios_core import runs as runstore
 from helios_core.graph import ArtifactGraphRepository
 
 
@@ -121,6 +125,117 @@ def test_model_overview_uses_model_authorization(persistent_client):
     )
 
     assert response.status_code == 403
+
+
+def test_model_status_limits_infrastructure_details_to_org_admin(
+    persistent_client,
+):
+    checker_calls = []
+    app.state.system_health_checker = lambda repository: checker_calls.append(
+        repository
+    ) or []
+
+    viewer = persistent_client.get(
+        "/api/v1/models/customer360/status",
+        headers=headers("viewer"),
+    )
+    owner_details = persistent_client.get(
+        "/api/v1/models/customer360/status",
+        params={"details": "true"},
+        headers=headers("owner"),
+    )
+
+    assert viewer.status_code == 200
+    body = viewer.json()
+    assert body["status"] == "degraded"
+    assert body["details_available"] is False
+    assert body["details"] == []
+    assert {item["id"] for item in body["components"]} == {
+        "api",
+        "semantic-model",
+        "discovery-profile",
+    }
+    assert checker_calls == []
+    assert owner_details.status_code == 403
+
+
+def test_model_status_reports_partial_failures_and_recent_runs(
+    persistent_client,
+    tmp_path,
+    monkeypatch,
+):
+    run_id = "customer-run"
+    run_directory = tmp_path / "runs" / run_id
+    run_directory.mkdir(parents=True)
+    (run_directory / "harvest.json").write_text(
+        json.dumps(
+            {
+                "model_id": "customer360",
+                "harvested_at": "2026-09-20T10:00:00+00:00",
+                "tables": [],
+            }
+        )
+    )
+    (run_directory / "profile.json").write_text(
+        json.dumps(
+            {
+                "model_id": "customer360",
+                "profiled_at": "2026-09-20T11:00:00+00:00",
+                "tables": {},
+            }
+        )
+    )
+    monkeypatch.setattr(runstore, "RUNS_DIR", str(tmp_path / "runs"))
+    app.state.system_health_checker = lambda _: [
+        system_health.HealthComponent(
+            "metadata",
+            "Metadata repository",
+            "healthy",
+            "Metadata repository is available.",
+        ),
+        system_health.HealthComponent(
+            "atlas",
+            "Atlas",
+            "unavailable",
+            "Atlas connectivity check failed.",
+        ),
+        system_health.HealthComponent(
+            "impala",
+            "Impala data source",
+            "healthy",
+            "Impala connectivity check succeeded.",
+        ),
+    ]
+
+    response = persistent_client.get(
+        "/api/v1/models/customer360/status",
+        params={"details": "true"},
+        headers=headers("admin"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "degraded"
+    assert body["details_available"] is True
+    assert {item["id"] for item in body["details"]} == {
+        "metadata",
+        "atlas",
+        "impala",
+    }
+    assert body["issues"] == [
+        "Profiling completed; proposals are pending.",
+        "Atlas connectivity check failed.",
+    ]
+    assert body["recent_activity"] == {
+        "discovery": {
+            "run_id": run_id,
+            "completed_at": "2026-09-20T10:00:00+00:00",
+        },
+        "profile": {
+            "run_id": run_id,
+            "completed_at": "2026-09-20T11:00:00+00:00",
+        },
+    }
 
 
 def test_graph_detail_is_lazy_and_uses_element_authorization(

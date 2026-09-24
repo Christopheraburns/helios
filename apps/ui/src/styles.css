@@ -686,6 +686,7 @@ a:focus-visible {
 
 .overview-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 24px;
   align-items: center;
   justify-content: space-between;
@@ -694,6 +695,139 @@ a:focus-visible {
   border: 1px solid var(--slate-200);
   border-radius: 12px;
   box-shadow: var(--shadow-sm);
+}
+
+.action-message {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--slate-700);
+  font-size: 0.82rem;
+  text-align: right;
+}
+
+.action-message--error {
+  color: #9f2d20;
+}
+
+.system-status {
+  margin-top: 20px;
+  padding: 18px 20px;
+  background: #fff;
+  border: 1px solid var(--slate-200);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.system-status__header,
+.system-status__footer,
+.system-status__error,
+.system-status__loading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.system-status__header h2,
+.system-status__details h3 {
+  margin: 0;
+  color: var(--navy-900);
+  font-size: 1rem;
+}
+
+.system-status__components {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0;
+  margin: 14px 0;
+  list-style: none;
+}
+
+.system-status__components li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 11px 12px;
+  background: #f7f9fa;
+  border: 1px solid var(--slate-200);
+  border-radius: 8px;
+}
+
+.system-status__components li div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.system-status__components strong {
+  color: var(--navy-900);
+  font-size: 0.82rem;
+}
+
+.system-status__components li span:not(.health-badge),
+.system-status__footer,
+.system-status__loading,
+.system-status__error,
+.system-status__details p {
+  color: var(--slate-600);
+  font-size: 0.75rem;
+}
+
+.system-status__footer {
+  justify-content: flex-end;
+}
+
+.system-status__footer > span {
+  margin-right: auto;
+}
+
+.system-status .button {
+  margin: 0;
+}
+
+.system-status__details {
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid var(--slate-200);
+}
+
+.health-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  border: 1px solid;
+  border-radius: 999px;
+}
+
+.health-badge--healthy {
+  color: #17663a;
+  background: #eaf8ef;
+  border-color: #a9ddba;
+}
+
+.health-badge--degraded {
+  color: #765714;
+  background: #fff8df;
+  border-color: #e4cf88;
+}
+
+.health-badge--unavailable {
+  color: #9f2d20;
+  background: #fff0ee;
+  border-color: #eab1aa;
+}
+
+.health-badge--unknown {
+  color: var(--slate-700);
+  background: var(--slate-100);
+  border-color: var(--slate-300);
 }
 
 .overview-actions h2,
@@ -914,6 +1048,82 @@ a:focus-visible {
   color: #fff;
   background: #8a6412;
   border-color: #8a6412;
+}
+
+.review-toolbar {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  background: #fffcf2;
+  border: 1px solid #e4cf88;
+  border-radius: 9px;
+}
+
+.review-toolbar__summary,
+.review-toolbar__audit,
+.review-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.review-toolbar__summary ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.review-toolbar__summary li {
+  display: grid;
+  gap: 2px;
+  padding: 5px 8px;
+  background: #fff;
+  border: 1px solid var(--slate-200);
+  border-radius: 6px;
+}
+
+.review-toolbar__summary li strong {
+  font-size: 0.72rem;
+  text-transform: capitalize;
+}
+
+.review-toolbar__summary li span,
+.review-toolbar__audit,
+.review-toolbar > p {
+  margin: 0;
+  color: var(--slate-600);
+  font-size: 0.72rem;
+}
+
+.review-toolbar__actions {
+  justify-content: flex-end;
+}
+
+.review-toolbar__actions label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--slate-700);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.review-toolbar__actions input {
+  width: 64px;
+  min-height: 32px;
+  padding: 4px 6px;
+  border: 1px solid var(--slate-300);
+  border-radius: 6px;
+}
+
+.review-toolbar .button {
+  margin: 0;
 }
 
 .canvas-breadcrumbs {
@@ -1553,6 +1763,14 @@ a:focus-visible {
 
   .overview-actions {
     display: grid;
+  }
+
+  .system-status__components {
+    grid-template-columns: 1fr;
+  }
+
+  .system-status__footer {
+    align-items: flex-start;
   }
 
   .overview-actions__buttons {

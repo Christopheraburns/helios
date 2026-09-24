@@ -77,6 +77,38 @@ export interface ModelOverview
   };
 }
 
+export type HealthState =
+  | "healthy"
+  | "degraded"
+  | "unavailable"
+  | "unknown";
+
+export interface HealthComponent {
+  id: string;
+  label: string;
+  status: HealthState;
+  description: string;
+}
+
+export interface RecentHealthActivity {
+  run_id: string;
+  completed_at: string | null;
+}
+
+export interface ModelSystemStatus {
+  model_id: string;
+  status: HealthState;
+  checked_at: string;
+  components: HealthComponent[];
+  details_available: boolean;
+  details: HealthComponent[];
+  recent_activity: {
+    discovery: RecentHealthActivity | null;
+    profile: RecentHealthActivity | null;
+  };
+  issues: string[];
+}
+
 export interface ModelsResponse {
   organization_id: string | null;
   models: ModelSummary[];
@@ -157,13 +189,36 @@ export interface GraphElementDetail {
   available_actions: string[];
 }
 
+export type ReviewSection =
+  | "datasets"
+  | "fields"
+  | "relationships"
+  | "metrics"
+  | "glossary_terms";
+
+export interface ReviewSectionCounts {
+  accept: number;
+  reject: number;
+  edit: number;
+  pending: number;
+  total: number;
+}
+
+export interface ReviewSummary {
+  model_id: string;
+  run_id: string;
+  sections: Record<ReviewSection, ReviewSectionCounts>;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  preflight_issues: Record<string, string>;
+  validation_errors: string[];
+  publish_ready: boolean;
+  publication: Record<string, unknown> | null;
+  available_actions: string[];
+}
+
 export interface ReviewDecisionRequest {
-  section:
-    | "datasets"
-    | "fields"
-    | "relationships"
-    | "metrics"
-    | "glossary_terms";
+  section: ReviewSection;
   element_id: string;
   decision: "accept" | "reject" | "edit";
   overrides?: Record<string, unknown>;
@@ -182,7 +237,20 @@ export interface ReviewDecisionResponse {
   };
   reviewed_at: string;
   reviewed_by: string;
-  summary: Record<string, Record<string, number>>;
+  summary: ReviewSummary;
+}
+
+export interface ReviewMutationResponse {
+  ok: true;
+  changed?: number;
+  summary: ReviewSummary;
+}
+
+export interface ReviewPublicationResponse {
+  ok: true;
+  model_id: string;
+  run_id: string;
+  manifest: Record<string, unknown>;
 }
 
 export class AuthenticationError extends Error {}
@@ -194,12 +262,35 @@ export class ApiUnavailableError extends Error {
   }
 }
 
+function apiErrorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object" || !("detail" in payload)) {
+    return null;
+  }
+  const detail = payload.detail;
+  if (typeof detail === "string") return detail;
+  if (
+    detail &&
+    typeof detail === "object" &&
+    "errors" in detail &&
+    Array.isArray(detail.errors)
+  ) {
+    return detail.errors.filter((item): item is string => {
+      return typeof item === "string";
+    }).join("; ");
+  }
+  return null;
+}
+
 export interface HeliosApi {
   health(): Promise<ApiHealth>;
   diagnostics(): Promise<ApiDiagnostics>;
   organizations(): Promise<OrganizationsResponse>;
   models(organizationId: string): Promise<ModelsResponse>;
   modelOverview(modelId: string): Promise<ModelOverview>;
+  modelStatus(
+    modelId: string,
+    includeDetails?: boolean,
+  ): Promise<ModelSystemStatus>;
   modelGraph(
     modelId: string,
     options?: GraphNavigationOptions,
@@ -214,6 +305,27 @@ export interface HeliosApi {
     runId: string,
     decision: ReviewDecisionRequest,
   ): Promise<ReviewDecisionResponse>;
+  modelReview(modelId: string, runId: string): Promise<ReviewSummary>;
+  decideModelDataset(
+    modelId: string,
+    runId: string,
+    table: string,
+    decision: "accept" | "reject",
+  ): Promise<ReviewMutationResponse>;
+  bulkAcceptModelProposals(
+    modelId: string,
+    runId: string,
+    minConfidence: number,
+  ): Promise<ReviewMutationResponse>;
+  resetModelReview(
+    modelId: string,
+    runId: string,
+    section?: ReviewSection,
+  ): Promise<ReviewMutationResponse>;
+  publishModelReview(
+    modelId: string,
+    runId: string,
+  ): Promise<ReviewPublicationResponse>;
   applicationUrl?(path: string): string;
 }
 
@@ -276,6 +388,16 @@ export class HeliosApiClient implements HeliosApi {
     );
   }
 
+  modelStatus(
+    modelId: string,
+    includeDetails = false,
+  ): Promise<ModelSystemStatus> {
+    const query = includeDetails ? "?details=true" : "";
+    return this.get<ModelSystemStatus>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/status${query}`,
+    );
+  }
+
   modelGraph(
     modelId: string,
     options: GraphNavigationOptions = {},
@@ -328,6 +450,56 @@ export class HeliosApiClient implements HeliosApi {
     );
   }
 
+  modelReview(modelId: string, runId: string): Promise<ReviewSummary> {
+    return this.get<ReviewSummary>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/reviews/${encodeURIComponent(runId)}`,
+    );
+  }
+
+  decideModelDataset(
+    modelId: string,
+    runId: string,
+    table: string,
+    decision: "accept" | "reject",
+  ): Promise<ReviewMutationResponse> {
+    return this.post<ReviewMutationResponse>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/reviews/${encodeURIComponent(runId)}/decisions/dataset`,
+      { table, decision },
+    );
+  }
+
+  bulkAcceptModelProposals(
+    modelId: string,
+    runId: string,
+    minConfidence: number,
+  ): Promise<ReviewMutationResponse> {
+    return this.post<ReviewMutationResponse>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/reviews/${encodeURIComponent(runId)}/decisions/bulk`,
+      { min_confidence: minConfidence },
+    );
+  }
+
+  resetModelReview(
+    modelId: string,
+    runId: string,
+    section?: ReviewSection,
+  ): Promise<ReviewMutationResponse> {
+    return this.post<ReviewMutationResponse>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/reviews/${encodeURIComponent(runId)}/reset`,
+      { section: section ?? null },
+    );
+  }
+
+  publishModelReview(
+    modelId: string,
+    runId: string,
+  ): Promise<ReviewPublicationResponse> {
+    return this.post<ReviewPublicationResponse>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/reviews/${encodeURIComponent(runId)}/publish`,
+      undefined,
+    );
+  }
+
   applicationUrl(path: string): string {
     return new URL(path, this.baseUrl).toString();
   }
@@ -336,11 +508,15 @@ export class HeliosApiClient implements HeliosApi {
     return this.request<T>(path, { method: "GET" });
   }
 
-  private async post<T>(path: string, body: unknown): Promise<T> {
+  private async post<T>(path: string, body?: unknown): Promise<T> {
     return this.request<T>(path, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      ...(body === undefined
+        ? {}
+        : {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          }),
     });
   }
 
@@ -372,8 +548,15 @@ export class HeliosApiClient implements HeliosApi {
       );
     }
     if (!response.ok) {
+      let detail: unknown;
+      try {
+        detail = await response.clone().json();
+      } catch {
+        detail = null;
+      }
+      const message = apiErrorMessage(detail);
       throw new ApiUnavailableError(
-        `The Helios API returned HTTP ${response.status}.`,
+        message || `The Helios API returned HTTP ${response.status}.`,
       );
     }
     if (!response.headers.get("content-type")?.includes("application/json")) {

@@ -8,8 +8,10 @@ import {
   HeliosApi,
   HeliosGraphDto,
   ModelOverview,
+  ModelSystemStatus,
   ModelsResponse,
   OrganizationsResponse,
+  ReviewSummary,
 } from "./api/client";
 
 const diagnostics: ApiDiagnostics = {
@@ -145,6 +147,81 @@ function overviewFor(modelId: string): ModelOverview {
   };
 }
 
+function reviewSummary(
+  overrides: Partial<ReviewSummary> = {},
+): ReviewSummary {
+  const counts = {
+    accept: 0,
+    reject: 0,
+    edit: 0,
+    pending: 0,
+    total: 0,
+  };
+  return {
+    model_id: "north-model",
+    run_id: "run-1",
+    sections: {
+      datasets: { ...counts, pending: 1, total: 1 },
+      fields: { ...counts },
+      relationships: { ...counts },
+      metrics: { ...counts },
+      glossary_terms: { ...counts },
+    },
+    reviewed_at: null,
+    reviewed_by: null,
+    preflight_issues: {},
+    validation_errors: [],
+    publish_ready: true,
+    publication: null,
+    available_actions: ["decide", "cascade", "bulk_accept", "reset"],
+    ...overrides,
+  };
+}
+
+function systemStatus(
+  overrides: Partial<ModelSystemStatus> = {},
+): ModelSystemStatus {
+  return {
+    model_id: "north-model",
+    status: "degraded",
+    checked_at: "2026-09-23T20:00:00+00:00",
+    components: [
+      {
+        id: "api",
+        label: "Helios API",
+        status: "healthy",
+        description: "The authorized status API responded.",
+      },
+      {
+        id: "semantic-model",
+        label: "Semantic model",
+        status: "healthy",
+        description: "A published semantic model is available.",
+      },
+      {
+        id: "discovery-profile",
+        label: "Discovery and profiling",
+        status: "degraded",
+        description: "Profiling completed; proposals are pending.",
+      },
+    ],
+    details_available: false,
+    details: [],
+    recent_activity: {
+      discovery: {
+        run_id: "run-1",
+        completed_at: "2026-09-22T10:00:00+00:00",
+      },
+      profile: {
+        run_id: "run-1",
+        completed_at: "2026-09-22T11:00:00+00:00",
+      },
+    },
+    issues: ["Profiling completed; proposals are pending."],
+    ...overrides,
+  };
+}
+
 function successfulClient(): HeliosApi {
   return {
     health: vi.fn().mockResolvedValue({ status: "ok" }),
@@ -156,6 +233,7 @@ function successfulClient(): HeliosApi {
     modelOverview: vi.fn((modelId: string) =>
       Promise.resolve(overviewFor(modelId)),
     ),
+    modelStatus: vi.fn().mockResolvedValue(systemStatus()),
     modelGraph: vi.fn().mockResolvedValue(graph),
     modelGraphDetail: vi.fn().mockResolvedValue({
       element_type: "node",
@@ -181,7 +259,28 @@ function successfulClient(): HeliosApi {
       entry: { decision: "accept" },
       reviewed_at: "2026-09-23T00:00:00+00:00",
       reviewed_by: "cloudera-workbench:analyst",
-      summary: {},
+      summary: reviewSummary(),
+    }),
+    modelReview: vi.fn().mockResolvedValue(reviewSummary()),
+    decideModelDataset: vi.fn().mockResolvedValue({
+      ok: true,
+      changed: 2,
+      summary: reviewSummary(),
+    }),
+    bulkAcceptModelProposals: vi.fn().mockResolvedValue({
+      ok: true,
+      changed: 1,
+      summary: reviewSummary(),
+    }),
+    resetModelReview: vi.fn().mockResolvedValue({
+      ok: true,
+      summary: reviewSummary(),
+    }),
+    publishModelReview: vi.fn().mockResolvedValue({
+      ok: true,
+      model_id: "north-model",
+      run_id: "run-1",
+      manifest: {},
     }),
     applicationUrl: vi.fn(
       (path: string) => `https://helios-api.example.test${path}`,
@@ -198,9 +297,15 @@ describe("Helios application shell", () => {
       organizations: vi.fn(() => pending),
       models: vi.fn(() => pending),
       modelOverview: vi.fn(() => pending),
+      modelStatus: vi.fn(() => pending),
       modelGraph: vi.fn(() => pending),
       modelGraphDetail: vi.fn(() => pending),
       decideModelProposal: vi.fn(() => pending),
+      modelReview: vi.fn(() => pending),
+      decideModelDataset: vi.fn(() => pending),
+      bulkAcceptModelProposals: vi.fn(() => pending),
+      resetModelReview: vi.fn(() => pending),
+      publishModelReview: vi.fn(() => pending),
     };
 
     render(<App client={client} />);
@@ -211,7 +316,8 @@ describe("Helios application shell", () => {
   });
 
   it("loads API-backed selectors, account identity, and model overview", async () => {
-    render(<App client={successfulClient()} />);
+    const client = successfulClient();
+    render(<App client={client} />);
 
     expect(
       await screen.findByRole("heading", { name: "North Model" }),
@@ -227,12 +333,101 @@ describe("Helios application shell", () => {
     expect(screen.getByRole("link", { name: "Review Proposals" }))
       .toHaveAttribute(
         "href",
-        "https://helios-api.example.test/runs/run-1/review",
+        "/canvas?organization=north&model=north-model&review_run_id=run-1",
       );
+    expect(document.querySelector('a[href*="/runs/"]')).toBeNull();
     expect(screen.queryByRole("link", { name: "Publish" }))
       .not.toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Primary navigation" }))
       .toHaveTextContent("Governance");
+    expect(
+      await screen.findByRole("heading", { name: "Helios health" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Degraded")).not.toHaveLength(0);
+    expect(screen.getByText("Helios API")).toBeInTheDocument();
+    expect(screen.queryByText("Metadata repository")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Show system details" }),
+    ).not.toBeInTheDocument();
+    expect(client.modelStatus).toHaveBeenCalledWith("north-model", false);
+  });
+
+  it("loads infrastructure checks only when an administrator expands them", async () => {
+    const client = successfulClient();
+    vi.mocked(client.modelStatus).mockImplementation(
+      (_modelId, includeDetails) =>
+        Promise.resolve(
+          systemStatus({
+            details_available: true,
+            details: includeDetails
+              ? [
+                  {
+                    id: "metadata",
+                    label: "Metadata repository",
+                    status: "healthy",
+                    description: "Metadata repository is available.",
+                  },
+                  {
+                    id: "atlas",
+                    label: "Atlas",
+                    status: "unavailable",
+                    description: "Atlas connectivity check failed.",
+                  },
+                ]
+              : [],
+          }),
+        ),
+    );
+
+    render(<App client={client} />);
+    await screen.findByRole("heading", { name: "Helios health" });
+    expect(screen.queryByText("Metadata repository")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Show system details" }),
+    );
+
+    expect(await screen.findByText("Metadata repository"))
+      .toBeInTheDocument();
+    expect(screen.getByText("Atlas connectivity check failed."))
+      .toBeInTheDocument();
+    expect(client.modelStatus).toHaveBeenLastCalledWith(
+      "north-model",
+      true,
+    );
+  });
+
+  it("shows a model status loading state independently", async () => {
+    const client = successfulClient();
+    vi.mocked(client.modelStatus).mockImplementation(
+      () => new Promise<ModelSystemStatus>(() => undefined),
+    );
+
+    render(<App client={client} />);
+
+    await screen.findByRole("heading", { name: "North Model" });
+    expect(await screen.findByText("Checking model services…"))
+      .toBeInTheDocument();
+    expect(screen.getByText("Production Warehouse")).toBeInTheDocument();
+  });
+
+  it("shows status errors and retries without hiding the model overview", async () => {
+    const client = successfulClient();
+    vi.mocked(client.modelStatus)
+      .mockRejectedValueOnce(new Error("Status request failed."))
+      .mockResolvedValueOnce(systemStatus());
+
+    render(<App client={client} />);
+    await screen.findByRole("heading", { name: "North Model" });
+    expect(await screen.findByRole("alert"))
+      .toHaveTextContent("Status request failed.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry status" }));
+
+    expect(await screen.findByText("Discovery and profiling"))
+      .toBeInTheDocument();
+    expect(client.modelStatus).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Production Warehouse")).toBeInTheDocument();
   });
 
   it("loads models from the API when the organization changes", async () => {
@@ -284,6 +479,7 @@ describe("Helios application shell", () => {
       organizations: vi.fn().mockResolvedValue(organizations),
       models: vi.fn().mockResolvedValue(modelsFor("north")),
       modelOverview: vi.fn().mockResolvedValue(overviewFor("north-model")),
+      modelStatus: vi.fn().mockResolvedValue(systemStatus()),
       modelGraph: vi.fn().mockResolvedValue(graph),
       modelGraphDetail: vi.fn().mockResolvedValue({
         element_type: "node",
@@ -306,7 +502,26 @@ describe("Helios application shell", () => {
         entry: { decision: "accept" },
         reviewed_at: "2026-09-23T00:00:00+00:00",
         reviewed_by: "cloudera-workbench:analyst",
-        summary: {},
+      summary: reviewSummary(),
+      }),
+      modelReview: vi.fn().mockResolvedValue(reviewSummary()),
+      decideModelDataset: vi.fn().mockResolvedValue({
+        ok: true,
+        summary: reviewSummary(),
+      }),
+      bulkAcceptModelProposals: vi.fn().mockResolvedValue({
+        ok: true,
+        summary: reviewSummary(),
+      }),
+      resetModelReview: vi.fn().mockResolvedValue({
+        ok: true,
+        summary: reviewSummary(),
+      }),
+      publishModelReview: vi.fn().mockResolvedValue({
+        ok: true,
+        model_id: "north-model",
+        run_id: "run-1",
+        manifest: {},
       }),
     };
 
@@ -467,17 +682,23 @@ describe("Helios application shell", () => {
           entry: { decision: request.decision },
           reviewed_at: "2026-09-23T00:00:00+00:00",
           reviewed_by: "cloudera-workbench:analyst",
-          summary: {},
+          summary: reviewSummary({
+            reviewed_at: "2026-09-23T00:00:00+00:00",
+            reviewed_by: "cloudera-workbench:analyst",
+          }),
         };
       },
     );
 
     render(<App client={client} />);
     await screen.findByRole("heading", { name: "North Model" });
-    fireEvent.click(screen.getByRole("link", { name: "Canvas" }));
     fireEvent.click(
-      await screen.findByRole("button", { name: "Review proposals" }),
+      await screen.findByRole("link", { name: "Review Proposals" }),
     );
+    expect(
+      await screen.findByRole("button", { name: "Reviewing proposals" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(window.location.search).toContain("review_run_id=run-1");
     await waitFor(() =>
       expect(client.modelGraph).toHaveBeenCalledWith(
         "north-model",
@@ -489,6 +710,19 @@ describe("Helios application shell", () => {
     const reviewNode = reviewStatus.closest(".react-flow__node");
     if (!reviewNode) throw new Error("Review node was not rendered.");
     fireEvent.click(reviewNode);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Approve dataset and attributes",
+      }),
+    );
+    await waitFor(() =>
+      expect(client.decideModelDataset).toHaveBeenCalledWith(
+        "north-model",
+        "run-1",
+        "sales.orders",
+        "accept",
+      ),
+    );
     fireEvent.click(
       await screen.findByRole("button", { name: "Approve" }),
     );
@@ -516,6 +750,121 @@ describe("Helios application shell", () => {
     expect(await screen.findAllByText("Approved")).not.toHaveLength(0);
     expect(screen.getByText("cloudera-workbench:analyst"))
       .toBeInTheDocument();
+  });
+
+  it("runs authorized bulk, reset, and publish review actions", async () => {
+    const client = successfulClient();
+    const summary = reviewSummary({
+      available_actions: [
+        "decide",
+        "cascade",
+        "bulk_accept",
+        "reset",
+        "publish",
+      ],
+    });
+    vi.mocked(client.modelReview).mockResolvedValue(summary);
+    vi.mocked(client.bulkAcceptModelProposals).mockResolvedValue({
+      ok: true,
+      changed: 1,
+      summary,
+    });
+    vi.mocked(client.resetModelReview).mockResolvedValue({
+      ok: true,
+      summary,
+    });
+    vi.mocked(client.decideModelDataset).mockResolvedValue({
+      ok: true,
+      changed: 2,
+      summary,
+    });
+    vi.mocked(client.modelGraphDetail).mockResolvedValue({
+      element_type: "node",
+      id: "dataset:orders",
+      kind: "dataset",
+      label: "Orders",
+      source: null,
+      target: null,
+      status: "needs_review",
+      confidence: 0.92,
+      evidence: "Profile evidence",
+      details: {
+        physical_identity: "sales.orders",
+        review_section: "datasets",
+        review_element_id: "sales.orders",
+      },
+      available_actions: ["model.edit"],
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<App client={client} />);
+    await screen.findByRole("heading", { name: "North Model" });
+    fireEvent.click(
+      await screen.findByRole("link", { name: "Review Proposals" }),
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Accept above threshold",
+      }),
+    );
+    await waitFor(() =>
+      expect(client.bulkAcceptModelProposals).toHaveBeenCalledWith(
+        "north-model",
+        "run-1",
+        0.85,
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset review" }));
+    await waitFor(() =>
+      expect(client.resetModelReview).toHaveBeenCalledWith(
+        "north-model",
+        "run-1",
+        undefined,
+      ),
+    );
+    expect(confirm).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Publish model" }));
+    await waitFor(() =>
+      expect(client.publishModelReview).toHaveBeenCalledWith(
+        "north-model",
+        "run-1",
+      ),
+    );
+    expect(
+      await screen.findByText("Model published successfully."),
+    ).toBeInTheDocument();
+    confirm.mockRestore();
+  });
+
+  it("keeps review state visible when publishing fails", async () => {
+    const client = successfulClient();
+    vi.mocked(client.modelReview).mockResolvedValue(
+      reviewSummary({
+        available_actions: ["publish"],
+      }),
+    );
+    vi.mocked(client.publishModelReview).mockRejectedValue(
+      new Error("A relationship references a missing dataset."),
+    );
+
+    render(<App client={client} />);
+    await screen.findByRole("heading", { name: "North Model" });
+    fireEvent.click(
+      await screen.findByRole("link", { name: "Review Proposals" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Publish model" }),
+    );
+
+    expect(
+      await screen.findByRole("alert"),
+    ).toHaveTextContent("A relationship references a missing dataset.");
+    expect(screen.getByText("Review run")).toBeInTheDocument();
+    expect(screen.queryByText("Model published successfully."))
+      .not.toBeInTheDocument();
   });
 
   it("restores authorized context from a deep link", async () => {
