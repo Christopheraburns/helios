@@ -459,6 +459,100 @@ def test_review_summary_is_authorized_and_reports_audit(review_client):
     ).status_code == 404
 
 
+def test_proposal_collection_is_paged_filterable_and_model_owned(review_client):
+    client, model, run_id, _ = review_client
+    endpoint = f"/api/v1/models/{model.id}/runs/{run_id}/proposals"
+
+    viewer = client.get(
+        endpoint,
+        params={"section": "datasets"},
+        headers={"x-forwarded-user": "viewer"},
+    )
+    datasets = client.get(
+        endpoint,
+        params={"section": "datasets", "query": "orders", "limit": 1},
+        headers={"x-forwarded-user": "editor"},
+    )
+    fields = client.get(
+        endpoint,
+        params={"section": "fields"},
+        headers={"x-forwarded-user": "editor"},
+    )
+    invalid_section = client.get(
+        endpoint,
+        params={"section": "ontology_mappings"},
+        headers={"x-forwarded-user": "editor"},
+    )
+
+    assert viewer.status_code == 403
+    assert datasets.status_code == 200
+    body = datasets.json()
+    assert body["page"] == {
+        "offset": 0,
+        "limit": 1,
+        "returned": 1,
+        "total": 1,
+        "has_more": False,
+    }
+    assert body["items"][0]["id"] == "sales.orders"
+    assert body["items"][0]["review"]["decision"] == "pending"
+    assert body["items"][0]["canvas"] == {
+        "review_run_id": run_id,
+        "element_id": "dataset:sales.orders",
+        "focus_node_id": "dataset:sales.orders",
+        "lens": "semantic",
+    }
+    assert body["items"][0]["available_actions"] == [
+        "accept",
+        "reject",
+        "edit",
+        "view_in_canvas",
+    ]
+    assert fields.json()["items"][0]["id"] == "sales.orders.customer_id"
+    assert invalid_section.status_code == 422
+
+
+def test_proposal_collection_includes_review_audit_and_decision_filter(
+    review_client,
+):
+    client, model, run_id, _ = review_client
+    headers = {"x-forwarded-user": "editor"}
+    base = f"/api/v1/models/{model.id}"
+    decision = client.post(
+        f"{base}/reviews/{run_id}/decisions",
+        headers=headers,
+        json={
+            "section": "datasets",
+            "element_id": "sales.orders",
+            "decision": "edit",
+            "overrides": {"name": "Orders"},
+            "note": "Use business label",
+        },
+    )
+    collection = client.get(
+        f"{base}/runs/{run_id}/proposals",
+        params={"section": "datasets", "decision": "edit"},
+        headers=headers,
+    )
+    pending = client.get(
+        f"{base}/runs/{run_id}/proposals",
+        params={"section": "datasets", "decision": "pending"},
+        headers=headers,
+    )
+
+    assert decision.status_code == 200
+    assert collection.status_code == 200
+    body = collection.json()
+    assert body["reviewed_by"] == "cloudera-workbench:editor"
+    assert body["reviewed_at"]
+    assert body["items"][0]["review"] == {
+        "decision": "edit",
+        "overrides": {"name": "Orders"},
+        "note": "Use business label",
+    }
+    assert pending.json()["items"] == []
+
+
 def test_review_cascade_bulk_and_reset_persist_audit(review_client):
     client, model, run_id, _ = review_client
     base = f"/api/v1/models/{model.id}/reviews/{run_id}"

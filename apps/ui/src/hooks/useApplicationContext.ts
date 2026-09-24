@@ -10,11 +10,17 @@ import {
   ApiUnavailableError,
   AuthenticationError,
   AuthorizationError,
+  DiscoveryRun,
+  DiscoveryRunsResponse,
   HeliosApi,
   HeliosApiClient,
   HeliosGraphDto,
+  HistoricalProfileSummary,
+  HistoricalTableProfile,
   GraphNavigationOptions,
   GraphElementDetail,
+  ProposalCollection,
+  ProposalCollectionOptions,
   ReviewDecisionRequest,
   ReviewDecisionResponse,
   ReviewMutationResponse,
@@ -58,6 +64,25 @@ export interface ApplicationContextState {
     elementId: string,
     reviewRunId?: string,
   ) => Promise<GraphElementDetail>;
+  loadModelRuns: (modelId: string) => Promise<DiscoveryRunsResponse>;
+  loadModelRun: (
+    modelId: string,
+    runId: string,
+  ) => Promise<DiscoveryRun>;
+  loadModelRunProfileSummary: (
+    modelId: string,
+    runId: string,
+  ) => Promise<HistoricalProfileSummary>;
+  loadModelRunTableProfile: (
+    modelId: string,
+    runId: string,
+    tableId: string,
+  ) => Promise<HistoricalTableProfile>;
+  loadModelRunProposals: (
+    modelId: string,
+    runId: string,
+    options: ProposalCollectionOptions,
+  ) => Promise<ProposalCollection>;
   decideModelProposal: (
     modelId: string,
     runId: string,
@@ -397,6 +422,64 @@ export function useApplicationContext(
       client().modelGraphDetail(modelId, elementId, reviewRunId),
     [client],
   );
+  const loadModelRuns = useCallback(
+    (modelId: string) => {
+      const api = client();
+      if (!api.modelRuns) {
+        throw new ApiUnavailableError("Run history is unavailable.");
+      }
+      return api.modelRuns(modelId);
+    },
+    [client],
+  );
+  const loadModelRun = useCallback(
+    (modelId: string, runId: string) => {
+      const api = client();
+      if (!api.modelRun) {
+        throw new ApiUnavailableError("Run details are unavailable.");
+      }
+      return api.modelRun(modelId, runId);
+    },
+    [client],
+  );
+  const loadModelRunTableProfile = useCallback(
+    (modelId: string, runId: string, tableId: string) => {
+      const api = client();
+      if (!api.modelRunTableProfile) {
+        throw new ApiUnavailableError(
+          "Historical table profiles are unavailable.",
+        );
+      }
+      return api.modelRunTableProfile(modelId, runId, tableId);
+    },
+    [client],
+  );
+  const loadModelRunProfileSummary = useCallback(
+    (modelId: string, runId: string) => {
+      const api = client();
+      if (!api.modelRunProfileSummary) {
+        throw new ApiUnavailableError(
+          "Historical profile summaries are unavailable.",
+        );
+      }
+      return api.modelRunProfileSummary(modelId, runId);
+    },
+    [client],
+  );
+  const loadModelRunProposals = useCallback(
+    (
+      modelId: string,
+      runId: string,
+      options: ProposalCollectionOptions,
+    ) => {
+      const api = client();
+      if (!api.modelRunProposals) {
+        throw new ApiUnavailableError("Proposal review is unavailable.");
+      }
+      return api.modelRunProposals(modelId, runId, options);
+    },
+    [client],
+  );
   const decideModelProposal = useCallback(
     (
       modelId: string,
@@ -465,6 +548,11 @@ export function useApplicationContext(
       : undefined,
     loadModelGraph,
     loadGraphElementDetail,
+    loadModelRuns,
+    loadModelRun,
+    loadModelRunProfileSummary,
+    loadModelRunTableProfile,
+    loadModelRunProposals,
     decideModelProposal,
     loadModelReview,
     decideModelDataset,

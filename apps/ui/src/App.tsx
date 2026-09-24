@@ -12,8 +12,12 @@ import TopNavigation from "./components/TopNavigation";
 import { HeliosApi } from "./api/client";
 import { useApplicationContext } from "./hooks/useApplicationContext";
 import CanvasPage from "./pages/CanvasPage";
+import ModelsPage from "./pages/ModelsPage";
 import OverviewPage from "./pages/OverviewPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
+import RunDetailPage, {
+  HistoricalTableProfilePage,
+} from "./pages/RunDetailPage";
 
 interface AppProps {
   client?: HeliosApi;
@@ -91,12 +95,15 @@ function ApplicationShell({ client }: AppProps) {
               />
               <Route
                 path="/models"
-                element={
-                  <PlaceholderPage
-                    title="Models"
-                    description="Manage semantic model definitions and versions."
-                  />
-                }
+                element={<ModelsPage context={context} />}
+              />
+              <Route
+                path="/models/runs/:runId"
+                element={<RunDetailPage context={context} />}
+              />
+              <Route
+                path="/models/runs/:runId/profile/*"
+                element={<HistoricalTableProfilePage context={context} />}
               />
               <Route
                 path="/data-sources"

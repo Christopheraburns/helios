@@ -115,6 +115,140 @@ export interface ModelsResponse {
   count: number;
 }
 
+export type RunLifecycleStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "completed_with_warnings"
+  | "failed"
+  | "cancelled";
+
+export type DiscoveryPhaseId = "harvest" | "profile" | "propose";
+
+export interface DiscoveryRunPhase {
+  id: DiscoveryPhaseId;
+  name: "Harvest" | "Profile" | "Propose";
+  status: "completed" | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_seconds: number | null;
+  counts: Record<string, number>;
+  available: boolean;
+}
+
+export interface DiscoveryRun {
+  id: string;
+  type: string;
+  model_id: string;
+  status: RunLifecycleStatus | null;
+  progress: number | null;
+  initiator: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_seconds: number | null;
+  warnings: unknown[];
+  errors: unknown[];
+  stages: Record<DiscoveryPhaseId, boolean>;
+  phases: DiscoveryRunPhase[];
+  counts: {
+    discovered: Record<string, number>;
+    profiled: Record<string, number>;
+    proposed: Record<string, number>;
+  };
+  data_source?: {
+    engine: string | null;
+    databases: string[];
+  };
+  provenance?: {
+    llm: Record<string, unknown> | null;
+  };
+  missing?: boolean;
+  available_actions?: string[];
+}
+
+export interface DiscoveryRunsResponse {
+  model_id: string;
+  runs: DiscoveryRun[];
+  available_actions: string[];
+}
+
+export interface TableColumnProfile {
+  type?: string;
+  null_rate?: number;
+  ndv?: number;
+  ndv_exact?: number;
+  min?: unknown;
+  max?: unknown;
+  glossary_terms: string[];
+  [key: string]: unknown;
+}
+
+export interface RelationshipEvidence {
+  from: string;
+  from_column?: string;
+  to: string;
+  to_column?: string;
+  name_score?: number;
+  to_rows?: number;
+  distinct_values?: number;
+  unmatched?: number;
+  match_ratio?: number;
+}
+
+export interface PrimaryKeyCandidate {
+  column: string;
+  confidence?: number;
+}
+
+export interface HistoricalTableSummary {
+  table_id: string;
+  harvested: boolean;
+  profiled: boolean;
+  column_count: number;
+  row_count: number | null;
+  primary_key_candidates: PrimaryKeyCandidate[];
+}
+
+export interface HistoricalProfileSummary {
+  model_id: string;
+  run_id: string;
+  profiled_at: string | null;
+  engine: string | null;
+  tables: HistoricalTableSummary[];
+  relationships: RelationshipEvidence[];
+  suggested_relationships: RelationshipEvidence[];
+  rejected_candidates: RelationshipEvidence[];
+  provenance: {
+    artifacts: Array<"harvest" | "profile">;
+    run_id: string;
+  };
+  available_actions: string[];
+}
+
+export interface HistoricalTableProfile {
+  model_id: string;
+  run_id: string;
+  table_id: string;
+  profiled_at: string | null;
+  engine: string | null;
+  row_count: number | null;
+  column_count: number;
+  columns: Record<string, TableColumnProfile>;
+  primary_key_candidates: PrimaryKeyCandidate[];
+  relationships: RelationshipEvidence[];
+  provenance: {
+    artifact: "profile";
+    run_id: string;
+    table_id: string;
+  };
+  canvas: {
+    element_id: string;
+    focus_node_id: string;
+    lens: "physical";
+  };
+  available_actions: string[];
+}
+
 export interface HeliosGraphNodeDto {
   id: string;
   kind: string;
@@ -195,6 +329,126 @@ export type ReviewSection =
   | "relationships"
   | "metrics"
   | "glossary_terms";
+
+export type ReviewDecision = "pending" | "accept" | "reject" | "edit";
+
+export interface DatasetProposal {
+  table: string;
+  name?: string;
+  kind?: "fact" | "dimension" | "bridge" | "lookup" | "other" | string;
+  description?: string;
+  primary_key?: string[];
+  confidence?: number;
+  source?: string;
+  fields?: FieldProposal[];
+}
+
+export interface FieldProposal {
+  table: string;
+  column: string;
+  type?: string;
+  name?: string;
+  role?: "identifier" | "foreign_key" | "time" | "measure" | "dimension" | "attribute" | string;
+  description?: string;
+  refers_to?: string | null;
+  glossary_terms?: string[];
+  proposed_term?: { name?: string; definition?: string } | null;
+  confidence?: number;
+  source?: string;
+}
+
+export interface RelationshipProposal {
+  from: string;
+  from_column: string;
+  to: string;
+  to_column: string;
+  accepted?: boolean;
+  source?: string;
+  reason?: string;
+  confidence?: number;
+  match_ratio?: number;
+}
+
+export interface MetricProposal {
+  name: string;
+  description?: string;
+  dataset: string;
+  expression?: string;
+  source?: string;
+  confidence?: number;
+}
+
+export interface GlossaryTermProposal {
+  name: string;
+  definition?: string;
+  columns?: string[];
+  source?: string;
+  confidence?: number;
+}
+
+export interface ProposalReviewState {
+  decision: ReviewDecision;
+  overrides: Record<string, unknown> | null;
+  note: string | null;
+}
+
+export interface ProposalCanvasMetadata {
+  review_run_id: string;
+  element_id: string;
+  focus_node_id: string;
+  related_node_ids?: string[];
+  lens: GraphLens;
+}
+
+interface ProposalItemBase<S extends ReviewSection, P> {
+  id: string;
+  section: S;
+  proposal: P;
+  confidence: number | null;
+  provenance: {
+    source: string | null;
+    llm: Record<string, unknown> | null;
+  };
+  review: ProposalReviewState;
+  canvas: ProposalCanvasMetadata;
+  available_actions: Array<"accept" | "reject" | "edit" | "view_in_canvas">;
+}
+
+export type ProposalItem =
+  | ProposalItemBase<"datasets", DatasetProposal>
+  | ProposalItemBase<"fields", FieldProposal>
+  | ProposalItemBase<"relationships", RelationshipProposal>
+  | ProposalItemBase<"metrics", MetricProposal>
+  | ProposalItemBase<"glossary_terms", GlossaryTermProposal>;
+
+export interface ProposalCollection {
+  model_id: string;
+  run_id: string;
+  section: ReviewSection;
+  items: ProposalItem[];
+  page: {
+    offset: number;
+    limit: number;
+    returned: number;
+    total: number;
+    has_more: boolean;
+  };
+  filters: {
+    decision: ReviewDecision | null;
+    query: string | null;
+  };
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  available_actions: Array<"decide" | "cascade" | "bulk_accept" | "reset">;
+}
+
+export interface ProposalCollectionOptions {
+  section: ReviewSection;
+  decision?: ReviewDecision;
+  query?: string;
+  offset?: number;
+  limit?: number;
+}
 
 export interface ReviewSectionCounts {
   accept: number;
@@ -287,6 +541,22 @@ export interface HeliosApi {
   organizations(): Promise<OrganizationsResponse>;
   models(organizationId: string): Promise<ModelsResponse>;
   modelOverview(modelId: string): Promise<ModelOverview>;
+  modelRuns?(modelId: string): Promise<DiscoveryRunsResponse>;
+  modelRun?(modelId: string, runId: string): Promise<DiscoveryRun>;
+  modelRunProfileSummary?(
+    modelId: string,
+    runId: string,
+  ): Promise<HistoricalProfileSummary>;
+  modelRunTableProfile?(
+    modelId: string,
+    runId: string,
+    tableId: string,
+  ): Promise<HistoricalTableProfile>;
+  modelRunProposals?(
+    modelId: string,
+    runId: string,
+    options: ProposalCollectionOptions,
+  ): Promise<ProposalCollection>;
   modelStatus(
     modelId: string,
     includeDetails?: boolean,
@@ -385,6 +655,52 @@ export class HeliosApiClient implements HeliosApi {
   modelOverview(modelId: string): Promise<ModelOverview> {
     return this.get<ModelOverview>(
       `/api/v1/models/${encodeURIComponent(modelId)}/overview`,
+    );
+  }
+
+  modelRuns(modelId: string): Promise<DiscoveryRunsResponse> {
+    return this.get<DiscoveryRunsResponse>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/runs`,
+    );
+  }
+
+  modelRun(modelId: string, runId: string): Promise<DiscoveryRun> {
+    return this.get<DiscoveryRun>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/runs/${encodeURIComponent(runId)}`,
+    );
+  }
+
+  modelRunProfileSummary(
+    modelId: string,
+    runId: string,
+  ): Promise<HistoricalProfileSummary> {
+    return this.get<HistoricalProfileSummary>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/runs/${encodeURIComponent(runId)}/profile`,
+    );
+  }
+
+  modelRunTableProfile(
+    modelId: string,
+    runId: string,
+    tableId: string,
+  ): Promise<HistoricalTableProfile> {
+    return this.get<HistoricalTableProfile>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/runs/${encodeURIComponent(runId)}/profile/tables/${encodeURIComponent(tableId)}`,
+    );
+  }
+
+  modelRunProposals(
+    modelId: string,
+    runId: string,
+    options: ProposalCollectionOptions,
+  ): Promise<ProposalCollection> {
+    const query = new URLSearchParams({ section: options.section });
+    if (options.decision) query.set("decision", options.decision);
+    if (options.query?.trim()) query.set("query", options.query.trim());
+    if (options.offset !== undefined) query.set("offset", String(options.offset));
+    if (options.limit !== undefined) query.set("limit", String(options.limit));
+    return this.get<ProposalCollection>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/runs/${encodeURIComponent(runId)}/proposals?${query}`,
     );
   }
 

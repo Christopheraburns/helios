@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Annotated, Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from helios_core import authz
 from helios_core import health as system_health
@@ -42,6 +42,44 @@ ReviewSection = Literal[
     "metrics",
     "glossary_terms",
 ]
+RunLifecycleStatus = Literal[
+    "queued",
+    "running",
+    "completed",
+    "completed_with_warnings",
+    "failed",
+    "cancelled",
+]
+
+
+class RunLifecycleDTO(BaseModel):
+    """Lifecycle contract; artifact-backed values remain nullable when unavailable."""
+
+    model_config = ConfigDict(extra="allow")
+
+    status: RunLifecycleStatus | None = None
+    progress: float | None = Field(default=None, ge=0, le=100)
+    initiator: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+    duration_seconds: float | None = Field(default=None, ge=0)
+    warnings: list[Any] = Field(default_factory=list)
+    errors: list[Any] = Field(default_factory=list)
+
+
+class RunDTO(RunLifecycleDTO):
+    id: str
+    type: str
+    model_id: str
+    stages: dict[str, bool] = Field(default_factory=dict)
+    phases: list[dict[str, Any]] = Field(default_factory=list)
+    counts: dict[str, dict[str, int]] = Field(default_factory=dict)
+
+
+class RunCollectionDTO(BaseModel):
+    model_id: str
+    runs: list[RunDTO]
+    available_actions: list[str]
 
 
 class ReviewDecisionRequest(BaseModel):
@@ -531,6 +569,65 @@ def _proposal_element_ids(proposal: dict, section: str) -> set[str]:
     return set()
 
 
+def _require_model_run(model: Model, run_id: str) -> None:
+    if (
+        run_id not in set(model.discovery_run_ids)
+        or "/" in run_id
+        or "\\" in run_id
+        or ".." in run_id
+    ):
+        raise HTTPException(404, "run not found for model")
+
+
+def _proposal_canvas(section: ReviewSection, item: dict, element_id: str) -> dict:
+    if section == "datasets":
+        focus_id = f"dataset:{item.get('table')}"
+        return {"element_id": focus_id, "focus_node_id": focus_id, "lens": "semantic"}
+    if section == "fields":
+        focus_id = f"attribute:{item.get('table')}:{item.get('column')}"
+        return {"element_id": focus_id, "focus_node_id": focus_id, "lens": "semantic"}
+    if section == "metrics":
+        focus_id = f"metric:{item.get('name')}"
+        return {"element_id": focus_id, "focus_node_id": focus_id, "lens": "semantic"}
+    if section == "glossary_terms":
+        focus_id = f"concept:{item.get('name')}"
+        return {"element_id": focus_id, "focus_node_id": focus_id, "lens": "ontology"}
+    source = f"dataset:{item.get('from')}"
+    target = f"dataset:{item.get('to')}"
+    return {
+        "element_id": f"relationship:{source}:{target}:{item.get('from_column', '')}",
+        "focus_node_id": source,
+        "related_node_ids": [source, target],
+        "lens": "semantic",
+    }
+
+
+def _proposal_rows(proposal: dict, section: ReviewSection) -> list[tuple[str, dict]]:
+    if section == "datasets":
+        return [
+            (review_store.dataset_id(dataset), dict(dataset))
+            for dataset in proposal.get("datasets") or []
+        ]
+    if section == "fields":
+        return [
+            (
+                review_store.field_id(dataset, field),
+                {"table": dataset.get("table"), **field},
+            )
+            for dataset in proposal.get("datasets") or []
+            for field in dataset.get("fields") or []
+        ]
+    id_function = {
+        "relationships": review_store.relationship_id,
+        "metrics": review_store.metric_id,
+        "glossary_terms": review_store.term_id,
+    }[section]
+    return [
+        (id_function(item), dict(item))
+        for item in proposal.get(section) or []
+    ]
+
+
 def _load_model_review(
     model: Model,
     run_id: str,
@@ -554,6 +651,86 @@ def _load_model_review(
         review_store.load(str(review_path), run_id),
         review_path,
     )
+
+
+def _proposal_collection(
+    *,
+    model: Model,
+    run_id: str,
+    proposal: dict,
+    review: dict,
+    section: ReviewSection,
+    decision: str | None,
+    query: str | None,
+    offset: int,
+    limit: int,
+) -> dict:
+    rows = _proposal_rows(proposal, section)
+    projected = []
+    query_text = (query or "").casefold()
+    for element_id, item in rows:
+        audit = review.get(section, {}).get(element_id)
+        item_decision = (audit or {}).get("decision", "pending")
+        if decision and item_decision != decision:
+            continue
+        if query_text and query_text not in json.dumps(
+            item, sort_keys=True, default=str
+        ).casefold():
+            continue
+        projected.append(
+            {
+                "id": element_id,
+                "section": section,
+                "proposal": item,
+                "confidence": item.get("confidence"),
+                "provenance": {
+                    "source": item.get("source"),
+                    "llm": (
+                        proposal.get("llm")
+                        if isinstance(proposal.get("llm"), dict)
+                        else None
+                    ),
+                },
+                "review": {
+                    "decision": item_decision,
+                    "overrides": (audit or {}).get("overrides"),
+                    "note": (audit or {}).get("note"),
+                },
+                "canvas": {
+                    "review_run_id": run_id,
+                    **_proposal_canvas(section, item, element_id),
+                },
+                "available_actions": [
+                    "accept",
+                    "reject",
+                    "edit",
+                    "view_in_canvas",
+                ],
+            }
+        )
+    total = len(projected)
+    return {
+        "model_id": model.id,
+        "run_id": run_id,
+        "section": section,
+        "items": projected[offset : offset + limit],
+        "page": {
+            "offset": offset,
+            "limit": limit,
+            "returned": len(projected[offset : offset + limit]),
+            "total": total,
+            "has_more": offset + limit < total,
+        },
+        "filters": {"decision": decision, "query": query},
+        "reviewed_at": review.get("reviewed_at"),
+        "reviewed_by": review.get("reviewed_by"),
+        "available_actions": [
+            "decide",
+            "cascade",
+            "bulk_accept",
+            "reset",
+        ],
+    }
 
 
 def _review_section_counts(proposal: dict, review: dict) -> dict[str, dict[str, int]]:
@@ -1256,7 +1433,7 @@ def get_model_ontology(
     }
 
 
-@api_router.get("/models/{model_id}/runs")
+@api_router.get("/models/{model_id}/runs", response_model=RunCollectionDTO)
 def get_model_runs(
     context: Annotated[
         AuthorizedModel,
@@ -1267,11 +1444,148 @@ def get_model_runs(
     return {
         "model_id": context.model.id,
         "runs": [
-            known.get(run_id, {"id": run_id, "stages": {}, "missing": True})
+            {
+                **known.get(
+                    run_id,
+                    {
+                        "id": run_id,
+                        "type": "discovery",
+                        "model_id": context.model.id,
+                        "status": None,
+                        "progress": None,
+                        "stages": {},
+                        "phases": [],
+                        "counts": {
+                            "discovered": {},
+                            "profiled": {},
+                            "proposed": {},
+                        },
+                        "warnings": [],
+                        "errors": [],
+                        "missing": True,
+                    },
+                ),
+                "model_id": context.model.id,
+            }
             for run_id in context.model.discovery_run_ids
         ],
         "available_actions": context.available_actions,
     }
+
+
+@api_router.get("/models/{model_id}/runs/{run_id}", response_model=RunDTO)
+def get_model_run(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+    run_id: str,
+) -> dict:
+    _require_model_run(context.model, run_id)
+    run = runstore.detail(run_id)
+    if not any(run["stages"].values()):
+        raise HTTPException(404, "run artifacts not found")
+    return {
+        **run,
+        "model_id": context.model.id,
+        "available_actions": context.available_actions,
+    }
+
+
+@api_router.get("/models/{model_id}/runs/{run_id}/profile")
+def get_model_run_profile_summary(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+    run_id: str,
+) -> dict:
+    _require_model_run(context.model, run_id)
+    _require(
+        context.policy,
+        context.principal,
+        authz.Action.DATASOURCE_READ,
+        _resource_for_action(context.model, authz.Action.DATASOURCE_READ),
+    )
+    summary = runstore.profile_summary(run_id)
+    if summary is None:
+        raise HTTPException(404, "run profile summary not found")
+    return {
+        "model_id": context.model.id,
+        **summary,
+        "provenance": {
+            "artifacts": ["harvest", "profile"],
+            "run_id": run_id,
+        },
+        "available_actions": ["view_table_profile"],
+    }
+
+
+@api_router.get("/models/{model_id}/runs/{run_id}/profile/tables/{table_id:path}")
+def get_model_run_table_profile(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+    run_id: str,
+    table_id: str,
+) -> dict:
+    _require_model_run(context.model, run_id)
+    _require(
+        context.policy,
+        context.principal,
+        authz.Action.DATASOURCE_READ,
+        _resource_for_action(context.model, authz.Action.DATASOURCE_READ),
+    )
+    table = runstore.table_profile(run_id, table_id)
+    if table is None:
+        raise HTTPException(404, "table profile not found")
+    return {
+        "model_id": context.model.id,
+        **table,
+        "provenance": {
+            "artifact": "profile",
+            "run_id": run_id,
+            "table_id": table_id,
+        },
+        "canvas": {
+            "element_id": f"dataset:{table_id}",
+            "focus_node_id": f"dataset:{table_id}",
+            "lens": "physical",
+        },
+        "available_actions": ["view_in_canvas"],
+    }
+
+
+@api_router.get("/models/{model_id}/runs/{run_id}/proposals")
+def get_model_run_proposals(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_EDIT)),
+    ],
+    run_id: str,
+    section: ReviewSection,
+    decision: Annotated[
+        Literal["pending", "accept", "reject", "edit"] | None,
+        Query(),
+    ] = None,
+    query: Annotated[str | None, Query(max_length=200)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> dict:
+    _require_model_run(context.model, run_id)
+    _, proposal, _, review, _ = _load_model_review(context.model, run_id)
+    return _proposal_collection(
+        model=context.model,
+        run_id=run_id,
+        proposal=proposal,
+        review=review,
+        section=section,
+        decision=decision,
+        query=query,
+        offset=offset,
+        limit=limit,
+    )
 
 
 @api_router.get("/models/{model_id}/versions")
