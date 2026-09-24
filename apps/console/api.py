@@ -5,14 +5,19 @@ Resource policy remains in ``helios_core.authz`` and can be reused by MCP or job
 """
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Annotated, Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from helios_core import authz
+from helios_core import health as system_health
+from helios_core import publication
 from helios_core import review as review_store
 from helios_core import runs as runstore
 from helios_core.artifacts import ArtifactStore
@@ -30,19 +35,34 @@ from helios_core.metadata import MetadataRepository
 
 api_router = APIRouter(prefix="/api/v1", tags=["api-v1"])
 
+ReviewSection = Literal[
+    "datasets",
+    "fields",
+    "relationships",
+    "metrics",
+    "glossary_terms",
+]
+
 
 class ReviewDecisionRequest(BaseModel):
-    section: Literal[
-        "datasets",
-        "fields",
-        "relationships",
-        "metrics",
-        "glossary_terms",
-    ]
+    section: ReviewSection
     element_id: str = Field(min_length=1, max_length=500)
     decision: Literal["accept", "reject", "edit"]
     overrides: dict[str, Any] | None = None
     note: str = Field(default="", max_length=2000)
+
+
+class DatasetReviewDecisionRequest(BaseModel):
+    table: str = Field(min_length=1, max_length=500)
+    decision: Literal["accept", "reject"]
+
+
+class BulkReviewDecisionRequest(BaseModel):
+    min_confidence: float = Field(default=0.85, ge=0, le=1)
+
+
+class ResetReviewRequest(BaseModel):
+    section: ReviewSection | None = None
 
 
 class ResourceStore:
@@ -366,6 +386,83 @@ def _model_overview(
     }
 
 
+def _latest_successful_run(model: Model, stage: str) -> dict | None:
+    timestamp_key = {
+        "harvest": "harvested_at",
+        "profile": "profiled_at",
+        "propose": "proposed_at",
+    }[stage]
+    for run_id in reversed(model.discovery_run_ids):
+        artifact = runstore.load(run_id, stage)
+        if artifact is not None:
+            return {
+                "run_id": run_id,
+                "completed_at": artifact.get(timestamp_key) or None,
+            }
+    return None
+
+
+def _model_status_components(
+    overview: dict,
+) -> list[system_health.HealthComponent]:
+    lifecycle = overview["lifecycle"]
+    publication_state = lifecycle["publication_state"]
+    if publication_state == "published":
+        semantic_status: system_health.HealthState = "healthy"
+        semantic_description = "A published semantic model is available."
+    elif publication_state == "proposed":
+        semantic_status = "degraded"
+        semantic_description = "Semantic model proposals require review."
+    else:
+        semantic_status = "unknown"
+        semantic_description = "No published semantic model is available."
+
+    discovery_state = lifecycle["discovery_status"]
+    if discovery_state == "proposals_ready":
+        discovery_status: system_health.HealthState = "healthy"
+        discovery_description = "The latest discovery run produced proposals."
+    elif discovery_state == "profile_complete":
+        discovery_status = "degraded"
+        discovery_description = "Profiling completed; proposals are pending."
+    elif discovery_state == "harvest_complete":
+        discovery_status = "degraded"
+        discovery_description = (
+            "Discovery harvest completed; profiling is pending."
+        )
+    elif discovery_state == "started":
+        discovery_status = "degraded"
+        discovery_description = "A discovery run has not completed."
+    elif discovery_state == "unavailable":
+        discovery_status = "unavailable"
+        discovery_description = (
+            "The latest discovery run artifacts are unavailable."
+        )
+    else:
+        discovery_status = "unknown"
+        discovery_description = "No discovery run has been recorded."
+
+    return [
+        system_health.HealthComponent(
+            "api",
+            "Helios API",
+            "healthy",
+            "The authorized status API responded.",
+        ),
+        system_health.HealthComponent(
+            "semantic-model",
+            "Semantic model",
+            semantic_status,
+            semantic_description,
+        ),
+        system_health.HealthComponent(
+            "discovery-profile",
+            "Discovery and profiling",
+            discovery_status,
+            discovery_description,
+        ),
+    ]
+
+
 def _profile_details(model: Model, details: dict) -> dict:
     dataset_identity = details.get("dataset_physical_identity")
     if dataset_identity is None and details.get("physical_name") is None:
@@ -432,6 +529,87 @@ def _proposal_element_ids(proposal: dict, section: str) -> set[str]:
             for term in proposal.get("glossary_terms", [])
         }
     return set()
+
+
+def _load_model_review(
+    model: Model,
+    run_id: str,
+) -> tuple[dict, dict, dict, dict, Path]:
+    if (
+        run_id not in set(model.discovery_run_ids)
+        or "/" in run_id
+        or ".." in run_id
+    ):
+        raise HTTPException(status_code=404, detail="review run not found for model")
+    run_dir = Path(runstore.RUNS_DIR) / run_id
+    proposal = runstore.load(run_id, "propose")
+    if not proposal:
+        raise HTTPException(status_code=404, detail="proposal not found")
+    harvest = runstore.load(run_id, "harvest") or {}
+    review_path = run_dir / "review.json"
+    return (
+        model,
+        proposal,
+        harvest,
+        review_store.load(str(review_path), run_id),
+        review_path,
+    )
+
+
+def _review_section_counts(proposal: dict, review: dict) -> dict[str, dict[str, int]]:
+    return review_store.summary(review, proposal)
+
+
+def _review_summary(
+    *,
+    model_id: str,
+    run_id: str,
+    proposal: dict,
+    harvest: dict,
+    review: dict,
+    permissions: list[str],
+) -> dict:
+    prepared = publication.prepare_reviewed_publication(
+        model_id=model_id,
+        model_name=publication.model_name_for_proposal(proposal, harvest),
+        run_id=run_id,
+        proposal=proposal,
+        review=review,
+    )
+    manifest_path = (
+        ArtifactStore(runstore.ROOT).directory(model_id, "published")
+        / "manifest.json"
+    )
+    manifest = (
+        json.loads(manifest_path.read_text()) if manifest_path.exists() else None
+    )
+    counts = _review_section_counts(proposal, review)
+    actions: list[str] = []
+    if "model.edit" in permissions:
+        actions.extend(["decide", "cascade", "bulk_accept", "reset"])
+    if "model.publish" in permissions:
+        actions.append("publish")
+    return {
+        "model_id": model_id,
+        "run_id": run_id,
+        "sections": counts,
+        "reviewed_at": review.get("reviewed_at"),
+        "reviewed_by": review.get("reviewed_by"),
+        "preflight_issues": prepared.preflight_issues,
+        "validation_errors": list(prepared.errors),
+        "publish_ready": not prepared.errors,
+        "publication": manifest,
+        "available_actions": actions,
+    }
+
+
+def _save_review(
+    review_path: Path,
+    review: dict,
+    context: AuthorizedModel,
+) -> dict:
+    review_store.save(str(review_path), review, reviewed_by=context.principal.id)
+    return review_store.load(str(review_path), review["run_id"])
 
 
 @api_router.get("/healthz")
@@ -597,6 +775,61 @@ def get_model_overview(
         request.app.state.metadata_repository,
         graphs,
     )
+
+
+@api_router.get("/models/{model_id}/status")
+def get_model_status(
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+    graphs: Annotated[GraphRepository, Depends(graph_repository)],
+    details: bool = False,
+) -> dict:
+    metadata: MetadataRepository = request.app.state.metadata_repository
+    overview = _model_overview(context, metadata, graphs)
+    components = _model_status_components(overview)
+    details_available = "organization.manage" in context.available_actions
+    infrastructure: list[system_health.HealthComponent] = []
+    if details:
+        if not details_available:
+            raise HTTPException(
+                403,
+                "organization administration permission is required",
+            )
+        checker = getattr(
+            request.app.state,
+            "system_health_checker",
+            system_health.collect_infrastructure_status,
+        )
+        infrastructure = list(checker(metadata))
+
+    all_components = components + infrastructure
+    issues = [
+        component.description
+        for component in all_components
+        if component.status in {"degraded", "unavailable"}
+    ]
+    return {
+        "model_id": context.model.id,
+        "status": system_health.aggregate_status(all_components),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "components": [
+            component.to_dict() for component in components
+        ],
+        "details_available": details_available,
+        "details": [
+            component.to_dict() for component in infrastructure
+        ] if details else [],
+        "recent_activity": {
+            "discovery": _latest_successful_run(
+                context.model, "harvest"
+            ),
+            "profile": _latest_successful_run(context.model, "profile"),
+        },
+        "issues": issues,
+    }
 
 
 @api_router.get("/models/{model_id}/graph")
@@ -792,6 +1025,27 @@ def get_model_graph_detail(
     }
 
 
+@api_router.get("/models/{model_id}/reviews/{run_id}")
+def get_model_review(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_EDIT)),
+    ],
+    run_id: str,
+) -> dict:
+    _, proposal, harvest, review, _ = _load_model_review(
+        context.model, run_id
+    )
+    return _review_summary(
+        model_id=context.model.id,
+        run_id=run_id,
+        proposal=proposal,
+        harvest=harvest,
+        review=review,
+        permissions=context.available_actions,
+    )
+
+
 @api_router.post("/models/{model_id}/reviews/{run_id}/decisions")
 def decide_model_proposal(
     context: Annotated[
@@ -801,20 +1055,12 @@ def decide_model_proposal(
     body: ReviewDecisionRequest,
     run_id: str,
 ) -> dict:
-    if (
-        run_id not in context.model.discovery_run_ids
-        or "/" in run_id
-        or ".." in run_id
-    ):
-        raise HTTPException(404, "review run not found")
-    proposal = runstore.load(run_id, "propose")
-    if proposal is None:
-        raise HTTPException(404, "review run not found")
+    _, proposal, harvest, review, review_path = _load_model_review(
+        context.model, run_id
+    )
     if body.element_id not in _proposal_element_ids(proposal, body.section):
         raise HTTPException(404, "proposal element not found")
 
-    path = os.path.join(runstore.RUNS_DIR, run_id, "review.json")
-    review = review_store.load(path, run_id)
     review_store.decide(
         review,
         body.section,
@@ -823,11 +1069,7 @@ def decide_model_proposal(
         body.overrides,
         body.note,
     )
-    review_store.save(
-        path,
-        review,
-        reviewed_by=context.principal.id,
-    )
+    review = _save_review(review_path, review, context)
     entry = review[body.section][body.element_id]
     return {
         "ok": True,
@@ -837,7 +1079,138 @@ def decide_model_proposal(
         "entry": entry,
         "reviewed_at": review["reviewed_at"],
         "reviewed_by": review["reviewed_by"],
-        "summary": review_store.summary(review, proposal),
+        "summary": _review_summary(
+            model_id=context.model.id,
+            run_id=run_id,
+            proposal=proposal,
+            harvest=harvest,
+            review=review,
+            permissions=context.available_actions,
+        ),
+    }
+
+
+@api_router.post("/models/{model_id}/reviews/{run_id}/decisions/dataset")
+def decide_model_dataset(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_EDIT)),
+    ],
+    body: DatasetReviewDecisionRequest,
+    run_id: str,
+) -> dict:
+    _, proposal, harvest, review, review_path = _load_model_review(
+        context.model, run_id
+    )
+    try:
+        changed = review_store.cascade_dataset(
+            review, proposal, body.table, body.decision
+        )
+    except KeyError:
+        raise HTTPException(404, "proposal dataset not found")
+    review = _save_review(review_path, review, context)
+    return {
+        "ok": True,
+        "changed": changed,
+        "summary": _review_summary(
+            model_id=context.model.id,
+            run_id=run_id,
+            proposal=proposal,
+            harvest=harvest,
+            review=review,
+            permissions=context.available_actions,
+        ),
+    }
+
+
+@api_router.post("/models/{model_id}/reviews/{run_id}/decisions/bulk")
+def bulk_accept_model_proposals(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_EDIT)),
+    ],
+    body: BulkReviewDecisionRequest,
+    run_id: str,
+) -> dict:
+    _, proposal, harvest, review, review_path = _load_model_review(
+        context.model, run_id
+    )
+    changed = review_store.bulk_accept(review, proposal, body.min_confidence)
+    review = _save_review(review_path, review, context)
+    return {
+        "ok": True,
+        "changed": changed,
+        "summary": _review_summary(
+            model_id=context.model.id,
+            run_id=run_id,
+            proposal=proposal,
+            harvest=harvest,
+            review=review,
+            permissions=context.available_actions,
+        ),
+    }
+
+
+@api_router.post("/models/{model_id}/reviews/{run_id}/reset")
+def reset_model_review(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_EDIT)),
+    ],
+    body: ResetReviewRequest,
+    run_id: str,
+) -> dict:
+    _, proposal, harvest, review, review_path = _load_model_review(
+        context.model, run_id
+    )
+    review_store.clear(review, body.section)
+    review = _save_review(review_path, review, context)
+    return {
+        "ok": True,
+        "summary": _review_summary(
+            model_id=context.model.id,
+            run_id=run_id,
+            proposal=proposal,
+            harvest=harvest,
+            review=review,
+            permissions=context.available_actions,
+        ),
+    }
+
+
+@api_router.post("/models/{model_id}/reviews/{run_id}/publish")
+def publish_model_review(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_PUBLISH)),
+    ],
+    run_id: str,
+) -> dict:
+    _, proposal, harvest, review, _ = _load_model_review(
+        context.model, run_id
+    )
+    try:
+        result = publication.publish_reviewed_proposal(
+            ArtifactStore(runstore.ROOT),
+            model_id=context.model.id,
+            model_name=publication.model_name_for_proposal(proposal, harvest),
+            run_id=run_id,
+            proposal=proposal,
+            review=review,
+        )
+    except publication.PublicationValidationError as exc:
+        raise HTTPException(
+            422,
+            {
+                "code": "publication_validation_failed",
+                "errors": list(exc.errors),
+            },
+        )
+    return {
+        "ok": True,
+        "model_id": context.model.id,
+        "run_id": run_id,
+        "manifest": result.manifest,
     }
 
 

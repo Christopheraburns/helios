@@ -17,7 +17,12 @@ import {
   GraphElementDetail,
   ReviewDecisionRequest,
   ReviewDecisionResponse,
+  ReviewMutationResponse,
+  ReviewPublicationResponse,
+  ReviewSection,
+  ReviewSummary,
   ModelOverview,
+  ModelSystemStatus,
   ModelSummary,
   OrganizationSummary,
 } from "../api/client";
@@ -58,6 +63,35 @@ export interface ApplicationContextState {
     runId: string,
     decision: ReviewDecisionRequest,
   ) => Promise<ReviewDecisionResponse>;
+  loadModelReview: (
+    modelId: string,
+    runId: string,
+  ) => Promise<ReviewSummary>;
+  decideModelDataset: (
+    modelId: string,
+    runId: string,
+    table: string,
+    decision: "accept" | "reject",
+  ) => Promise<ReviewMutationResponse>;
+  bulkAcceptModelProposals: (
+    modelId: string,
+    runId: string,
+    minConfidence: number,
+  ) => Promise<ReviewMutationResponse>;
+  resetModelReview: (
+    modelId: string,
+    runId: string,
+    section?: ReviewSection,
+  ) => Promise<ReviewMutationResponse>;
+  publishModelReview: (
+    modelId: string,
+    runId: string,
+  ) => Promise<ReviewPublicationResponse>;
+  refreshModelOverview: () => void;
+  loadModelStatus: (
+    modelId: string,
+    includeDetails?: boolean,
+  ) => Promise<ModelSystemStatus>;
 }
 
 function describeError(error: unknown): {
@@ -100,6 +134,7 @@ export function useApplicationContext(
   const [modelOverview, setModelOverview] = useState<ModelOverview>();
   const [modelsOrganizationId, setModelsOrganizationId] = useState("");
   const [loadVersion, setLoadVersion] = useState(0);
+  const [overviewVersion, setOverviewVersion] = useState(0);
 
   const requestedOrganizationId = searchParams.get("organization") ?? "";
   const requestedModelId = searchParams.get("model") ?? "";
@@ -257,7 +292,9 @@ export function useApplicationContext(
 
   useEffect(() => {
     let active = true;
-    setModelOverview(undefined);
+    setModelOverview((current) =>
+      current?.id === selectedModelId ? current : undefined,
+    );
     if (
       status !== "ready" ||
       effectiveModelStatus !== "ready" ||
@@ -305,6 +342,7 @@ export function useApplicationContext(
     selectedModelId,
     status,
     loadVersion,
+    overviewVersion,
   ]);
 
   useEffect(() => {
@@ -367,6 +405,44 @@ export function useApplicationContext(
     ) => client().decideModelProposal(modelId, runId, decision),
     [client],
   );
+  const loadModelReview = useCallback(
+    (modelId: string, runId: string) =>
+      client().modelReview(modelId, runId),
+    [client],
+  );
+  const decideModelDataset = useCallback(
+    (
+      modelId: string,
+      runId: string,
+      table: string,
+      decision: "accept" | "reject",
+    ) => client().decideModelDataset(modelId, runId, table, decision),
+    [client],
+  );
+  const bulkAcceptModelProposals = useCallback(
+    (modelId: string, runId: string, minConfidence: number) =>
+      client().bulkAcceptModelProposals(
+        modelId,
+        runId,
+        minConfidence,
+      ),
+    [client],
+  );
+  const resetModelReview = useCallback(
+    (modelId: string, runId: string, section?: ReviewSection) =>
+      client().resetModelReview(modelId, runId, section),
+    [client],
+  );
+  const publishModelReview = useCallback(
+    (modelId: string, runId: string) =>
+      client().publishModelReview(modelId, runId),
+    [client],
+  );
+  const loadModelStatus = useCallback(
+    (modelId: string, includeDetails = false) =>
+      client().modelStatus(modelId, includeDetails),
+    [client],
+  );
   const applicationUrl = client().applicationUrl;
 
   return {
@@ -390,5 +466,13 @@ export function useApplicationContext(
     loadModelGraph,
     loadGraphElementDetail,
     decideModelProposal,
+    loadModelReview,
+    decideModelDataset,
+    bulkAcceptModelProposals,
+    resetModelReview,
+    publishModelReview,
+    refreshModelOverview: () =>
+      setOverviewVersion((version) => version + 1),
+    loadModelStatus,
   };
 }

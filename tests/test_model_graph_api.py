@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -318,6 +319,11 @@ def review_client(tmp_path, monkeypatch):
                 authz.Role.MODEL_VIEWER,
                 authz.Resource("model", model.id, ORGANIZATION.id),
             ),
+            authz.Grant(
+                "cloudera-workbench:editor",
+                authz.Role.MODEL_EDITOR,
+                authz.Resource("model", model.id, ORGANIZATION.id),
+            ),
         ]
     )
     app.state.graph_repository = ArtifactGraphRepository(ArtifactStore(tmp_path))
@@ -418,3 +424,149 @@ def test_review_decision_rejects_unauthorized_or_unknown_elements(review_client)
         headers={"x-forwarded-user": "owner"},
         json=body,
     ).status_code == 404
+
+
+def test_review_summary_is_authorized_and_reports_audit(review_client):
+    client, model, run_id, _ = review_client
+    endpoint = f"/api/v1/models/{model.id}/reviews/{run_id}"
+
+    assert client.get(
+        endpoint, headers={"x-forwarded-user": "viewer"}
+    ).status_code == 403
+    summary = client.get(
+        endpoint, headers={"x-forwarded-user": "owner"}
+    )
+
+    assert summary.status_code == 200
+    body = summary.json()
+    assert body["sections"]["datasets"] == {
+        "accept": 0,
+        "reject": 0,
+        "edit": 0,
+        "pending": 1,
+        "total": 1,
+    }
+    assert body["reviewed_at"] is None
+    assert body["reviewed_by"] is None
+    assert body["publish_ready"] is False
+    assert body["validation_errors"]
+    assert "reset" in body["available_actions"]
+    assert "publish" in body["available_actions"]
+
+    assert client.get(
+        f"/api/v1/models/{model.id}/reviews/another-run",
+        headers={"x-forwarded-user": "owner"},
+    ).status_code == 404
+
+
+def test_review_cascade_bulk_and_reset_persist_audit(review_client):
+    client, model, run_id, _ = review_client
+    base = f"/api/v1/models/{model.id}/reviews/{run_id}"
+    headers = {"x-forwarded-user": "editor"}
+
+    cascade = client.post(
+        f"{base}/decisions/dataset",
+        headers=headers,
+        json={"table": "sales.orders", "decision": "reject"},
+    )
+    assert cascade.status_code == 200
+    assert cascade.json()["changed"] == 2
+    assert cascade.json()["summary"]["sections"]["datasets"]["reject"] == 1
+    assert cascade.json()["summary"]["sections"]["fields"]["reject"] == 1
+
+    reset = client.post(f"{base}/reset", headers=headers, json={})
+    assert reset.status_code == 200
+    assert reset.json()["summary"]["sections"]["datasets"]["pending"] == 1
+    assert reset.json()["summary"]["reviewed_by"] == "cloudera-workbench:editor"
+
+    bulk = client.post(
+        f"{base}/decisions/bulk",
+        headers=headers,
+        json={"min_confidence": 0.85},
+    )
+    assert bulk.status_code == 200
+    assert bulk.json()["changed"] == 1
+    assert bulk.json()["summary"]["sections"]["datasets"]["accept"] == 1
+    assert bulk.json()["summary"]["sections"]["fields"]["pending"] == 1
+    assert client.post(
+        f"{base}/publish", headers=headers
+    ).status_code == 403
+
+
+def test_publish_review_writes_artifacts_and_reconciles_graph(review_client):
+    client, model, run_id, _ = review_client
+    base = f"/api/v1/models/{model.id}/reviews/{run_id}"
+    headers = {"x-forwarded-user": "owner"}
+    assert client.post(
+        f"{base}/decisions/dataset",
+        headers=headers,
+        json={"table": "sales.orders", "decision": "accept"},
+    ).status_code == 200
+
+    published = client.post(f"{base}/publish", headers=headers)
+
+    assert published.status_code == 200
+    manifest = published.json()["manifest"]
+    assert manifest["model_id"] == model.id
+    assert manifest["run_id"] == run_id
+    assert manifest["datasets"] == 1
+    published_dir = Path(runstore.ROOT) / "models" / model.id / "published"
+    assert (published_dir / "semantic.ossie.yaml").exists()
+    assert (published_dir / "semantic.ossie.json").exists()
+    assert json.loads((published_dir / "manifest.json").read_text())[
+        "published_at"
+    ]
+
+    graph = client.get(
+        f"/api/v1/models/{model.id}/graph",
+        headers=headers,
+    )
+    assert graph.status_code == 200
+    assert "dataset:orders" in {node["id"] for node in graph.json()["nodes"]}
+
+
+def test_publish_validation_failure_does_not_write_artifacts(review_client):
+    client, model, run_id, run_directory = review_client
+    proposal_path = run_directory / "propose.json"
+    proposal = json.loads(proposal_path.read_text())
+    proposal["relationships"].append(
+        {
+            "from": "sales.orders",
+            "from_column": "customer_id",
+            "to": "missing.table",
+            "to_column": "id",
+            "accepted": True,
+            "confidence": 0.9,
+        }
+    )
+    proposal_path.write_text(json.dumps(proposal))
+    base = f"/api/v1/models/{model.id}/reviews/{run_id}"
+    headers = {"x-forwarded-user": "owner"}
+    assert client.post(
+        f"{base}/decisions/dataset",
+        headers=headers,
+        json={"table": "sales.orders", "decision": "accept"},
+    ).status_code == 200
+    relationship_id = "sales.orders.customer_id->missing.table.id"
+    assert client.post(
+        f"{base}/decisions",
+        headers=headers,
+        json={
+            "section": "relationships",
+            "element_id": relationship_id,
+            "decision": "accept",
+        },
+    ).status_code == 200
+
+    response = client.post(f"{base}/publish", headers=headers)
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "publication_validation_failed"
+    assert response.json()["detail"]["errors"]
+    assert not (
+        Path(runstore.ROOT)
+        / "models"
+        / model.id
+        / "published"
+        / "manifest.json"
+    ).exists()

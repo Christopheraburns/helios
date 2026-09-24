@@ -155,6 +155,22 @@ Helios grants receives a successful response with a count of zero.
 - Counts come from the backend's authorized graph projection. The UI must not
   inspect model artifacts to recreate them.
 
+`GET /api/v1/models/{model_id}/status?details={false|true}`
+
+- Requires `model.read`.
+- The compact response reports API availability, model publication state,
+  discovery/profile state, and the most recent successful harvest and profile
+  artifacts for the requested model.
+- Each component uses `healthy`, `degraded`, `unavailable`, or `unknown`;
+  partial failures do not prevent other component results from being returned.
+- `details=true` additionally requires `organization.manage` and runs
+  independent metadata repository, Atlas, Impala, and proposal-service checks.
+- Detailed checks return safe descriptions only. They do not return hosts,
+  connection strings, credentials, tokens, or raw exception messages.
+- MCP and Iceberg are not reported as separate checks because the current
+  backend has no configured, authenticated MCP-to-API health contract and no
+  independent Iceberg connectivity probe.
+
 `GET /api/v1/models/{model_id}/glossary`
 
 - Requires `glossary.read`.
@@ -240,6 +256,15 @@ contains opaque `review_section` and `review_element_id` values for authorized
 mutation requests. Detail responses include review note, overrides, reviewer,
 and review timestamp when available.
 
+`GET /api/v1/models/{model_id}/reviews/{run_id}`
+
+- Requires `model.edit`.
+- Returns per-section decision counts, review audit data, preflight issues,
+  publication validation errors, publication readiness, the current
+  publication manifest (when present), and `available_actions`.
+- Review actions are `decide`, `cascade`, `bulk_accept`, `reset`, and
+  `publish`; clients must not infer them from roles.
+
 `POST /api/v1/models/{model_id}/reviews/{run_id}/decisions`
 
 - Requires `model.edit`.
@@ -251,6 +276,37 @@ and review timestamp when available.
   the entry, review timestamp, reviewer, and updated summary.
 - Clients wait for success and then refetch the affected graph and detail; the
   API does not provide an optimistic-state contract.
+
+`POST /api/v1/models/{model_id}/reviews/{run_id}/decisions/dataset`
+
+- Requires `model.edit`.
+- Accepts `table` and an `accept` or `reject` decision, applying it to the
+  dataset and all of its attributes.
+
+`POST /api/v1/models/{model_id}/reviews/{run_id}/decisions/bulk`
+
+- Requires `model.edit`.
+- Accepts `min_confidence` from 0 through 1 and accepts currently pending
+  elements at or above the threshold.
+
+`POST /api/v1/models/{model_id}/reviews/{run_id}/reset`
+
+- Requires `model.edit`.
+- Accepts an optional review `section`; omitting it clears all decisions
+  without modifying the immutable proposal.
+
+The mutation endpoints record the authenticated reviewer and return the
+updated review summary.
+
+`POST /api/v1/models/{model_id}/reviews/{run_id}/publish`
+
+- Requires `model.publish`.
+- Applies review decisions, validates the generated Ossie document, and
+  writes model-scoped published YAML, JSON, and manifest artifacts.
+- Validation failures return HTTP 422 with
+  `detail.code=publication_validation_failed` and an `errors` list.
+- The API does not expose the legacy Console's optional Git commit behavior.
+- Clients refetch review, graph, detail, and overview state after success.
 
 The response shape is:
 

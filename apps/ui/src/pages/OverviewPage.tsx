@@ -1,5 +1,11 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
+import {
+  HealthComponent,
+  HealthState,
+  ModelSystemStatus,
+} from "../api/client";
 import { EmptyState, ErrorState } from "../components/AsyncState";
 import { ApplicationContextState } from "../hooks/useApplicationContext";
 
@@ -9,6 +15,21 @@ interface OverviewPageProps {
 
 export default function OverviewPage({ context }: OverviewPageProps) {
   const location = useLocation();
+  const [publishState, setPublishState] = useState<
+    "idle" | "saving" | "success" | "error"
+  >("idle");
+  const [publishMessage, setPublishMessage] = useState("");
+  const [systemStatus, setSystemStatus] = useState<ModelSystemStatus>();
+  const [systemStatusState, setSystemStatusState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [systemStatusError, setSystemStatusError] = useState("");
+  const [statusRetryVersion, setStatusRetryVersion] = useState(0);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const [detailsState, setDetailsState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [detailsError, setDetailsError] = useState("");
   const organization = context.organizations.find(
     (item) => item.id === context.selectedOrganizationId,
   );
@@ -39,12 +60,100 @@ export default function OverviewPage({ context }: OverviewPageProps) {
 
   const overview = context.modelOverview;
   const actions = new Set(overview?.available_actions ?? []);
-  const reviewUrl =
-    overview?.lifecycle.latest_run_id && context.applicationUrl
-      ? context.applicationUrl(
-          `/runs/${encodeURIComponent(overview.lifecycle.latest_run_id)}/review`,
-        )
-      : undefined;
+  const reviewRunId = overview?.lifecycle.latest_run_id;
+  const reviewSearch = new URLSearchParams(location.search);
+  if (context.selectedOrganizationId) {
+    reviewSearch.set("organization", context.selectedOrganizationId);
+  }
+  if (context.selectedModelId) {
+    reviewSearch.set("model", context.selectedModelId);
+  }
+  if (reviewRunId) reviewSearch.set("review_run_id", reviewRunId);
+
+  useEffect(() => {
+    if (!context.selectedModelId || context.overviewStatus !== "ready") {
+      setSystemStatus(undefined);
+      setSystemStatusState("idle");
+      return;
+    }
+    let active = true;
+    setSystemStatusState("loading");
+    setSystemStatusError("");
+    setDetailsExpanded(false);
+    setDetailsState("idle");
+    void context
+      .loadModelStatus(context.selectedModelId)
+      .then((result) => {
+        if (!active) return;
+        setSystemStatus(result);
+        setSystemStatusState("ready");
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setSystemStatus(undefined);
+        setSystemStatusState("error");
+        setSystemStatusError(
+          error instanceof Error
+            ? error.message
+            : "System status is unavailable.",
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    context.loadModelStatus,
+    context.overviewStatus,
+    context.selectedModelId,
+    statusRetryVersion,
+  ]);
+
+  async function loadSystemDetails() {
+    setDetailsState("loading");
+    setDetailsError("");
+    try {
+      const result = await context.loadModelStatus(
+        context.selectedModelId,
+        true,
+      );
+      setSystemStatus(result);
+      setDetailsState("ready");
+    } catch (error) {
+      setDetailsState("error");
+      setDetailsError(
+        error instanceof Error
+          ? error.message
+          : "Detailed system status is unavailable.",
+      );
+    }
+  }
+
+  function toggleSystemDetails() {
+    if (!systemStatus?.details_available) return;
+    if (detailsExpanded) {
+      setDetailsExpanded(false);
+      return;
+    }
+    setDetailsExpanded(true);
+    if (detailsState !== "ready") void loadSystemDetails();
+  }
+
+  async function publish() {
+    if (!overview || !reviewRunId) return;
+    setPublishState("saving");
+    setPublishMessage("");
+    try {
+      await context.publishModelReview(overview.id, reviewRunId);
+      setPublishState("success");
+      setPublishMessage("Model published successfully.");
+      context.refreshModelOverview();
+    } catch (error) {
+      setPublishState("error");
+      setPublishMessage(
+        error instanceof Error ? error.message : "Publishing failed.",
+      );
+    }
+  }
 
   return (
     <>
@@ -110,22 +219,55 @@ export default function OverviewPage({ context }: OverviewPageProps) {
                   Run Discovery
                 </button>
               ) : null}
-              {reviewUrl &&
+              {reviewRunId &&
               actions.has("model.edit") &&
               overview.lifecycle.review_status === "pending" ? (
-                <a className="button button--secondary" href={reviewUrl}>
+                <Link
+                  className="button button--secondary"
+                  to={{
+                    pathname: "/canvas",
+                    search: `?${reviewSearch.toString()}`,
+                  }}
+                >
                   Review Proposals
-                </a>
+                </Link>
               ) : null}
-              {reviewUrl &&
+              {reviewRunId &&
               actions.has("model.publish") &&
               overview.lifecycle.review_status === "complete" ? (
-                <a className="button button--secondary" href={reviewUrl}>
-                  Publish
-                </a>
+                <button
+                  className="button button--secondary"
+                  disabled={publishState === "saving"}
+                  onClick={() => void publish()}
+                  type="button"
+                >
+                  {publishState === "saving" ? "Publishing…" : "Publish"}
+                </button>
               ) : null}
             </div>
+            {publishMessage ? (
+              <p
+                className={`action-message action-message--${publishState}`}
+                role={publishState === "error" ? "alert" : "status"}
+              >
+                {publishMessage}
+              </p>
+            ) : null}
           </section>
+
+          <SystemStatusSection
+            status={systemStatus}
+            loadState={systemStatusState}
+            error={systemStatusError}
+            detailsExpanded={detailsExpanded}
+            detailsState={detailsState}
+            detailsError={detailsError}
+            onToggleDetails={toggleSystemDetails}
+            onRetryDetails={() => void loadSystemDetails()}
+            onRetry={() =>
+              setStatusRetryVersion((version) => version + 1)
+            }
+          />
 
           <section className="summary-grid summary-grid--four" aria-label="Model summary">
             <SummaryCard label="Datasets" value={overview.summary.dataset_count} />
@@ -217,6 +359,153 @@ export default function OverviewPage({ context }: OverviewPageProps) {
   );
 }
 
+function SystemStatusSection({
+  status,
+  loadState,
+  error,
+  detailsExpanded,
+  detailsState,
+  detailsError,
+  onToggleDetails,
+  onRetryDetails,
+  onRetry,
+}: {
+  status?: ModelSystemStatus;
+  loadState: "idle" | "loading" | "ready" | "error";
+  error: string;
+  detailsExpanded: boolean;
+  detailsState: "idle" | "loading" | "ready" | "error";
+  detailsError: string;
+  onToggleDetails: () => void;
+  onRetryDetails: () => void;
+  onRetry: () => void;
+}) {
+  return (
+    <section className="system-status" aria-labelledby="system-status-title">
+      <div className="system-status__header">
+        <div>
+          <p className="section-eyebrow">System status</p>
+          <h2 id="system-status-title">Helios health</h2>
+        </div>
+        {status ? <StatusBadge status={status.status} /> : null}
+      </div>
+
+      {loadState === "loading" || loadState === "idle" ? (
+        <div className="system-status__loading" role="status">
+          <span className="spinner" aria-hidden="true" />
+          Checking model services…
+        </div>
+      ) : loadState === "error" ? (
+        <div className="system-status__error" role="alert">
+          <span>{error || "System status is unavailable."}</span>
+          <button
+            className="button button--secondary"
+            onClick={onRetry}
+            type="button"
+          >
+            Retry status
+          </button>
+        </div>
+      ) : status ? (
+        <>
+          <StatusComponents components={status.components} />
+          <div className="system-status__footer">
+            <RecentActivity status={status} />
+            <button
+              className="button button--secondary"
+              onClick={onRetry}
+              type="button"
+            >
+              Refresh status
+            </button>
+            {status.details_available ? (
+              <button
+                aria-expanded={detailsExpanded}
+                className="button button--secondary"
+                onClick={onToggleDetails}
+                type="button"
+              >
+                {detailsExpanded
+                  ? "Hide system details"
+                  : "Show system details"}
+              </button>
+            ) : null}
+          </div>
+          {detailsExpanded ? (
+            <div className="system-status__details">
+              <h3>Infrastructure checks</h3>
+              {detailsState === "loading" ? (
+                <p role="status">Running detailed checks…</p>
+              ) : detailsState === "error" ? (
+                <div role="alert">
+                  <span>
+                    {detailsError ||
+                      "Detailed system status is unavailable."}
+                  </span>
+                  <button
+                    className="button button--secondary"
+                    onClick={onRetryDetails}
+                    type="button"
+                  >
+                    Retry details
+                  </button>
+                </div>
+              ) : (
+                <StatusComponents components={status.details} />
+              )}
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+function StatusComponents({
+  components,
+}: {
+  components: HealthComponent[];
+}) {
+  return (
+    <ul className="system-status__components">
+      {components.map((component) => (
+        <li key={component.id}>
+          <div>
+            <strong>{component.label}</strong>
+            <span>{component.description}</span>
+          </div>
+          <StatusBadge status={component.status} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function StatusBadge({ status }: { status: HealthState }) {
+  return (
+    <span className={`health-badge health-badge--${status}`}>
+      {formatLabel(status)}
+    </span>
+  );
+}
+
+function RecentActivity({ status }: { status: ModelSystemStatus }) {
+  const discovery = status.recent_activity.discovery;
+  const profile = status.recent_activity.profile;
+  if (!discovery && !profile) {
+    return <span>No successful discovery or profile run recorded.</span>;
+  }
+  return (
+    <span>
+      {profile
+        ? `Last profile ${formatOptionalDate(profile.completed_at)}`
+        : discovery
+          ? `Last discovery ${formatOptionalDate(discovery.completed_at)}`
+          : ""}
+    </span>
+  );
+}
+
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
     <article className="summary-card summary-card--compact">
@@ -251,6 +540,10 @@ function formatDate(value: string): string {
         dateStyle: "medium",
         timeStyle: "short",
       }).format(date);
+}
+
+function formatOptionalDate(value: string | null): string {
+  return value ? formatDate(value) : "completed (time unavailable)";
 }
 
 function formatReview(
