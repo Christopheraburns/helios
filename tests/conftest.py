@@ -97,6 +97,7 @@ def persistent_auth_stack(tmp_path) -> PersistentAuthorizationStack:
         "admin",
         "owner",
         "viewer",
+        "consumer",
         "editor",
         "other-owner",
         "outsider",
@@ -166,6 +167,9 @@ def persistent_auth_stack(tmp_path) -> PersistentAuthorizationStack:
     )
     repository.add_model_grant(
         customer.id, _principal("viewer").id, authz.Role.MODEL_VIEWER
+    )
+    repository.add_model_grant(
+        customer.id, _principal("consumer").id, authz.Role.MODEL_CONSUMER
     )
     repository.add_model_grant(
         finance.id, _principal("editor").id, authz.Role.MODEL_EDITOR

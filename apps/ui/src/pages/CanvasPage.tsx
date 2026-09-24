@@ -9,7 +9,7 @@ import {
   Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import {
@@ -18,6 +18,7 @@ import {
   AuthorizationError,
   GraphElementDetail,
   GraphLens,
+  HeliosGraphEdgeDto,
   HeliosGraphDto,
   HeliosGraphNodeDto,
   ReviewSection,
@@ -73,6 +74,7 @@ export default function CanvasPage({ context }: CanvasPageProps) {
   );
   const [lens, setLens] = useState<GraphLens>("semantic");
   const [reviewMode, setReviewMode] = useState(false);
+  const [reviewRunId, setReviewRunId] = useState<string>();
   const [mutationStatus, setMutationStatus] = useState<
     "idle" | "saving" | "success" | "error"
   >("idle");
@@ -86,31 +88,80 @@ export default function CanvasPage({ context }: CanvasPageProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<HeliosGraphNodeDto[]>([]);
   const [searching, setSearching] = useState(false);
+  const [pendingFitNodeIds, setPendingFitNodeIds] = useState<string[]>([]);
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
+  const suppressedSearchRef = useRef<
+    { modelId: string; signature: string } | undefined
+  >(undefined);
   const model = context.models.find(
     (item) => item.id === context.selectedModelId,
   );
-  const reviewRunId =
+  const latestReviewRunId =
     context.modelOverview?.lifecycle.latest_run_id ?? undefined;
   const canReview =
-    Boolean(reviewRunId) &&
+    Boolean(latestReviewRunId) &&
     Boolean(
       context.modelOverview?.available_actions.includes("model.edit"),
     );
   const requestedReviewRunId = searchParams.get("review_run_id") ?? "";
+  const requestedLens = parseLens(searchParams.get("lens"));
+  const requestedFocusNodeId = searchParams.get("focus_node_id") ?? "";
+  const requestedElementId = searchParams.get("element_id") ?? "";
+  const requestedRelatedNodeIds = parseRelatedNodeIds(
+    searchParams.get("related_node_ids"),
+  );
+  const canvasSearchSignature = canvasSearchKey(searchParams);
+
+  function updateCanvasSearch(
+    updates: Record<string, string | undefined>,
+    replace = false,
+  ) {
+    const next = new URLSearchParams(searchParamsRef.current);
+    for (const [key, value] of Object.entries(updates)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    suppressedSearchRef.current = {
+      modelId: context.selectedModelId,
+      signature: canvasSearchKey(next),
+    };
+    searchParamsRef.current = next;
+    setSearchParams(next, { replace });
+  }
 
   useEffect(() => {
+    if (
+      suppressedSearchRef.current?.modelId === context.selectedModelId &&
+      suppressedSearchRef.current.signature === canvasSearchSignature
+    ) {
+      suppressedSearchRef.current = undefined;
+      return;
+    }
     let active = true;
+    const initialLens = requestedLens ?? "semantic";
+    const relatedNodeIds = requestedRelatedNodeIds;
     setDto(undefined);
     setSelectedNode(undefined);
     setSelectedEdge(undefined);
+    setSelectedDetail(undefined);
+    setDetailStatus("idle");
     setExpandedDatasetIds(new Set());
     setExpandedNodeIds(new Set());
     setExpansionChildren(new Map());
     setBreadcrumbs(model ? [{ id: null, label: model.name }] : []);
     setReviewMode(false);
+    setReviewRunId(undefined);
     setReviewSummary(undefined);
     setReviewStatus("idle");
     setMutationStatus("idle");
+    setMutationError("");
+    setLens(initialLens);
+    setSearchTerm("");
+    setSearchResults([]);
+    setSearching(false);
+    setZoomLevel("medium");
+    setPendingFitNodeIds([]);
     if (!context.selectedModelId) {
       setStatus("idle");
       return () => {
@@ -120,19 +171,116 @@ export default function CanvasPage({ context }: CanvasPageProps) {
 
     setStatus("loading");
     setErrorMessage("");
-    void context
-      .loadModelGraph(context.selectedModelId, {
-        navigation: true,
-        lens,
+    async function loadInitialGraph() {
+      const modelId = context.selectedModelId;
+      const urlUpdates: Record<string, string | undefined> = {};
+      let activeReviewRunId = requestedReviewRunId || undefined;
+      let summary: ReviewSummary | undefined;
+      let focusNodeId = requestedFocusNodeId || undefined;
+      let elementId = requestedElementId || undefined;
+      let effectiveRelatedIds = relatedNodeIds;
+      let result: HeliosGraphDto;
+
+      if (searchParams.get("lens") && !requestedLens) {
+        urlUpdates.lens = undefined;
+      }
+      if (activeReviewRunId) {
+        try {
+          summary = await context.loadModelReview(modelId, activeReviewRunId);
+        } catch {
+          activeReviewRunId = undefined;
+          focusNodeId = undefined;
+          elementId = undefined;
+          effectiveRelatedIds = [];
+          urlUpdates.review_run_id = undefined;
+          urlUpdates.focus_node_id = undefined;
+          urlUpdates.element_id = undefined;
+          urlUpdates.related_node_ids = undefined;
+        }
+      }
+
+      const graphOptions = {
+        navigation: true as const,
+        lens: initialLens,
+        ...(activeReviewRunId ? { reviewRunId: activeReviewRunId } : {}),
         depth: 1,
         limit: 120,
-      })
-      .then((result) => {
-        if (!active) return;
-        setDto(result);
-        setStatus("ready");
-      })
-      .catch((error: unknown) => {
+      };
+      try {
+        result = await context.loadModelGraph(modelId, {
+          ...graphOptions,
+          ...(focusNodeId ? { focusNodeId } : {}),
+        });
+      } catch (error) {
+        if (!focusNodeId) throw error;
+        result = await context.loadModelGraph(modelId, graphOptions);
+        focusNodeId = undefined;
+        elementId = undefined;
+        effectiveRelatedIds = [];
+        urlUpdates.focus_node_id = undefined;
+        urlUpdates.element_id = undefined;
+        urlUpdates.related_node_ids = undefined;
+      }
+
+      if (!active) return;
+      const nodeIds = new Set(result.nodes.map((node) => node.id));
+      const edge = elementId
+        ? result.edges.find((item) => item.id === elementId)
+        : undefined;
+      const node = elementId
+        ? result.nodes.find((item) => item.id === elementId)
+        : undefined;
+      if (elementId && !node && !edge) {
+        elementId = undefined;
+        effectiveRelatedIds = [];
+        urlUpdates.element_id = undefined;
+        urlUpdates.related_node_ids = undefined;
+      }
+      const validRelatedIds = effectiveRelatedIds.filter((id) =>
+        nodeIds.has(id),
+      );
+      if (validRelatedIds.length !== effectiveRelatedIds.length) {
+        effectiveRelatedIds = validRelatedIds;
+        urlUpdates.related_node_ids = validRelatedIds.length
+          ? validRelatedIds.join(",")
+          : undefined;
+      }
+
+      const fitIds = new Set(validRelatedIds);
+      if (focusNodeId && nodeIds.has(focusNodeId)) fitIds.add(focusNodeId);
+      if (node) fitIds.add(node.id);
+      if (edge) {
+        fitIds.add(edge.source);
+        fitIds.add(edge.target);
+      }
+      const expandedDatasets = datasetsToExpand(result, fitIds);
+      setExpandedDatasetIds(expandedDatasets);
+      setDto(result);
+      setReviewRunId(activeReviewRunId);
+      setReviewMode(Boolean(activeReviewRunId));
+      setReviewSummary(summary);
+      setReviewStatus(summary ? "ready" : "idle");
+      if (node) setSelectedNode(searchNode(node));
+      if (edge) setSelectedEdge(searchEdge(edge));
+      if (focusNodeId) {
+        const focusNode = result.nodes.find((item) => item.id === focusNodeId);
+        if (focusNode) {
+          setBreadcrumbs([
+            ...(model ? [{ id: null, label: model.name }] : []),
+            { id: focusNode.id, label: focusNode.label },
+          ]);
+        }
+      }
+      setPendingFitNodeIds(
+        fitIds.size ? [...fitIds] : result.nodes.map((item) => item.id),
+      );
+      setStatus("ready");
+      if (Object.keys(urlUpdates).length) {
+        updateCanvasSearch(urlUpdates, true);
+      }
+    }
+
+    void loadInitialGraph().catch((error: unknown) => {
         if (!active) return;
         setErrorMessage(describeGraphError(error));
         setStatus("error");
@@ -143,62 +291,11 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     };
   }, [
     context.loadModelGraph,
-    context.selectedModelId,
-    model?.name,
-    retryVersion,
-  ]);
-
-  useEffect(() => {
-    if (
-      context.overviewStatus !== "ready" ||
-      !requestedReviewRunId ||
-      reviewMode
-    ) {
-      return;
-    }
-    if (!canReview || requestedReviewRunId !== reviewRunId) {
-      const next = new URLSearchParams(searchParams);
-      next.delete("review_run_id");
-      setSearchParams(next, { replace: true });
-      return;
-    }
-    void toggleReviewMode(true, false);
-  }, [
-    canReview,
-    context.overviewStatus,
-    requestedReviewRunId,
-    reviewMode,
-    reviewRunId,
-  ]);
-
-  useEffect(() => {
-    if (!reviewMode || !reviewRunId || !context.selectedModelId) {
-      setReviewSummary(undefined);
-      setReviewStatus("idle");
-      return;
-    }
-    let active = true;
-    setReviewStatus("loading");
-    void context
-      .loadModelReview(context.selectedModelId, reviewRunId)
-      .then((summary) => {
-        if (!active) return;
-        setReviewSummary(summary);
-        setReviewStatus("ready");
-      })
-      .catch((error: unknown) => {
-        if (!active) return;
-        setReviewStatus("error");
-        setMutationError(describeGraphError(error));
-      });
-    return () => {
-      active = false;
-    };
-  }, [
     context.loadModelReview,
     context.selectedModelId,
-    reviewMode,
-    reviewRunId,
+    canvasSearchSignature,
+    model?.name,
+    retryVersion,
   ]);
 
   const graph = useMemo(
@@ -210,6 +307,12 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     () => (graph ? adaptCanvasGraphToReactFlow(graph) : undefined),
     [graph],
   );
+
+  useEffect(() => {
+    if (!flowInstance || !flowGraph || !pendingFitNodeIds.length) return;
+    fitNodeIds(pendingFitNodeIds);
+    setPendingFitNodeIds([]);
+  }, [flowGraph, flowInstance, pendingFitNodeIds]);
 
   useEffect(() => {
     if (!context.selectedModelId || searchTerm.trim().length < 2) {
@@ -292,10 +395,20 @@ export default function CanvasPage({ context }: CanvasPageProps) {
   const onNodeClick: NodeMouseHandler<HeliosFlowNode> = (_, node) => {
     setSelectedNode(node.data.graphNode);
     setSelectedEdge(undefined);
+    updateCanvasSearch({
+      element_id: node.id,
+      focus_node_id: node.id,
+      related_node_ids: undefined,
+    });
   };
   const onEdgeClick: EdgeMouseHandler<HeliosFlowEdge> = (_, edge) => {
     setSelectedEdge(edge.data?.graphEdge);
     setSelectedNode(undefined);
+    updateCanvasSearch({
+      element_id: edge.id,
+      focus_node_id: edge.source,
+      related_node_ids: [edge.source, edge.target].join(","),
+    });
   };
 
   async function expandNeighbors(node: CanvasGraphNode) {
@@ -380,6 +493,11 @@ export default function CanvasPage({ context }: CanvasPageProps) {
       ...current,
       { id: node.id, label: node.label },
     ]);
+    updateCanvasSearch({
+      focus_node_id: node.id,
+      element_id: node.id,
+      related_node_ids: undefined,
+    });
     fitNodeIds(result.nodes.map((item) => item.id));
   }
 
@@ -401,6 +519,11 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     setExpandedNodeIds(new Set());
     setExpandedDatasetIds(new Set());
     setExpansionChildren(new Map());
+    updateCanvasSearch({
+      focus_node_id: crumb.id ?? undefined,
+      element_id: undefined,
+      related_node_ids: undefined,
+    });
     fitNodeIds(result.nodes.map((item) => item.id));
   }
 
@@ -439,6 +562,13 @@ export default function CanvasPage({ context }: CanvasPageProps) {
         setSelectedEdge(undefined);
         setBreadcrumbs(model ? [{ id: null, label: model.name }] : []);
       }
+      updateCanvasSearch({
+        lens: nextLens,
+        focus_node_id: focusPreserved ? currentFocus : undefined,
+        ...(!focusPreserved
+          ? { element_id: undefined, related_node_ids: undefined }
+          : {}),
+      });
       fitNodeIds(result.nodes.map((item) => item.id));
     } catch (error) {
       setErrorMessage(describeGraphError(error));
@@ -450,45 +580,76 @@ export default function CanvasPage({ context }: CanvasPageProps) {
     enabled = !reviewMode,
     updateUrl = true,
   ) {
-    if (!context.selectedModelId || !reviewRunId) return;
+    const nextReviewRunId = enabled ? latestReviewRunId : undefined;
+    if (!context.selectedModelId || (enabled && !nextReviewRunId)) return;
     const nextReviewMode = enabled;
     const currentFocus = breadcrumbs.at(-1)?.id ?? undefined;
     try {
+      setReviewStatus(enabled ? "loading" : "idle");
       let result: HeliosGraphDto;
+      let summary: ReviewSummary | undefined;
       try {
-        result = await context.loadModelGraph(context.selectedModelId, {
-          navigation: true,
-          lens,
-          reviewRunId: nextReviewMode ? reviewRunId : undefined,
-          focusNodeId: currentFocus,
-          depth: 1,
-          limit: 120,
-        });
+        if (nextReviewRunId) {
+          [result, summary] = await Promise.all([
+            context.loadModelGraph(context.selectedModelId, {
+              navigation: true,
+              lens,
+              reviewRunId: nextReviewRunId,
+              focusNodeId: currentFocus,
+              depth: 1,
+              limit: 120,
+            }),
+            context.loadModelReview(
+              context.selectedModelId,
+              nextReviewRunId,
+            ),
+          ]);
+        } else {
+          result = await context.loadModelGraph(context.selectedModelId, {
+            navigation: true,
+            lens,
+            focusNodeId: currentFocus,
+            depth: 1,
+            limit: 120,
+          });
+        }
       } catch {
         result = await context.loadModelGraph(context.selectedModelId, {
           navigation: true,
           lens,
-          reviewRunId: nextReviewMode ? reviewRunId : undefined,
+          reviewRunId: nextReviewRunId,
           depth: 1,
           limit: 120,
         });
+        summary = nextReviewRunId
+          ? await context.loadModelReview(
+              context.selectedModelId,
+              nextReviewRunId,
+            )
+          : undefined;
         setBreadcrumbs(model ? [{ id: null, label: model.name }] : []);
         setSelectedNode(undefined);
         setSelectedEdge(undefined);
       }
       setReviewMode(nextReviewMode);
+      setReviewRunId(nextReviewRunId);
+      setReviewSummary(summary);
+      setReviewStatus(summary ? "ready" : "idle");
       setDto(result);
       setExpandedNodeIds(new Set());
       setExpandedDatasetIds(new Set());
       setExpansionChildren(new Map());
       if (updateUrl) {
-        const next = new URLSearchParams(searchParams);
-        if (nextReviewMode) {
-          next.set("review_run_id", reviewRunId);
-        } else {
-          next.delete("review_run_id");
-        }
-        setSearchParams(next);
+        updateCanvasSearch({
+          review_run_id: nextReviewRunId,
+          ...(!nextReviewMode
+            ? {
+                focus_node_id: undefined,
+                element_id: undefined,
+                related_node_ids: undefined,
+              }
+            : {}),
+        });
       }
       fitNodeIds(result.nodes.map((item) => item.id));
     } catch (error) {
@@ -723,7 +884,7 @@ export default function CanvasPage({ context }: CanvasPageProps) {
               </button>
             ))}
           </div>
-          {canReview ? (
+          {reviewMode || canReview ? (
             <button
               className="canvas-review-toggle"
               type="button"
@@ -966,6 +1127,10 @@ export default function CanvasPage({ context }: CanvasPageProps) {
                 onPaneClick={() => {
                   setSelectedNode(undefined);
                   setSelectedEdge(undefined);
+                  updateCanvasSearch({
+                    element_id: undefined,
+                    related_node_ids: undefined,
+                  });
                 }}
                 fitView
                 fitViewOptions={{ padding: 0.18 }}
@@ -1436,6 +1601,85 @@ function searchNode(node: HeliosGraphNodeDto): CanvasGraphNode {
     metadata: node.metadata,
     permittedActions: node.permitted_actions,
   };
+}
+
+function searchEdge(edge: HeliosGraphEdgeDto): CanvasGraphEdge {
+  return {
+    id: edge.id,
+    kind: edge.kind,
+    category: relationshipCategory(edge.kind),
+    source: edge.source,
+    target: edge.target,
+    status: edge.status,
+    confidence: edge.confidence,
+    evidence: edge.evidence,
+    metadata: edge.metadata,
+    permittedActions: edge.permitted_actions,
+  };
+}
+
+function relationshipCategory(
+  kind: string,
+): CanvasGraphEdge["category"] {
+  const normalized = kind.toLowerCase();
+  if (normalized.includes("physical")) return "physical";
+  if (normalized.includes("inferred")) return "inferred";
+  if (normalized.includes("semantic")) return "semantic";
+  if (normalized.includes("ontology")) return "ontology";
+  return "generic";
+}
+
+function datasetsToExpand(
+  dto: HeliosGraphDto,
+  relevantNodeIds: ReadonlySet<string>,
+): Set<string> {
+  const kinds = new Map(dto.nodes.map((node) => [node.id, node.kind]));
+  const result = new Set(
+    [...relevantNodeIds].filter((id) => kinds.get(id) === "dataset"),
+  );
+  for (const edge of dto.edges) {
+    if (
+      relevantNodeIds.has(edge.source) &&
+      kinds.get(edge.source) === "attribute" &&
+      kinds.get(edge.target) === "dataset"
+    ) {
+      result.add(edge.target);
+    }
+    if (
+      relevantNodeIds.has(edge.target) &&
+      kinds.get(edge.target) === "attribute" &&
+      kinds.get(edge.source) === "dataset"
+    ) {
+      result.add(edge.source);
+    }
+  }
+  return result;
+}
+
+function parseLens(value: string | null): GraphLens | undefined {
+  return value === "physical" ||
+    value === "semantic" ||
+    value === "ontology"
+    ? value
+    : undefined;
+}
+
+function parseRelatedNodeIds(value: string | null): string[] {
+  if (!value) return [];
+  return [...new Set(value.split(",").map((id) => id.trim()).filter(Boolean))]
+    .slice(0, 120);
+}
+
+function canvasSearchKey(params: URLSearchParams): string {
+  return [
+    "review_run_id",
+    "lens",
+    "focus_node_id",
+    "element_id",
+    "related_node_ids",
+  ]
+    .map((key) => `${key}=${params.get(key) ?? ""}`)
+    .join("&");
 }
 
 function describeGraphError(error: unknown): string {

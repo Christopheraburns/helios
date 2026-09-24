@@ -1,16 +1,20 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
 import {
   ApiDiagnostics,
   AuthenticationError,
+  AuthorizationError,
+  DiscoveryRun,
   HeliosApi,
   HeliosGraphDto,
   ModelOverview,
   ModelSystemStatus,
   ModelsResponse,
   OrganizationsResponse,
+  ProposalCollection,
+  ProposalItem,
   ReviewSummary,
 } from "./api/client";
 
@@ -222,6 +226,118 @@ function systemStatus(
   };
 }
 
+function discoveryRun(
+  overrides: Partial<DiscoveryRun> = {},
+): DiscoveryRun {
+  return {
+    id: "run-1",
+    type: "discovery",
+    model_id: "north-model",
+    status: "completed",
+    progress: 100,
+    initiator: null,
+    started_at: "2026-09-22T10:00:00+00:00",
+    completed_at: "2026-09-22T10:02:00+00:00",
+    duration_seconds: 120,
+    warnings: [],
+    errors: [],
+    stages: { harvest: true, profile: true, propose: true },
+    phases: [
+      {
+        id: "harvest",
+        name: "Harvest",
+        status: "completed",
+        started_at: null,
+        completed_at: "2026-09-22T10:00:00+00:00",
+        duration_seconds: null,
+        counts: { tables: 1, columns: 2 },
+        available: true,
+      },
+      {
+        id: "profile",
+        name: "Profile",
+        status: "completed",
+        started_at: null,
+        completed_at: "2026-09-22T10:01:00+00:00",
+        duration_seconds: null,
+        counts: { tables: 1 },
+        available: true,
+      },
+      {
+        id: "propose",
+        name: "Propose",
+        status: "completed",
+        started_at: null,
+        completed_at: "2026-09-22T10:02:00+00:00",
+        duration_seconds: null,
+        counts: { datasets: 1, fields: 1 },
+        available: true,
+      },
+    ],
+    counts: {
+      discovered: { tables: 1, columns: 2 },
+      profiled: { tables: 1 },
+      proposed: { datasets: 1, fields: 1 },
+    },
+    data_source: { engine: "impala", databases: ["sales"] },
+    provenance: { llm: { provider: "test", model: "fixture" } },
+    available_actions: ["model.read", "model.edit", "datasource.read"],
+    ...overrides,
+  };
+}
+
+function proposalItem(
+  overrides: Partial<ProposalItem> = {},
+): ProposalItem {
+  return {
+    id: "sales.orders",
+    section: "datasets",
+    proposal: {
+      table: "sales.orders",
+      name: "Orders",
+      kind: "fact",
+      description: "Customer orders.",
+      confidence: 0.92,
+    },
+    confidence: 0.92,
+    provenance: {
+      source: "profile",
+      llm: { provider: "test", model: "fixture" },
+    },
+    review: { decision: "pending", overrides: null, note: null },
+    canvas: {
+      review_run_id: "run-1",
+      element_id: "dataset:sales.orders",
+      focus_node_id: "dataset:sales.orders",
+      lens: "semantic",
+    },
+    available_actions: ["accept", "reject", "edit", "view_in_canvas"],
+    ...overrides,
+  } as ProposalItem;
+}
+
+function proposalCollection(
+  item: ProposalItem = proposalItem(),
+): ProposalCollection {
+  return {
+    model_id: "north-model",
+    run_id: "run-1",
+    section: item.section,
+    items: [item],
+    page: {
+      offset: 0,
+      limit: 25,
+      returned: 1,
+      total: 1,
+      has_more: false,
+    },
+    filters: { decision: null, query: null },
+    reviewed_at: null,
+    reviewed_by: null,
+    available_actions: ["decide", "cascade", "bulk_accept", "reset"],
+  };
+}
+
 function successfulClient(): HeliosApi {
   return {
     health: vi.fn().mockResolvedValue({ status: "ok" }),
@@ -233,6 +349,108 @@ function successfulClient(): HeliosApi {
     modelOverview: vi.fn((modelId: string) =>
       Promise.resolve(overviewFor(modelId)),
     ),
+    modelRuns: vi.fn().mockResolvedValue({
+      model_id: "north-model",
+      runs: [discoveryRun()],
+      available_actions: ["model.read"],
+    }),
+    modelRun: vi.fn().mockResolvedValue(discoveryRun()),
+    modelRunProfileSummary: vi.fn().mockResolvedValue({
+      model_id: "north-model",
+      run_id: "run-1",
+      profiled_at: "2026-09-22T10:01:00+00:00",
+      engine: "impala",
+      tables: [
+        {
+          table_id: "sales.orders",
+          harvested: true,
+          profiled: true,
+          column_count: 2,
+          row_count: 1000,
+          primary_key_candidates: [
+            { column: "order_id", confidence: 0.95 },
+          ],
+        },
+      ],
+      relationships: [
+        {
+          from: "sales.orders",
+          from_column: "customer_id",
+          to: "sales.customers",
+          to_column: "customer_id",
+          match_ratio: 1,
+          distinct_values: 500,
+        },
+      ],
+      suggested_relationships: [
+        {
+          from: "sales.orders",
+          from_column: "region_id",
+          to: "sales.regions",
+          to_column: "region_id",
+          match_ratio: 0.98,
+          distinct_values: 12,
+        },
+      ],
+      rejected_candidates: [
+        {
+          from: "sales.orders",
+          from_column: "legacy_id",
+          to: "sales.legacy",
+          to_column: "legacy_id",
+          match_ratio: 0.1,
+          unmatched: 90,
+        },
+      ],
+      provenance: { artifacts: ["harvest", "profile"], run_id: "run-1" },
+      available_actions: ["view_table_profile"],
+    }),
+    modelRunTableProfile: vi.fn().mockResolvedValue({
+      model_id: "north-model",
+      run_id: "run-1",
+      table_id: "sales.orders",
+      profiled_at: "2026-09-22T10:01:00+00:00",
+      engine: "impala",
+      row_count: 1000,
+      column_count: 1,
+      columns: {
+        order_id: {
+          type: "bigint",
+          null_rate: 0,
+          ndv_exact: 1000,
+          glossary_terms: ["Order identifier"],
+        },
+        customer_id: {
+          type: "bigint",
+          null_rate: 0,
+          ndv: 500,
+          glossary_terms: [],
+        },
+      },
+      primary_key_candidates: [{ column: "order_id", confidence: 0.95 }],
+      relationships: [
+        {
+          from: "sales.orders",
+          from_column: "customer_id",
+          to: "sales.customers",
+          to_column: "customer_id",
+          match_ratio: 1,
+          distinct_values: 500,
+        },
+      ],
+      provenance: {
+        artifact: "profile",
+        run_id: "run-1",
+        table_id: "sales.orders",
+      },
+      canvas: {
+        element_id: "dataset:sales.orders",
+        focus_node_id: "dataset:sales.orders",
+        lens: "physical",
+      },
+      available_actions: ["view_in_canvas"],
+    }),
+    modelRunProposals: vi.fn().mockResolvedValue(proposalCollection()),
     modelStatus: vi.fn().mockResolvedValue(systemStatus()),
     modelGraph: vi.fn().mockResolvedValue(graph),
     modelGraphDetail: vi.fn().mockResolvedValue({
@@ -289,6 +507,11 @@ function successfulClient(): HeliosApi {
 }
 
 describe("Helios application shell", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it("renders loading controls and status while API data is pending", () => {
     const pending = new Promise<never>(() => undefined);
     const client: HeliosApi = {
@@ -335,7 +558,7 @@ describe("Helios application shell", () => {
         "href",
         "/canvas?organization=north&model=north-model&review_run_id=run-1",
       );
-    expect(document.querySelector('a[href*="/runs/"]')).toBeNull();
+    expect(document.querySelector('a[href^="/runs/"]')).toBeNull();
     expect(screen.queryByRole("link", { name: "Publish" }))
       .not.toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Primary navigation" }))
@@ -614,8 +837,9 @@ describe("Helios application shell", () => {
         limit: 120,
       }),
     );
-    expect(screen.getByRole("button", { name: "Physical" }))
-      .toHaveAttribute("aria-pressed", "true");
+    await waitFor(() =>
+      expect(window.location.search).toContain("lens=physical"),
+    );
     expect(window.location.search).toContain("organization=north");
     expect(window.location.search).toContain("model=north-model");
   });
@@ -933,5 +1157,499 @@ describe("Helios application shell", () => {
     expect(screen.getByLabelText("Organization")).toHaveValue("north");
     expect(screen.getByLabelText("Model")).toBeDisabled();
     expect(window.location.search).not.toContain("model=");
+  });
+
+  it("renders model-scoped runs with evidence-backed and unavailable lifecycle values", async () => {
+    const client = successfulClient();
+    vi.mocked(client.modelRuns!).mockResolvedValue({
+      model_id: "north-model",
+      runs: [
+        discoveryRun(),
+        discoveryRun({
+          id: "run-artifacts-missing",
+          status: null,
+          progress: null,
+          started_at: null,
+          completed_at: null,
+          duration_seconds: null,
+          missing: true,
+          phases: [
+            {
+              id: "harvest",
+              name: "Harvest",
+              status: null,
+              started_at: null,
+              completed_at: null,
+              duration_seconds: null,
+              counts: {},
+              available: false,
+            },
+          ],
+          stages: { harvest: false, profile: false, propose: false },
+        }),
+      ],
+      available_actions: ["model.read"],
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/models?organization=north&model=north-model",
+    );
+
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Discovery & Activity" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "run-1" })).toHaveAttribute(
+      "href",
+      "/models/runs/run-1?organization=north&model=north-model",
+    );
+    expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Unavailable").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Harvest").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Validate")).not.toBeInTheDocument();
+    expect(document.querySelector('a[href^="/runs/"]')).toBeNull();
+    expect(client.modelRuns).toHaveBeenCalledWith("north-model");
+  });
+
+  it("renders run detail diagnostics, only returned phases, and preserved context", async () => {
+    const client = successfulClient();
+    vi.mocked(client.modelRun!).mockResolvedValue(
+      discoveryRun({
+        status: "completed_with_warnings",
+        warnings: ["Profile sampling was limited."],
+        errors: [{ code: "row-read", message: "One partition was skipped." }],
+        phases: [discoveryRun().phases[0]],
+      }),
+    );
+    window.history.replaceState(
+      {},
+      "",
+      "/models/runs/run-1?organization=north&model=north-model",
+    );
+
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "run-1" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Completed With Warnings")).toBeInTheDocument();
+    expect(screen.getByText("Profile sampling was limited.")).toBeInTheDocument();
+    expect(screen.getByText(/One partition was skipped/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Harvest" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Profile" }))
+      .not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Discovery & Activity" }))
+      .toHaveAttribute(
+        "href",
+        "/models?organization=north&model=north-model",
+      );
+    expect(
+      await screen.findByRole("link", { name: "sales.orders" }),
+    ).toHaveAttribute(
+      "href",
+      "/models/runs/run-1/profile/sales.orders?organization=north&model=north-model",
+    );
+    expect(screen.getByText("sales.orders.customer_id")).toBeInTheDocument();
+    expect(screen.getByText("sales.orders.region_id")).toBeInTheDocument();
+    expect(screen.getByText("sales.orders.legacy_id")).toBeInTheDocument();
+    expect(client.modelRunProfileSummary).toHaveBeenCalledWith(
+      "north-model",
+      "run-1",
+    );
+  });
+
+  it("renders historical keys, glossary, cardinality accuracy, and relationships", async () => {
+    const client = successfulClient();
+    window.history.replaceState(
+      {},
+      "",
+      "/models/runs/run-1/profile/sales.orders?organization=north&model=north-model",
+    );
+
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "sales.orders" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Primary key candidates" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("order_id")).toHaveLength(2);
+    expect(screen.getByText(/95% confidence/)).toBeInTheDocument();
+    expect(screen.getByText("Order identifier")).toBeInTheDocument();
+    expect(screen.getByText("1,000 exact")).toBeInTheDocument();
+    expect(screen.getByText("≈ 500")).toBeInTheDocument();
+    expect(screen.getByText("sales.orders.customer_id")).toBeInTheDocument();
+    expect(screen.getByText("sales.customers.customer_id")).toBeInTheDocument();
+  });
+
+  it("shows empty, unavailable, and denied run states without legacy links", async () => {
+    const client = successfulClient();
+    vi.mocked(client.modelRuns!).mockResolvedValue({
+      model_id: "north-model",
+      runs: [],
+      available_actions: ["model.read"],
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/models?organization=north&model=north-model",
+    );
+    const { unmount } = render(<App client={client} />);
+    expect(
+      await screen.findByRole("heading", { name: "No discovery activity" }),
+    ).toBeInTheDocument();
+    unmount();
+
+    vi.mocked(client.modelRuns!).mockRejectedValue(
+      new AuthorizationError("Run history access denied."),
+    );
+    render(<App client={client} />);
+    expect(
+      await screen.findByRole("heading", {
+        name: "Discovery activity could not be loaded",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Run history access denied.")).toBeInTheDocument();
+    expect(document.querySelector('a[href^="/runs/"]')).toBeNull();
+  });
+
+  it("renders and filters proposal sections and submits typed edit decisions", async () => {
+    const client = successfulClient();
+    vi.mocked(client.modelRunProposals!).mockImplementation(
+      async (_modelId, _runId, options) => {
+        const item =
+          options.section === "metrics"
+            ? proposalItem({
+                id: "sales.orders::Revenue",
+                section: "metrics",
+                proposal: {
+                  name: "Revenue",
+                  dataset: "sales.orders",
+                  expression: "sum(total)",
+                  description: "Gross revenue.",
+                  confidence: 0.88,
+                },
+                canvas: {
+                  review_run_id: "run-1",
+                  element_id: "metric:Revenue",
+                  focus_node_id: "metric:Revenue",
+                  lens: "semantic",
+                },
+              })
+            : proposalItem();
+        return {
+          ...proposalCollection(item),
+          filters: {
+            decision: options.decision ?? null,
+            query: options.query ?? null,
+          },
+        };
+      },
+    );
+    window.history.replaceState(
+      {},
+      "",
+      "/models/runs/run-1?organization=north&model=north-model",
+    );
+
+    render(<App client={client} />);
+    await screen.findByRole("heading", { name: "Proposal workspace" });
+    expect(screen.getByText("Customer orders.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Decision"), {
+      target: { value: "pending" },
+    });
+    fireEvent.change(screen.getByLabelText("Search this section"), {
+      target: { value: "orders" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await waitFor(() =>
+      expect(client.modelRunProposals).toHaveBeenLastCalledWith(
+        "north-model",
+        "run-1",
+        expect.objectContaining({
+          section: "datasets",
+          decision: "pending",
+          query: "orders",
+        }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Business name"), {
+      target: { value: "Customer Orders" },
+    });
+    fireEvent.change(screen.getByLabelText("Reviewer note"), {
+      target: { value: "Use the governed label." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save edit" }));
+    await waitFor(() =>
+      expect(client.decideModelProposal).toHaveBeenCalledWith(
+        "north-model",
+        "run-1",
+        expect.objectContaining({
+          section: "datasets",
+          element_id: "sales.orders",
+          decision: "edit",
+          overrides: expect.objectContaining({
+            name: "Customer Orders",
+            kind: "fact",
+          }),
+          note: "Use the governed label.",
+        }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Metrics/ }));
+    expect(
+      await screen.findByRole("heading", { name: "Revenue" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("sum(total)")).toBeInTheDocument();
+    expect(client.modelRunProposals).toHaveBeenLastCalledWith(
+      "north-model",
+      "run-1",
+      expect.objectContaining({ section: "metrics" }),
+    );
+  });
+
+  it("supports approve, reject, dataset cascade, bulk, reset, and publish feedback", async () => {
+    const client = successfulClient();
+    const actionable = reviewSummary({
+      available_actions: [
+        "decide",
+        "cascade",
+        "bulk_accept",
+        "reset",
+        "publish",
+      ],
+    });
+    vi.mocked(client.modelReview).mockResolvedValue(actionable);
+    vi.mocked(client.modelRunProposals!).mockResolvedValue(proposalCollection());
+    vi.mocked(client.decideModelProposal).mockResolvedValue({
+      ok: true,
+      run_id: "run-1",
+      section: "datasets",
+      element_id: "sales.orders",
+      entry: { decision: "accept" },
+      reviewed_at: "2026-09-23T00:00:00+00:00",
+      reviewed_by: "cloudera-workbench:analyst",
+      summary: actionable,
+    });
+    vi.mocked(client.decideModelDataset).mockResolvedValue({
+      ok: true,
+      changed: 3,
+      summary: actionable,
+    });
+    vi.mocked(client.bulkAcceptModelProposals).mockResolvedValue({
+      ok: true,
+      changed: 4,
+      summary: actionable,
+    });
+    vi.mocked(client.resetModelReview).mockResolvedValue({
+      ok: true,
+      summary: actionable,
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    window.history.replaceState(
+      {},
+      "",
+      "/models/runs/run-1?organization=north&model=north-model",
+    );
+
+    render(<App client={client} />);
+    await screen.findByRole("heading", { name: "Proposal workspace" });
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await waitFor(() =>
+      expect(client.decideModelProposal).toHaveBeenLastCalledWith(
+        "north-model",
+        "run-1",
+        expect.objectContaining({ decision: "accept" }),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Reject" }));
+    await waitFor(() =>
+      expect(client.decideModelProposal).toHaveBeenLastCalledWith(
+        "north-model",
+        "run-1",
+        expect.objectContaining({ decision: "reject" }),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Approve all" }));
+    expect(
+      await screen.findByText("Accepted the dataset and 2 fields."),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Accept above threshold" }),
+    );
+    expect(
+      await screen.findByText("Accepted 4 pending proposals."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reset section" }));
+    expect(
+      await screen.findByText("Reset decisions in Datasets."),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Publish reviewed model" }),
+    );
+    expect(
+      await screen.findByText(
+        "The reviewed model was published successfully.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("polls active runs until terminal and does not poll null or terminal runs", async () => {
+    vi.useFakeTimers();
+    const client = successfulClient();
+    vi.mocked(client.modelRuns!)
+      .mockResolvedValueOnce({
+        model_id: "north-model",
+        runs: [discoveryRun({ status: "running", progress: 50 })],
+        available_actions: ["model.read"],
+      })
+      .mockResolvedValueOnce({
+        model_id: "north-model",
+        runs: [discoveryRun({ status: "completed", progress: 100 })],
+        available_actions: ["model.read"],
+      });
+    window.history.replaceState(
+      {},
+      "",
+      "/models?organization=north&model=north-model",
+    );
+    render(<App client={client} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(client.modelRuns).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(client.modelRuns).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(client.modelRuns).toHaveBeenCalledTimes(2);
+    expect(client.modelOverview).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not poll evidence-backed null lifecycle runs", async () => {
+    vi.useFakeTimers();
+    const client = successfulClient();
+    vi.mocked(client.modelRuns!).mockResolvedValue({
+      model_id: "north-model",
+      runs: [discoveryRun({ status: null, progress: null })],
+      available_actions: ["model.read"],
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/models?organization=north&model=north-model",
+    );
+    render(<App client={client} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(client.modelRuns).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(client.modelRuns).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens Canvas node and edge deep links with focused selection", async () => {
+    const client = successfulClient();
+    const linkedGraph: HeliosGraphDto = {
+      ...graph,
+      nodes: [
+        {
+          ...graph.nodes[1],
+          id: "dataset:sales.orders",
+          label: "Orders",
+        },
+        {
+          ...graph.nodes[1],
+          id: "dataset:sales.customers",
+          label: "Customers",
+        },
+      ],
+      edges: [
+        {
+          ...graph.edges[0],
+          id: "relationship:orders-customers",
+          source: "dataset:sales.orders",
+          target: "dataset:sales.customers",
+        },
+      ],
+    };
+    vi.mocked(client.modelGraph).mockResolvedValue(linkedGraph);
+    vi.mocked(client.modelGraphDetail).mockImplementation(
+      async (_modelId, elementId) => ({
+        element_type: elementId.startsWith("relationship") ? "edge" : "node",
+        id: elementId,
+        kind: elementId.startsWith("relationship")
+          ? "physical_relationship"
+          : "dataset",
+        label: elementId.startsWith("relationship") ? null : "Orders",
+        source: elementId.startsWith("relationship")
+          ? "dataset:sales.orders"
+          : null,
+        target: elementId.startsWith("relationship")
+          ? "dataset:sales.customers"
+          : null,
+        status: "published",
+        confidence: null,
+        evidence: "Historical profile evidence",
+        details: {},
+        available_actions: ["datasource.read"],
+      }),
+    );
+    window.history.replaceState(
+      {},
+      "",
+      "/canvas?organization=north&model=north-model&lens=physical&focus_node_id=dataset%3Asales.orders&element_id=dataset%3Asales.orders",
+    );
+    const first = render(<App client={client} />);
+    expect(
+      await screen.findByRole("heading", { name: "Orders" }),
+    ).toBeInTheDocument();
+    expect(client.modelGraph).toHaveBeenCalledWith(
+      "north-model",
+      expect.objectContaining({
+        lens: "physical",
+        focusNodeId: "dataset:sales.orders",
+      }),
+    );
+    expect(client.modelGraphDetail).toHaveBeenCalledWith(
+      "north-model",
+      "dataset:sales.orders",
+      undefined,
+    );
+    first.unmount();
+
+    window.history.replaceState(
+      {},
+      "",
+      "/canvas?organization=north&model=north-model&lens=physical&focus_node_id=dataset%3Asales.orders&element_id=relationship%3Aorders-customers&related_node_ids=dataset%3Asales.orders%2Cdataset%3Asales.customers",
+    );
+    render(<App client={client} />);
+    expect(
+      await screen.findByRole("heading", { name: "physical_relationship" }),
+    ).toBeInTheDocument();
+    expect(client.modelGraphDetail).toHaveBeenLastCalledWith(
+      "north-model",
+      "relationship:orders-customers",
+      undefined,
+    );
+    expect(window.location.search).toContain("organization=north");
+    expect(window.location.search).toContain("model=north-model");
+    expect(document.querySelector('a[href^="/runs/"]')).toBeNull();
   });
 });

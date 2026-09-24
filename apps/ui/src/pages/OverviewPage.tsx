@@ -257,6 +257,7 @@ export default function OverviewPage({ context }: OverviewPageProps) {
 
           <SystemStatusSection
             status={systemStatus}
+            search={location.search}
             loadState={systemStatusState}
             error={systemStatusError}
             detailsExpanded={detailsExpanded}
@@ -361,6 +362,7 @@ export default function OverviewPage({ context }: OverviewPageProps) {
 
 function SystemStatusSection({
   status,
+  search,
   loadState,
   error,
   detailsExpanded,
@@ -371,6 +373,7 @@ function SystemStatusSection({
   onRetry,
 }: {
   status?: ModelSystemStatus;
+  search: string;
   loadState: "idle" | "loading" | "ready" | "error";
   error: string;
   detailsExpanded: boolean;
@@ -410,7 +413,7 @@ function SystemStatusSection({
         <>
           <StatusComponents components={status.components} />
           <div className="system-status__footer">
-            <RecentActivity status={status} />
+            <RecentActivity status={status} search={search} />
             <button
               className="button button--secondary"
               onClick={onRetry}
@@ -489,19 +492,32 @@ function StatusBadge({ status }: { status: HealthState }) {
   );
 }
 
-function RecentActivity({ status }: { status: ModelSystemStatus }) {
+function RecentActivity({
+  status,
+  search,
+}: {
+  status: ModelSystemStatus;
+  search: string;
+}) {
   const discovery = status.recent_activity.discovery;
   const profile = status.recent_activity.profile;
   if (!discovery && !profile) {
     return <span>No successful discovery or profile run recorded.</span>;
   }
+  const recent = profile ?? discovery;
+  const label = profile ? "profile" : "discovery";
   return (
     <span>
-      {profile
-        ? `Last profile ${formatOptionalDate(profile.completed_at)}`
-        : discovery
-          ? `Last discovery ${formatOptionalDate(discovery.completed_at)}`
-          : ""}
+      Last {label}{" "}
+      <Link
+        className="text-link"
+        to={{
+          pathname: `/models/runs/${encodeURIComponent(recent!.run_id)}`,
+          search,
+        }}
+      >
+        {formatOptionalDate(recent!.completed_at)}
+      </Link>
     </span>
   );
 }

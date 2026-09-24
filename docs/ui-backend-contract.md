@@ -1,7 +1,7 @@
 # Helios UI backend contract (current state)
 
 This document records the backend interfaces available to a future Helios UI as
-of 2026-09-23. It describes the current implementation; it is not a replacement
+of 2026-09-24. It describes the current implementation; it is not a replacement
 API design.
 
 ## Contract boundary
@@ -194,6 +194,50 @@ Helios grants receives a successful response with a count of zero.
 - Requires `model.read`.
 - Returns `model_id`, `runs`, and `available_actions`.
 - Runs are resolved from the filesystem using `Model.discovery_run_ids`.
+- Each run contains the artifact-backed `harvest`, `profile`, and `propose`
+  phases actually returned by the API, stage availability, aggregate counts,
+  lifecycle fields, warnings, and errors.
+- Lifecycle `status`, `progress`, initiator, and timestamps are nullable.
+  Existing harvest/profile/proposal files do not prove that a producer is
+  queued or running, who initiated it, or that it failed. A proposal artifact
+  is currently the only evidence used to report `completed` and 100 percent
+  progress. Missing or malformed evidence remains unavailable rather than
+  being inferred.
+
+`GET /api/v1/models/{model_id}/runs/{run_id}`
+
+- Requires `model.read`, verifies that the run belongs to the model, and
+  returns the same lifecycle contract plus source and proposal provenance.
+- Returns HTTP 404 when the run is not model-owned or has no readable
+  artifacts.
+
+`GET /api/v1/models/{model_id}/runs/{run_id}/profile`
+
+- Requires both `model.read` and `datasource.read`.
+- Returns safe harvested/profiled table summaries, row and column counts,
+  primary-key candidates, and accepted, suggested, and rejected relationship
+  evidence from that exact run.
+- Relationship evidence is allowlisted; unknown artifact fields are not
+  returned. Missing or malformed artifact collections become empty evidence
+  rather than leaking raw artifact content.
+
+`GET /api/v1/models/{model_id}/runs/{run_id}/profile/tables/{table_id}`
+
+- Requires both `model.read` and `datasource.read`.
+- Returns the historical table statistics from that exact run, proposal-safe
+  provenance, primary-key candidates, exact-versus-approximate distinct-value
+  evidence, run-harvest glossary matches, accepted relationships, and Canvas
+  metadata. It does not silently substitute the latest profile.
+- Returns HTTP 404 when the table or profile artifact is unavailable.
+
+`GET /api/v1/models/{model_id}/runs/{run_id}/proposals`
+
+- Requires `model.edit` and model/run ownership.
+- Requires one of `datasets`, `fields`, `relationships`, `metrics`, or
+  `glossary_terms` as `section`; there is no ontology-mapping proposal type.
+- Supports `decision`, `query`, `offset`, and `limit` filters and returns typed
+  proposal data, confidence/provenance, review audit, paging, permitted
+  actions, and Canvas deep-link metadata.
 
 `GET /api/v1/models/{model_id}/versions`
 
@@ -298,6 +342,12 @@ and review timestamp when available.
 The mutation endpoints record the authenticated reviewer and return the
 updated review summary.
 
+The React proposal workspace renders those same five proposal types. It
+provides typed editors for dataset, field, relationship, metric, and glossary
+term overrides; individual accept/reject/edit; dataset-and-field cascade;
+confidence-threshold bulk acceptance; section reset; and publish feedback.
+Controls are enabled only by returned `available_actions`.
+
 `POST /api/v1/models/{model_id}/reviews/{run_id}/publish`
 
 - Requires `model.publish`.
@@ -366,6 +416,34 @@ The primary visual UI is the React/TypeScript application in `apps/ui`. It
 uses only this HTTP contract for selectors, overview, Canvas navigation,
 Inspector details, and proposal review.
 
+Implemented routes are:
+
+- `/` — selected model overview;
+- `/models` — model-scoped discovery activity;
+- `/models/runs/{run_id}` — run detail and proposal workspace;
+- `/models/runs/{run_id}/profile/{table_id}` — historical table profile; and
+- `/canvas` — current or historical review graph.
+
+Every route preserves the authorized `organization` and `model` query
+parameters. React does not link to the legacy `/runs` pages.
+
+Canvas deep links accept `lens=physical|semantic|ontology`,
+`review_run_id`, `focus_node_id`, `element_id`, and a comma-separated
+`related_node_ids`. The graph is loaded around `focus_node_id`; `element_id`
+selects a returned node or edge in the Inspector; related node IDs guide
+multi-node fitting for relationship links. Invalid or unauthorized focus and
+selection values are removed rather than used to bypass graph projection.
+
+The run list and detail poll every five seconds only while the API returns
+`queued` or `running`. Polling stops for terminal states (`completed`,
+`completed_with_warnings`, `failed`, or `cancelled`) and for nullable status.
+A transition from active to terminal refreshes the model overview. A refresh
+failure leaves the last successful run data visible with retry feedback.
+Run detail automatically loads the authorized profile summary and renders
+linked harvested/profiled tables plus accepted, suggested, and rejected
+relationship groups. Historical table detail renders key candidates, glossary
+matches, cardinality accuracy, and accepted relationship evidence.
+
 The legacy console also includes Jinja2 HTML with CSS in
 `apps/console/static`. It
 contains health, Atlas glossary/term CRUD, discovery run browsing, proposal
@@ -413,6 +491,19 @@ Existing APIs need not be redesigned for the covered capabilities.
      proposals can be reviewed.
    - There is no separate concept-mapping proposal type in the current
      discovery contract, so the UI does not fabricate one.
+
+7. **Explicit follow-ups**
+   - The API does not persist producer lifecycle events. Accurate queued,
+     running, failed, cancelled, progress, initiator, warning, and error values
+     require a future producer-owned status store.
+   - There is no discovery launch or cancellation endpoint. The UI does not
+     invoke job scripts and exposes no cancel action.
+   - Rich glossary CRUD, version history, and producer persistence remain
+     separate follow-up work.
+
+Run/profile parity with the legacy `run.html` and `run_table.html` read-only
+evidence is complete. Published Atlas glossary CRUD and assignments remain a
+separate governance capability.
 
 ## Verification baseline
 
