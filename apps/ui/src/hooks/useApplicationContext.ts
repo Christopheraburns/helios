@@ -8,8 +8,16 @@ import {
 import {
   ApiDiagnostics,
   ApiUnavailableError,
+  AuditEvent,
+  AuditEventCollection,
+  AuditEventOptions,
+  AuditSessionCollection,
   AuthenticationError,
   AuthorizationError,
+  ClientAuditEvent,
+  ConversationCollection,
+  ConversationDetail,
+  PersistedConversationTurn,
   DiscoveryRun,
   DiscoveryRunsResponse,
   HeliosApi,
@@ -17,6 +25,13 @@ import {
   HeliosGraphDto,
   HistoricalProfileSummary,
   HistoricalTableProfile,
+  GlossaryAssignableAsset,
+  GlossaryImportResult,
+  GlossaryTermResponse,
+  GlossaryTermsOptions,
+  GlossaryTermsResponse,
+  GlossaryTermWrite,
+  ModelGlossary,
   GraphNavigationOptions,
   GraphElementDetail,
   ProposalCollection,
@@ -117,6 +132,79 @@ export interface ApplicationContextState {
     modelId: string,
     includeDetails?: boolean,
   ) => Promise<ModelSystemStatus>;
+  loadModelGlossary: (modelId: string) => Promise<ModelGlossary>;
+  createModelGlossary: (
+    modelId: string,
+    body: { name: string; description: string },
+  ) => Promise<ModelGlossary>;
+  deleteModelGlossary: (modelId: string) => Promise<{ ok: true }>;
+  loadModelGlossaryTerms: (
+    modelId: string,
+    options?: GlossaryTermsOptions,
+  ) => Promise<GlossaryTermsResponse>;
+  loadModelGlossaryTerm: (
+    modelId: string,
+    termId: string,
+  ) => Promise<GlossaryTermResponse>;
+  createModelGlossaryTerm: (
+    modelId: string,
+    body: GlossaryTermWrite,
+  ) => Promise<GlossaryTermResponse>;
+  updateModelGlossaryTerm: (
+    modelId: string,
+    termId: string,
+    body: GlossaryTermWrite,
+  ) => Promise<GlossaryTermResponse>;
+  deleteModelGlossaryTerm: (
+    modelId: string,
+    termId: string,
+  ) => Promise<{ ok: true }>;
+  importModelGlossary: (
+    modelId: string,
+    file: File,
+  ) => Promise<GlossaryImportResult>;
+  loadGlossaryAssignableAssets: (
+    modelId: string,
+    query?: string,
+  ) => Promise<{ items: GlossaryAssignableAsset[] }>;
+  assignModelGlossaryTerm: (
+    modelId: string,
+    termId: string,
+    canvasElementId: string,
+  ) => Promise<{ ok: true }>;
+  unassignModelGlossaryTerm: (
+    modelId: string,
+    termId: string,
+    assignmentId: string,
+  ) => Promise<{ ok: true }>;
+  loadModelConversations: (
+    modelId: string,
+  ) => Promise<ConversationCollection>;
+  createModelConversation: (
+    modelId: string,
+    message: string,
+  ) => Promise<PersistedConversationTurn>;
+  loadModelConversation: (
+    modelId: string,
+    conversationId: string,
+  ) => Promise<ConversationDetail>;
+  appendModelConversationTurn: (
+    modelId: string,
+    conversationId: string,
+    message: string,
+    expectedVersion: number,
+  ) => Promise<PersistedConversationTurn>;
+  loadAuditEvents: (
+    options?: AuditEventOptions,
+  ) => Promise<AuditEventCollection>;
+  loadAuditEvent: (eventId: string) => Promise<AuditEvent>;
+  loadAuditSessions: (
+    organizationId?: string,
+    includeAll?: boolean,
+  ) => Promise<AuditSessionCollection>;
+  recordClientActivity: (
+    event: ClientAuditEvent,
+  ) => Promise<{ ok: true }>;
 }
 
 function describeError(error: unknown): {
@@ -398,18 +486,31 @@ export function useApplicationContext(
         )
       ) {
         writeContext(organizationId, "", false);
+        const api = client();
+        void api.recordClientAuditEvent?.({
+          action: "context.organization_select",
+          resource_type: "organization",
+          resource_id: organizationId,
+        }).catch(() => undefined);
       }
     },
-    [organizations, writeContext],
+    [client, organizations, writeContext],
   );
 
   const selectModel = useCallback(
     (modelId: string) => {
       if (models.some((model) => model.id === modelId)) {
         writeContext(selectedOrganizationId, modelId, false);
+        const api = client();
+        void api.recordClientAuditEvent?.({
+          action: "context.model_select",
+          resource_type: "model",
+          resource_id: modelId,
+          model_id: modelId,
+        }).catch(() => undefined);
       }
     },
-    [models, selectedOrganizationId, writeContext],
+    [client, models, selectedOrganizationId, writeContext],
   );
 
   const loadModelGraph = useCallback(
@@ -526,6 +627,195 @@ export function useApplicationContext(
       client().modelStatus(modelId, includeDetails),
     [client],
   );
+  const loadModelGlossary = useCallback((modelId: string) => {
+    const api = client();
+    if (!api.modelGlossary) {
+      throw new ApiUnavailableError("Glossary management is unavailable.");
+    }
+    return api.modelGlossary(modelId);
+  }, [client]);
+  const createModelGlossary = useCallback((
+    modelId: string,
+    body: { name: string; description: string },
+  ) => {
+    const api = client();
+    if (!api.createModelGlossary) {
+      throw new ApiUnavailableError("Glossary management is unavailable.");
+    }
+    return api.createModelGlossary(modelId, body);
+  }, [client]);
+  const deleteModelGlossary = useCallback((modelId: string) => {
+    const api = client();
+    if (!api.deleteModelGlossary) {
+      throw new ApiUnavailableError("Glossary management is unavailable.");
+    }
+    return api.deleteModelGlossary(modelId);
+  }, [client]);
+  const loadModelGlossaryTerms = useCallback((
+    modelId: string,
+    options?: GlossaryTermsOptions,
+  ) => {
+    const api = client();
+    if (!api.modelGlossaryTerms) {
+      throw new ApiUnavailableError("Glossary terms are unavailable.");
+    }
+    return api.modelGlossaryTerms(modelId, options);
+  }, [client]);
+  const loadModelGlossaryTerm = useCallback((
+    modelId: string,
+    termId: string,
+  ) => {
+    const api = client();
+    if (!api.modelGlossaryTerm) {
+      throw new ApiUnavailableError("Glossary term details are unavailable.");
+    }
+    return api.modelGlossaryTerm(modelId, termId);
+  }, [client]);
+  const createModelGlossaryTerm = useCallback((
+    modelId: string,
+    body: GlossaryTermWrite,
+  ) => {
+    const api = client();
+    if (!api.createModelGlossaryTerm) {
+      throw new ApiUnavailableError("Glossary term creation is unavailable.");
+    }
+    return api.createModelGlossaryTerm(modelId, body);
+  }, [client]);
+  const updateModelGlossaryTerm = useCallback((
+    modelId: string,
+    termId: string,
+    body: GlossaryTermWrite,
+  ) => {
+    const api = client();
+    if (!api.updateModelGlossaryTerm) {
+      throw new ApiUnavailableError("Glossary term editing is unavailable.");
+    }
+    return api.updateModelGlossaryTerm(modelId, termId, body);
+  }, [client]);
+  const deleteModelGlossaryTerm = useCallback((
+    modelId: string,
+    termId: string,
+  ) => {
+    const api = client();
+    if (!api.deleteModelGlossaryTerm) {
+      throw new ApiUnavailableError("Glossary term deletion is unavailable.");
+    }
+    return api.deleteModelGlossaryTerm(modelId, termId);
+  }, [client]);
+  const importModelGlossary = useCallback((modelId: string, file: File) => {
+    const api = client();
+    if (!api.importModelGlossary) {
+      throw new ApiUnavailableError("Glossary import is unavailable.");
+    }
+    return api.importModelGlossary(modelId, file);
+  }, [client]);
+  const loadGlossaryAssignableAssets = useCallback((
+    modelId: string,
+    query?: string,
+  ) => {
+    const api = client();
+    if (!api.modelGlossaryAssignableAssets) {
+      throw new ApiUnavailableError("Glossary assignments are unavailable.");
+    }
+    return api.modelGlossaryAssignableAssets(modelId, query);
+  }, [client]);
+  const assignModelGlossaryTerm = useCallback((
+    modelId: string,
+    termId: string,
+    canvasElementId: string,
+  ) => {
+    const api = client();
+    if (!api.assignModelGlossaryTerm) {
+      throw new ApiUnavailableError("Glossary assignments are unavailable.");
+    }
+    return api.assignModelGlossaryTerm(modelId, termId, canvasElementId);
+  }, [client]);
+  const unassignModelGlossaryTerm = useCallback((
+    modelId: string,
+    termId: string,
+    assignmentId: string,
+  ) => {
+    const api = client();
+    if (!api.unassignModelGlossaryTerm) {
+      throw new ApiUnavailableError("Glossary assignments are unavailable.");
+    }
+    return api.unassignModelGlossaryTerm(modelId, termId, assignmentId);
+  }, [client]);
+  const loadModelConversations = useCallback((modelId: string) => {
+    const api = client();
+    if (!api.modelConversations) {
+      throw new ApiUnavailableError("Conversations are unavailable.");
+    }
+    return api.modelConversations(modelId);
+  }, [client]);
+  const createModelConversation = useCallback((
+    modelId: string,
+    message: string,
+  ) => {
+    const api = client();
+    if (!api.createModelConversation) {
+      throw new ApiUnavailableError("Conversations are unavailable.");
+    }
+    return api.createModelConversation(modelId, message);
+  }, [client]);
+  const loadModelConversation = useCallback((
+    modelId: string,
+    conversationId: string,
+  ) => {
+    const api = client();
+    if (!api.modelConversation) {
+      throw new ApiUnavailableError("Conversation details are unavailable.");
+    }
+    return api.modelConversation(modelId, conversationId);
+  }, [client]);
+  const appendModelConversationTurn = useCallback((
+    modelId: string,
+    conversationId: string,
+    message: string,
+    expectedVersion: number,
+  ) => {
+    const api = client();
+    if (!api.appendModelConversationTurn) {
+      throw new ApiUnavailableError("Conversations are unavailable.");
+    }
+    return api.appendModelConversationTurn(
+      modelId,
+      conversationId,
+      message,
+      expectedVersion,
+    );
+  }, [client]);
+  const loadAuditEvents = useCallback((options?: AuditEventOptions) => {
+    const api = client();
+    if (!api.auditEvents) {
+      throw new ApiUnavailableError("Activity logs are unavailable.");
+    }
+    return api.auditEvents(options);
+  }, [client]);
+  const loadAuditEvent = useCallback((eventId: string) => {
+    const api = client();
+    if (!api.auditEvent) {
+      throw new ApiUnavailableError("Activity log details are unavailable.");
+    }
+    return api.auditEvent(eventId);
+  }, [client]);
+  const loadAuditSessions = useCallback((
+    organizationId?: string,
+    includeAll = false,
+  ) => {
+    const api = client();
+    if (!api.auditSessions) {
+      throw new ApiUnavailableError("Activity log sessions are unavailable.");
+    }
+    return api.auditSessions(organizationId, includeAll);
+  }, [client]);
+  const recordClientActivity = useCallback((event: ClientAuditEvent) => {
+    const api = client();
+    if (!api.recordClientAuditEvent) {
+      return Promise.resolve({ ok: true as const });
+    }
+    return api.recordClientAuditEvent(event);
+  }, [client]);
   const applicationUrl = client().applicationUrl;
 
   return {
@@ -562,5 +852,25 @@ export function useApplicationContext(
     refreshModelOverview: () =>
       setOverviewVersion((version) => version + 1),
     loadModelStatus,
+    loadModelGlossary,
+    createModelGlossary,
+    deleteModelGlossary,
+    loadModelGlossaryTerms,
+    loadModelGlossaryTerm,
+    createModelGlossaryTerm,
+    updateModelGlossaryTerm,
+    deleteModelGlossaryTerm,
+    importModelGlossary,
+    loadGlossaryAssignableAssets,
+    assignModelGlossaryTerm,
+    unassignModelGlossaryTerm,
+    loadModelConversations,
+    createModelConversation,
+    loadModelConversation,
+    appendModelConversationTurn,
+    loadAuditEvents,
+    loadAuditEvent,
+    loadAuditSessions,
+    recordClientActivity,
   };
 }

@@ -7,20 +7,24 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+import csv
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from io import StringIO
 from pathlib import Path
 from typing import Annotated, Any, Callable, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
-from helios_core import authz
+from helios_core import audit, authz
 from helios_core import health as system_health
 from helios_core import publication
 from helios_core import review as review_store
 from helios_core import runs as runstore
 from helios_core.artifacts import ArtifactStore
+from helios_core.atlas import AtlasClient, AtlasError
+from helios_core.config import atlas_config
 from helios_core.domain import Model, Organization
 from helios_core.graph import (
     ArtifactGraphRepository,
@@ -31,7 +35,17 @@ from helios_core.graph import (
     graph_response,
     navigation_graph_response,
 )
-from helios_core.metadata import MetadataRepository
+from helios_core.metadata import (
+    AuditEvent,
+    AuditSession,
+    ConversationVersionConflict,
+    MetadataRepository,
+    StoredConversation,
+)
+from apps.console.conversation import (
+    ConversationService,
+    ConversationUnavailable,
+)
 
 api_router = APIRouter(prefix="/api/v1", tags=["api-v1"])
 
@@ -103,6 +117,151 @@ class ResetReviewRequest(BaseModel):
     section: ReviewSection | None = None
 
 
+class GlossaryCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=4000)
+
+
+class GlossaryTermWriteRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    definition: str = Field(default="", max_length=4000)
+    long_description: str = Field(default="", max_length=12000)
+    abbreviation: str = Field(default="", max_length=100)
+    examples: list[str] = Field(default_factory=list, max_length=100)
+
+
+class GlossaryAssignmentRequest(BaseModel):
+    canvas_element_id: str = Field(min_length=1, max_length=1000)
+
+
+class ConversationTurnRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=10_000)
+
+
+class PersistedConversationTurnRequest(ConversationTurnRequest):
+    expected_version: int = Field(ge=1)
+
+
+class ConversationToolTraceResponse(BaseModel):
+    tool: str
+    arguments: dict[str, Any]
+    result: Any
+
+
+class ConversationQueryResultResponse(BaseModel):
+    columns: list[str]
+    rows: list[list[Any]]
+    sql: str | None = None
+
+
+class ConversationTurnResponse(BaseModel):
+    model_id: str
+    answer: str
+    tool_trace: list[ConversationToolTraceResponse]
+    query_result: ConversationQueryResultResponse | None = None
+
+
+class ConversationMessageResponse(BaseModel):
+    id: str
+    role: Literal["user", "assistant"]
+    content: str
+    created_at: datetime
+
+
+class ConversationSummaryResponse(BaseModel):
+    id: str
+    model_id: str
+    title: str
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationDetailResponse(ConversationSummaryResponse):
+    messages: list[ConversationMessageResponse]
+
+
+class ConversationCollectionResponse(BaseModel):
+    model_id: str
+    conversations: list[ConversationSummaryResponse]
+
+
+class PersistedConversationTurnResponse(BaseModel):
+    conversation: ConversationDetailResponse
+    turn: ConversationTurnResponse
+
+
+class AuditClientEventRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal[
+        "navigation.view",
+        "context.organization_select",
+        "context.model_select",
+        "workspace.collapse",
+        "workspace.expand",
+        "canvas.lens_change",
+        "canvas.node_focus",
+        "canvas.node_select",
+        "activity.filter_change",
+    ]
+    path: str | None = Field(default=None, max_length=300)
+    resource_type: Literal[
+        "application",
+        "organization",
+        "model",
+        "workspace",
+        "canvas",
+        "node",
+        "activity",
+    ] | None = None
+    resource_id: str | None = Field(default=None, max_length=300)
+    model_id: str | None = Field(default=None, max_length=200)
+
+
+class AuditEventResponse(BaseModel):
+    id: str
+    occurred_at: datetime
+    request_id: str | None
+    session_id: str | None
+    principal_id: str | None
+    organization_id: str | None
+    model_id: str | None
+    component: str
+    event_type: str
+    action: str
+    resource_type: str | None
+    resource_id: str | None
+    outcome: str
+    severity: str
+    http_status: int | None
+    duration_ms: float | None
+    summary: str
+    details: dict[str, Any]
+    diagnostics: dict[str, Any] | None = None
+
+
+class AuditEventCollectionResponse(BaseModel):
+    items: list[AuditEventResponse]
+    page: dict[str, Any]
+    filters: dict[str, Any]
+    available_actions: list[str]
+
+
+class AuditSessionResponse(BaseModel):
+    session_id: str
+    principal_id: str
+    first_seen_at: datetime
+    last_seen_at: datetime
+    event_count: int
+    organization_id: str | None
+
+
+class AuditSessionCollectionResponse(BaseModel):
+    sessions: list[AuditSessionResponse]
+    available_actions: list[str]
+
+
 class ResourceStore:
     """Small application-boundary store, replaceable by persistent storage later."""
 
@@ -156,8 +315,8 @@ class AuthorizedModel:
         ]
 
 
-def current_principal(request: Request) -> authz.Principal:
-    """Translate trusted Workbench identity context into a core Principal."""
+def principal_from_request(request: Request) -> authz.Principal | None:
+    """Translate trusted Workbench identity context when one is present."""
     development_subject = (
         os.environ.get("HELIOS_DEV_USER")
         if os.environ.get("HELIOS_DEV") == "1"
@@ -169,13 +328,20 @@ def current_principal(request: Request) -> authz.Principal:
         or development_subject
     )
     if not subject:
-        raise HTTPException(401, "authenticated principal is required")
+        return None
     return authz.Principal(
         issuer="cloudera-workbench",
         subject=subject,
         kind=authz.PrincipalKind.HUMAN,
         display_name=subject,
     )
+
+
+def current_principal(request: Request) -> authz.Principal:
+    principal = principal_from_request(request)
+    if principal is None:
+        raise HTTPException(401, "authenticated principal is required")
+    return principal
 
 
 def resource_store(request: Request) -> ResourceStore | MetadataRepository:
@@ -197,6 +363,26 @@ def authorization_policy(
 def graph_repository(request: Request) -> GraphRepository:
     override = getattr(request.app.state, "graph_repository", None)
     return override or ArtifactGraphRepository(ArtifactStore(runstore.ROOT))
+
+
+def atlas_client(request: Request) -> AtlasClient:
+    override = getattr(request.app.state, "atlas_client", None)
+    if override is not None:
+        return override
+    configuration = atlas_config()
+    if configuration is None:
+        raise HTTPException(503, "Atlas glossary service is not configured")
+    return AtlasClient(configuration)
+
+
+def conversation_service(request: Request) -> ConversationService:
+    override = getattr(request.app.state, "conversation_service", None)
+    if override is not None:
+        return override
+    try:
+        return ConversationService.from_env()
+    except ConversationUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
 
 
 def load_organization(
@@ -789,6 +975,103 @@ def _save_review(
     return review_store.load(str(review_path), review["run_id"])
 
 
+def _conversation_message(body: ConversationTurnRequest) -> str:
+    message = body.message.strip()
+    if not message:
+        raise HTTPException(422, "message must not be empty")
+    return message
+
+
+def _conversation_title(message: str) -> str:
+    title = " ".join(message.split())
+    return title if len(title) <= 80 else f"{title[:79].rstrip()}…"
+
+
+def _conversation_response(
+    conversation: StoredConversation,
+    *,
+    include_messages: bool,
+) -> dict:
+    response = {
+        "id": conversation.id,
+        "model_id": conversation.model_id,
+        "title": conversation.title,
+        "version": conversation.version,
+        "created_at": conversation.created_at,
+        "updated_at": conversation.updated_at,
+    }
+    if include_messages:
+        response["messages"] = [
+            {
+                "id": message.id,
+                "role": message.role,
+                "content": message.content,
+                "created_at": message.created_at,
+            }
+            for message in conversation.messages
+        ]
+    return response
+
+
+def _audit_event_response(
+    event: AuditEvent,
+    *,
+    include_diagnostics: bool = False,
+) -> dict:
+    details = dict(event.details or {})
+    diagnostics = details.pop("diagnostics", None)
+    return {
+        "id": event.id,
+        "occurred_at": event.occurred_at,
+        "request_id": event.request_id,
+        "session_id": event.session_id,
+        "principal_id": event.principal_id,
+        "organization_id": event.organization_id,
+        "model_id": event.model_id,
+        "component": event.component,
+        "event_type": event.event_type,
+        "action": event.action,
+        "resource_type": event.resource_type,
+        "resource_id": event.resource_id,
+        "outcome": event.outcome,
+        "severity": event.severity,
+        "http_status": event.http_status,
+        "duration_ms": event.duration_ms,
+        "summary": event.summary,
+        "details": details,
+        "diagnostics": (
+            diagnostics
+            if include_diagnostics and isinstance(diagnostics, dict)
+            else None
+        ),
+    }
+
+
+def _audit_session_response(session: AuditSession) -> dict:
+    return {
+        "session_id": session.session_id,
+        "principal_id": session.principal_id,
+        "first_seen_at": session.first_seen_at,
+        "last_seen_at": session.last_seen_at,
+        "event_count": session.event_count,
+        "organization_id": session.organization_id,
+    }
+
+
+def _can_manage_organization(
+    principal: authz.Principal,
+    policy: authz.Policy,
+    organization_id: str,
+) -> bool:
+    return policy.can(
+        principal,
+        authz.Action.ORGANIZATION_MANAGE,
+        authz.Resource(
+            "organization", organization_id, organization_id
+        ),
+    ).allowed
+
+
 @api_router.get("/healthz")
 def api_health() -> dict:
     return {"status": "ok"}
@@ -813,6 +1096,208 @@ def api_diagnostics(
         },
         "accessible_organization_count": len(organization_ids),
     }
+
+
+@api_router.get(
+    "/audit/events",
+    response_model=AuditEventCollectionResponse,
+)
+def list_audit_events(
+    request: Request,
+    principal: Annotated[authz.Principal, Depends(current_principal)],
+    policy: Annotated[authz.Policy, Depends(authorization_policy)],
+    organization_id: str | None = None,
+    principal_id: str | None = None,
+    session_id: str | None = None,
+    model_id: str | None = None,
+    component: str | None = None,
+    event_type: str | None = None,
+    outcome: str | None = None,
+    severity: str | None = None,
+    occurred_from: datetime | None = None,
+    occurred_to: datetime | None = None,
+    include_all: bool = False,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict:
+    repository: MetadataRepository = request.app.state.metadata_repository
+    normalized_session_id = audit.normalize_correlation_id(session_id)
+    if session_id and normalized_session_id is None:
+        raise HTTPException(422, "session_id is invalid")
+    organization_admin = bool(
+        organization_id
+        and _can_manage_organization(principal, policy, organization_id)
+    )
+    if include_all and not organization_admin:
+        raise HTTPException(
+            403,
+            "organization administration permission is required",
+        )
+    if principal_id and principal_id != principal.id and not organization_admin:
+        raise HTTPException(403, "another principal's audit events are unavailable")
+    effective_principal = (
+        principal_id
+        if organization_admin and principal_id
+        else None
+        if organization_admin and include_all
+        else principal.id
+    )
+    events, total = repository.audit_events(
+        principal_id=effective_principal,
+        organization_id=organization_id,
+        session_id=normalized_session_id,
+        model_id=model_id,
+        component=component,
+        event_type=event_type,
+        outcome=outcome,
+        severity=severity,
+        occurred_from=occurred_from,
+        occurred_to=occurred_to,
+        offset=offset,
+        limit=limit,
+    )
+    actions = ["audit.read"]
+    if organization_admin:
+        actions.append("audit.read_organization")
+    return {
+        "items": [_audit_event_response(item) for item in events],
+        "page": {
+            "offset": offset,
+            "limit": limit,
+            "returned": len(events),
+            "total": total,
+            "has_more": offset + len(events) < total,
+        },
+        "filters": {
+            "organization_id": organization_id,
+            "principal_id": effective_principal,
+            "session_id": session_id,
+            "model_id": model_id,
+            "component": component,
+            "event_type": event_type,
+            "outcome": outcome,
+            "severity": severity,
+            "occurred_from": occurred_from,
+            "occurred_to": occurred_to,
+            "include_all": include_all,
+        },
+        "available_actions": actions,
+    }
+
+
+@api_router.get(
+    "/audit/events/{event_id}",
+    response_model=AuditEventResponse,
+)
+def get_audit_event(
+    event_id: str,
+    request: Request,
+    principal: Annotated[authz.Principal, Depends(current_principal)],
+    policy: Annotated[authz.Policy, Depends(authorization_policy)],
+) -> dict:
+    repository: MetadataRepository = request.app.state.metadata_repository
+    event = repository.audit_event(event_id)
+    if event is None:
+        raise HTTPException(404, "audit event not found")
+    own_event = event.principal_id == principal.id
+    organization_admin = bool(
+        event.organization_id
+        and _can_manage_organization(
+            principal, policy, event.organization_id
+        )
+    )
+    if not own_event and not organization_admin:
+        raise HTTPException(404, "audit event not found")
+    return _audit_event_response(
+        event,
+        include_diagnostics=organization_admin,
+    )
+
+
+@api_router.get(
+    "/audit/sessions",
+    response_model=AuditSessionCollectionResponse,
+)
+def list_audit_sessions(
+    request: Request,
+    principal: Annotated[authz.Principal, Depends(current_principal)],
+    policy: Annotated[authz.Policy, Depends(authorization_policy)],
+    organization_id: str | None = None,
+    include_all: bool = False,
+    limit: int = Query(default=100, ge=1, le=200),
+) -> dict:
+    repository: MetadataRepository = request.app.state.metadata_repository
+    organization_admin = bool(
+        organization_id
+        and _can_manage_organization(principal, policy, organization_id)
+    )
+    if include_all and not organization_admin:
+        raise HTTPException(
+            403,
+            "organization administration permission is required",
+        )
+    sessions = repository.audit_sessions(
+        principal_id=None if include_all else principal.id,
+        organization_id=organization_id,
+        limit=limit,
+    )
+    actions = ["audit.read"]
+    if organization_admin:
+        actions.append("audit.read_organization")
+    return {
+        "sessions": [
+            _audit_session_response(session) for session in sessions
+        ],
+        "available_actions": actions,
+    }
+
+
+@api_router.post("/audit/client-events")
+def record_client_audit_event(
+    body: AuditClientEventRequest,
+    request: Request,
+    principal: Annotated[authz.Principal, Depends(current_principal)],
+    policy: Annotated[authz.Policy, Depends(authorization_policy)],
+) -> dict:
+    repository: MetadataRepository = request.app.state.metadata_repository
+    organization_id = None
+    model_id = None
+    if body.model_id:
+        model = repository.model(body.model_id)
+        if model is None:
+            raise HTTPException(404, "model not found")
+        _require(
+            policy,
+            principal,
+            authz.Action.MODEL_READ,
+            authz.Resource(
+                "model", model.id, model.organization_id
+            ),
+        )
+        model_id = model.id
+        organization_id = model.organization_id
+    elif body.resource_type == "organization" and body.resource_id:
+        grant_organizations = {
+            grant.organization_id
+            for grant in repository.grants_for_principal(principal.id)
+        }
+        if body.resource_id not in grant_organizations:
+            raise HTTPException(403, "organization is unavailable")
+        organization_id = body.resource_id
+    audit.emit(
+        repository,
+        component="ui",
+        event_type="ui.activity",
+        action=body.action,
+        outcome="success",
+        summary=f"UI activity: {body.action}",
+        resource_type=body.resource_type,
+        resource_id=body.resource_id,
+        organization_id=organization_id,
+        model_id=model_id,
+        details={"path": body.path} if body.path else {},
+    )
+    return {"ok": True}
 
 
 @api_router.get("/organizations")
@@ -952,6 +1437,186 @@ def get_model_overview(
         request.app.state.metadata_repository,
         graphs,
     )
+
+
+@api_router.get(
+    "/models/{model_id}/conversations",
+    response_model=ConversationCollectionResponse,
+)
+def list_model_conversations(
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+) -> dict:
+    repository: MetadataRepository = request.app.state.metadata_repository
+    conversations = repository.conversations_for_principal(
+        context.model.id, context.principal.id
+    )
+    return {
+        "model_id": context.model.id,
+        "conversations": [
+            _conversation_response(item, include_messages=False)
+            for item in conversations
+        ],
+    }
+
+
+@api_router.post(
+    "/models/{model_id}/conversations",
+    response_model=PersistedConversationTurnResponse,
+)
+async def create_model_conversation(
+    body: ConversationTurnRequest,
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+    service: Annotated[
+        ConversationService,
+        Depends(conversation_service),
+    ],
+) -> dict:
+    message = _conversation_message(body)
+    try:
+        turn = await service.turn(
+            context.principal,
+            context.model.organization_id,
+            context.model.id,
+            message,
+            history=[],
+        )
+    except ConversationUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+    repository: MetadataRepository = request.app.state.metadata_repository
+    conversation = repository.create_conversation(
+        context.model.id,
+        context.principal.id,
+        _conversation_title(message),
+        message,
+        turn["answer"],
+    )
+    return {
+        "conversation": _conversation_response(
+            conversation, include_messages=True
+        ),
+        "turn": turn,
+    }
+
+
+@api_router.get(
+    "/models/{model_id}/conversations/{conversation_id}",
+    response_model=ConversationDetailResponse,
+)
+def get_model_conversation(
+    conversation_id: str,
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+) -> dict:
+    repository: MetadataRepository = request.app.state.metadata_repository
+    conversation = repository.conversation_for_principal(
+        conversation_id,
+        context.model.id,
+        context.principal.id,
+    )
+    if conversation is None:
+        raise HTTPException(404, "conversation not found")
+    return _conversation_response(conversation, include_messages=True)
+
+
+@api_router.post(
+    "/models/{model_id}/conversations/{conversation_id}/turns",
+    response_model=PersistedConversationTurnResponse,
+)
+async def append_model_conversation_turn(
+    conversation_id: str,
+    body: PersistedConversationTurnRequest,
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+    service: Annotated[
+        ConversationService,
+        Depends(conversation_service),
+    ],
+) -> dict:
+    message = _conversation_message(body)
+    repository: MetadataRepository = request.app.state.metadata_repository
+    conversation = repository.conversation_for_principal(
+        conversation_id,
+        context.model.id,
+        context.principal.id,
+    )
+    if conversation is None:
+        raise HTTPException(404, "conversation not found")
+    if conversation.version != body.expected_version:
+        raise HTTPException(
+            409,
+            "conversation changed; reload before sending another message",
+        )
+    history = [
+        {"role": item.role, "content": item.content}
+        for item in conversation.messages
+    ]
+    try:
+        turn = await service.turn(
+            context.principal,
+            context.model.organization_id,
+            context.model.id,
+            message,
+            history=history,
+        )
+        updated = repository.append_conversation_turn(
+            conversation.id,
+            context.model.id,
+            context.principal.id,
+            body.expected_version,
+            message,
+            turn["answer"],
+        )
+    except ConversationVersionConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except ConversationUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return {
+        "conversation": _conversation_response(
+            updated, include_messages=True
+        ),
+        "turn": turn,
+    }
+
+
+@api_router.post(
+    "/models/{model_id}/conversation/turns",
+    response_model=ConversationTurnResponse,
+)
+async def create_model_conversation_turn(
+    body: ConversationTurnRequest,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+    service: Annotated[
+        ConversationService,
+        Depends(conversation_service),
+    ],
+) -> dict:
+    message = _conversation_message(body)
+    try:
+        return await service.turn(
+            context.principal,
+            context.model.organization_id,
+            context.model.id,
+            message,
+        )
+    except ConversationUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
 
 
 @api_router.get("/models/{model_id}/status")
@@ -1391,18 +2056,505 @@ def publish_model_review(
     }
 
 
+def _atlas_request(operation: Callable[[], Any]) -> Any:
+    try:
+        return operation()
+    except AtlasError as exc:
+        status = exc.status if exc.status in {400, 404, 409, 422} else 502
+        raise HTTPException(status, str(exc)) from exc
+
+
+def _glossary_document(context: AuthorizedModel, atlas: AtlasClient) -> dict:
+    glossary_id = context.model.glossary_id
+    if not glossary_id:
+        raise HTTPException(404, "this model does not have a glossary")
+    document = _atlas_request(lambda: atlas.get_glossary(glossary_id))
+    if document.get("guid") not in {None, glossary_id}:
+        raise HTTPException(502, "Atlas returned an unexpected glossary")
+    return document
+
+
+def _term_document(
+    context: AuthorizedModel,
+    atlas: AtlasClient,
+    term_id: str,
+) -> dict:
+    glossary = _glossary_document(context, atlas)
+    term = _atlas_request(lambda: atlas.get_term(term_id))
+    anchor = term.get("anchor") or {}
+    if anchor.get("glossaryGuid") != glossary.get("guid"):
+        raise HTTPException(404, "glossary term not found")
+    return term
+
+
+def _term_summary(term: dict) -> dict:
+    return {
+        "id": term.get("guid"),
+        "name": term.get("name") or "",
+        "definition": term.get("shortDescription") or "",
+        "long_description": term.get("longDescription") or "",
+        "abbreviation": term.get("abbreviation") or "",
+        "examples": list(term.get("examples") or []),
+        "status": "published",
+        "confidence": None,
+        "evidence": [],
+    }
+
+
+def _authorized_attribute_assets(
+    context: AuthorizedModel,
+    graphs: GraphRepository,
+) -> dict[str, dict[str, Any]]:
+    graph = authorize_graph(
+        graphs.graph_for_model(context.model),
+        context.model,
+        context.principal,
+        context.policy,
+    )
+    nodes = {node.id: node for node in graph.nodes}
+    parents = {
+        edge.target: edge.source
+        for edge in graph.edges
+        if edge.kind in {"physical", "physical_relationship"}
+    }
+    assets: dict[str, dict[str, Any]] = {}
+    for node in graph.nodes:
+        if node.kind != "attribute":
+            continue
+        dataset = nodes.get(parents.get(node.id, ""))
+        source = dataset.metadata.get("physical_name") if dataset else None
+        column = node.metadata.get("physical_name")
+        if not isinstance(source, str) or not isinstance(column, str):
+            continue
+        physical_identity = f"{source}.{column}".split("@", 1)[0]
+        if len(physical_identity.split(".")) != 3:
+            continue
+        assets[node.id] = {
+            "node": node,
+            "dataset": dataset,
+            "physical_identity": physical_identity,
+        }
+    return assets
+
+
+def _require_datasource_read(context: AuthorizedModel) -> None:
+    _require(
+        context.policy,
+        context.principal,
+        authz.Action.DATASOURCE_READ,
+        _resource_for_action(context.model, authz.Action.DATASOURCE_READ),
+    )
+
+
+def _save_model_glossary(
+    request: Request,
+    context: AuthorizedModel,
+    glossary_id: str | None,
+) -> Model:
+    repository: MetadataRepository = request.app.state.metadata_repository
+    stored = repository.stored_model(context.model.id)
+    if stored is None:
+        raise HTTPException(404, "model not found")
+    updated = replace(stored.model, glossary_id=glossary_id)
+    repository.save_model(updated, stored.created_by, stored.status)
+    return updated
+
+
 @api_router.get("/models/{model_id}/glossary")
 def get_model_glossary(
     context: Annotated[
         AuthorizedModel,
         Depends(authorize_model(authz.Action.GLOSSARY_READ, "glossary")),
     ],
+    atlas: Annotated[AtlasClient, Depends(atlas_client)],
 ) -> dict:
+    if not context.model.glossary_id:
+        return {
+            "model_id": context.model.id,
+            "glossary_id": None,
+            "glossary": None,
+            "available_actions": context.available_actions,
+        }
+    glossary = _glossary_document(context, atlas)
+    terms, truncated = _all_glossary_terms(atlas, glossary["guid"])
     return {
         "model_id": context.model.id,
-        "glossary_id": context.model.glossary_id,
+        "glossary_id": glossary["guid"],
+        "glossary": {
+            "id": glossary.get("guid"),
+            "name": glossary.get("name") or "",
+            "description": glossary.get("shortDescription") or "",
+            "term_count": len(terms),
+            "term_count_truncated": truncated,
+        },
         "available_actions": context.available_actions,
     }
+
+
+@api_router.post("/models/{model_id}/glossary", status_code=201)
+def create_model_glossary(
+    request: Request,
+    body: GlossaryCreateRequest,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.GLOSSARY_EDIT, "glossary")),
+    ],
+    atlas: Annotated[AtlasClient, Depends(atlas_client)],
+) -> dict:
+    if context.model.glossary_id:
+        raise HTTPException(409, "this model already has a glossary")
+    glossary = _atlas_request(
+        lambda: atlas.create_glossary(body.name.strip(), body.description.strip())
+    )
+    glossary_id = glossary.get("guid")
+    if not glossary_id:
+        raise HTTPException(502, "Atlas did not return a glossary identifier")
+    try:
+        _save_model_glossary(request, context, glossary_id)
+    except Exception:
+        try:
+            atlas.delete_glossary(glossary_id)
+        except AtlasError:
+            pass
+        raise
+    return {
+        "model_id": context.model.id,
+        "glossary_id": glossary_id,
+        "glossary": {
+            "id": glossary_id,
+            "name": glossary.get("name") or body.name.strip(),
+            "description": glossary.get("shortDescription")
+            or body.description.strip(),
+            "term_count": 0,
+        },
+        "available_actions": context.available_actions,
+    }
+
+
+@api_router.delete("/models/{model_id}/glossary")
+def delete_model_glossary(
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.GLOSSARY_EDIT, "glossary")),
+    ],
+    atlas: Annotated[AtlasClient, Depends(atlas_client)],
+    confirm: bool = False,
+) -> dict:
+    glossary = _glossary_document(context, atlas)
+    if not confirm:
+        terms, truncated = _all_glossary_terms(atlas, glossary["guid"])
+        raise HTTPException(
+            409,
+            {
+                "code": "confirmation_required",
+                "term_count": len(terms),
+                "term_count_truncated": truncated,
+            },
+        )
+    glossary_id = context.model.glossary_id
+    _atlas_request(lambda: atlas.delete_glossary(glossary_id))
+    _save_model_glossary(request, context, None)
+    return {"ok": True, "model_id": context.model.id}
+
+
+def _all_glossary_terms(atlas: AtlasClient, glossary_id: str) -> tuple[list[dict], bool]:
+    terms: list[dict] = []
+    page_size = 500
+    maximum = 10_000
+    while len(terms) < maximum:
+        page = _atlas_request(
+            lambda: atlas.list_terms(glossary_id, page_size, len(terms))
+        )
+        terms.extend(page)
+        if len(page) < page_size:
+            return terms, False
+    return terms, True
+
+
+@api_router.get("/models/{model_id}/glossary/terms")
+def list_model_glossary_terms(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.GLOSSARY_READ, "glossary")),
+    ],
+    atlas: Annotated[AtlasClient, Depends(atlas_client)],
+    query: str = Query(default="", max_length=200),
+    status: Literal["published"] | None = None,
+    sort: Literal["name", "definition", "abbreviation"] = "name",
+    direction: Literal["asc", "desc"] = "asc",
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict:
+    glossary = _glossary_document(context, atlas)
+    terms, truncated = _all_glossary_terms(atlas, glossary["guid"])
+    needle = query.strip().casefold()
+    if needle:
+        terms = [
+            term
+            for term in terms
+            if needle in (term.get("name") or "").casefold()
+            or needle in (term.get("shortDescription") or "").casefold()
+            or needle in (term.get("longDescription") or "").casefold()
+        ]
+    if status and status != "published":
+        terms = []
+    sort_field = {
+        "name": "name",
+        "definition": "shortDescription",
+        "abbreviation": "abbreviation",
+    }[sort]
+    terms.sort(
+        key=lambda term: (term.get(sort_field) or "").casefold(),
+        reverse=direction == "desc",
+    )
+    total = len(terms)
+    return {
+        "model_id": context.model.id,
+        "glossary_id": glossary["guid"],
+        "items": [_term_summary(term) for term in terms[offset : offset + limit]],
+        "offset": offset,
+        "limit": limit,
+        "total": total,
+        "truncated": truncated,
+        "available_actions": context.available_actions,
+    }
+
+
+@api_router.post("/models/{model_id}/glossary/terms", status_code=201)
+def create_model_glossary_term(
+    body: GlossaryTermWriteRequest,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.GLOSSARY_EDIT, "glossary")),
+    ],
+    atlas: Annotated[AtlasClient, Depends(atlas_client)],
+) -> dict:
+    glossary = _glossary_document(context, atlas)
+    term = _atlas_request(
+        lambda: atlas.create_term(
+            glossary["guid"],
+            body.name.strip(),
+            body.definition.strip(),
+            body.long_description.strip(),
+            body.abbreviation.strip(),
+            [example.strip() for example in body.examples if example.strip()],
+        )
+    )
+    return {
+        "term": _term_summary(term),
+        "available_actions": context.available_actions,
+    }
+
+
+@api_router.get("/models/{model_id}/glossary/terms/{term_id}")
+def get_model_glossary_term(
+    term_id: str,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.GLOSSARY_READ, "glossary")),
+    ],
+    atlas: Annotated[AtlasClient, Depends(atlas_client)],
+    graphs: Annotated[GraphRepository, Depends(graph_repository)],
+) -> dict:
+    term = _term_document(context, atlas, term_id)
+    authorized_assets = _authorized_attribute_assets(context, graphs)
+    canvas_by_physical = {
+        item["physical_identity"]: element_id
+        for element_id, item in authorized_assets.items()
+    }
+    assignments = []
+    for assignment in _atlas_request(lambda: atlas.assigned_entities(term_id)):
+        physical_identity = (assignment.get("displayText") or "").split("@", 1)[0]
+        canvas_id = canvas_by_physical.get(physical_identity)
+        if not canvas_id:
+            continue
+        node = authorized_assets[canvas_id]["node"]
+        assignments.append(
+            {
+                "id": assignment.get("guid"),
+                "name": assignment.get("displayText") or node.label,
+                "type": assignment.get("typeName") or "attribute",
+                "canvas_element_id": canvas_id,
+                "canvas_lens": "physical",
+            }
+        )
+    return {
+        "term": {**_term_summary(term), "assignments": assignments},
+        "available_actions": context.available_actions,
+    }
+
+
+@api_router.patch("/models/{model_id}/glossary/terms/{term_id}")
+def update_model_glossary_term(
+    term_id: str,
+    body: GlossaryTermWriteRequest,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.GLOSSARY_EDIT, "glossary")),
+    ],
+    atlas: Annotated[AtlasClient, Depends(atlas_client)],
+) -> dict:
+    _term_document(context, atlas, term_id)
+    term = _atlas_request(
+        lambda: atlas.update_term(
+            term_id,
+            name=body.name.strip(),
+            shortDescription=body.definition.strip(),
+            longDescription=body.long_description.strip(),
+            abbreviation=body.abbreviation.strip(),
+            examples=[
+                example.strip() for example in body.examples if example.strip()
+            ],
+        )
+    )
+    return {
+        "term": _term_summary(term),
+        "available_actions": context.available_actions,
+    }
+
+
+@api_router.delete("/models/{model_id}/glossary/terms/{term_id}")
+def delete_model_glossary_term(
+    term_id: str,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.GLOSSARY_EDIT, "glossary")),
+    ],
+    atlas: Annotated[AtlasClient, Depends(atlas_client)],
+) -> dict:
+    _term_document(context, atlas, term_id)
+    _atlas_request(lambda: atlas.delete_term(term_id))
+    return {"ok": True, "term_id": term_id}
+
+
+@api_router.post("/models/{model_id}/glossary/import")
+async def import_model_glossary_terms(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.GLOSSARY_EDIT, "glossary")),
+    ],
+    atlas: Annotated[AtlasClient, Depends(atlas_client)],
+    file: UploadFile = File(...),
+) -> dict:
+    glossary = _glossary_document(context, atlas)
+    content = await file.read(5_000_001)
+    if len(content) > 5_000_000:
+        raise HTTPException(413, "glossary CSV must be 5 MB or smaller")
+    try:
+        text = content.decode("utf-8-sig")
+        rows = list(csv.DictReader(StringIO(text)))
+    except (UnicodeDecodeError, csv.Error) as exc:
+        raise HTTPException(422, "glossary import must be a valid UTF-8 CSV") from exc
+    if not rows:
+        raise HTTPException(422, "glossary import contains no terms")
+    glossary_names = {
+        (row.get("GlossaryName") or "").strip() for row in rows
+    }
+    if glossary_names != {glossary.get("name") or ""}:
+        raise HTTPException(
+            422,
+            "every imported row must name the model's linked glossary",
+        )
+    result = _atlas_request(
+        lambda: atlas.import_csv_bytes(file.filename or "glossary.csv", content)
+    )
+    return {
+        "ok": True,
+        "imported": len((result or {}).get("successImportInfoList", [])),
+        "failed": len((result or {}).get("failedImportInfoList", [])),
+    }
+
+
+@api_router.get("/models/{model_id}/glossary/assignable-assets")
+def list_model_glossary_assignable_assets(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.GLOSSARY_EDIT, "glossary")),
+    ],
+    graphs: Annotated[GraphRepository, Depends(graph_repository)],
+    query: str = Query(default="", max_length=200),
+) -> dict:
+    _require_datasource_read(context)
+    needle = query.strip().casefold()
+    assets = _authorized_attribute_assets(context, graphs)
+    items = [
+        {
+            "id": element_id,
+            "name": item["node"].label,
+            "dataset_id": item["dataset"].id if item["dataset"] else None,
+        }
+        for element_id, item in assets.items()
+        if not needle
+        or needle in item["node"].label.casefold()
+        or needle in element_id.casefold()
+        or needle in item["physical_identity"].casefold()
+    ]
+    return {"items": sorted(items, key=lambda item: item["name"].casefold())[:200]}
+
+
+@api_router.post(
+    "/models/{model_id}/glossary/terms/{term_id}/assignments",
+    status_code=201,
+)
+def assign_model_glossary_term(
+    term_id: str,
+    body: GlossaryAssignmentRequest,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.GLOSSARY_EDIT, "glossary")),
+    ],
+    atlas: Annotated[AtlasClient, Depends(atlas_client)],
+    graphs: Annotated[GraphRepository, Depends(graph_repository)],
+) -> dict:
+    _require_datasource_read(context)
+    _term_document(context, atlas, term_id)
+    assets = _authorized_attribute_assets(context, graphs)
+    asset = assets.get(body.canvas_element_id)
+    if asset is None:
+        raise HTTPException(404, "authorized glossary assignment target not found")
+    database, table_name, column = asset["physical_identity"].split(".", 2)
+    hit = _atlas_request(lambda: atlas.find_column(database, table_name, column))
+    if hit is None:
+        raise HTTPException(404, "the selected attribute is not registered in Atlas")
+    _atlas_request(lambda: atlas.assign(term_id, [hit]))
+    return {"ok": True}
+
+
+@api_router.delete(
+    "/models/{model_id}/glossary/terms/{term_id}/assignments/{assignment_id}"
+)
+def unassign_model_glossary_term(
+    term_id: str,
+    assignment_id: str,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.GLOSSARY_EDIT, "glossary")),
+    ],
+    atlas: Annotated[AtlasClient, Depends(atlas_client)],
+    graphs: Annotated[GraphRepository, Depends(graph_repository)],
+) -> dict:
+    _require_datasource_read(context)
+    _term_document(context, atlas, term_id)
+    authorized_assets = _authorized_attribute_assets(context, graphs)
+    authorized_physical = {
+        item["physical_identity"] for item in authorized_assets.values()
+    }
+    assignment = next(
+        (
+            item
+            for item in _atlas_request(lambda: atlas.assigned_entities(term_id))
+            if item.get("guid") == assignment_id
+        ),
+        None,
+    )
+    if assignment is None:
+        raise HTTPException(404, "glossary assignment not found")
+    physical_identity = (assignment.get("displayText") or "").split("@", 1)[0]
+    if physical_identity not in authorized_physical:
+        raise HTTPException(404, "authorized glossary assignment not found")
+    _atlas_request(lambda: atlas.unassign(term_id, assignment_id))
+    return {"ok": True}
 
 
 @api_router.get("/models/{model_id}/semantic")

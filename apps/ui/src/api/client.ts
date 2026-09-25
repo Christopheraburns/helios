@@ -507,8 +507,225 @@ export interface ReviewPublicationResponse {
   manifest: Record<string, unknown>;
 }
 
+export interface GlossarySummary {
+  id: string;
+  name: string;
+  description: string;
+  term_count: number;
+}
+
+export interface ModelGlossary {
+  model_id: string;
+  glossary: GlossarySummary | null;
+  available_actions: string[];
+}
+
+export interface GlossaryTerm {
+  id: string;
+  name: string;
+  definition: string;
+  long_description: string;
+  abbreviation: string;
+  examples: string[];
+  status: "published";
+  confidence: number | null;
+  evidence: string[];
+}
+
+export interface GlossaryAssignment {
+  id: string;
+  name: string;
+  type: string;
+  canvas_element_id: string;
+  canvas_lens: "physical";
+}
+
+export interface GlossaryTermDetail extends GlossaryTerm {
+  assignments: GlossaryAssignment[];
+}
+
+export interface GlossaryTermsResponse {
+  model_id: string;
+  glossary_id: string;
+  items: GlossaryTerm[];
+  offset: number;
+  limit: number;
+  total: number;
+  truncated: boolean;
+  available_actions: string[];
+}
+
+export interface GlossaryTermResponse {
+  term: GlossaryTermDetail | GlossaryTerm;
+  available_actions: string[];
+}
+
+export interface GlossaryTermWrite {
+  name: string;
+  definition: string;
+  long_description: string;
+  abbreviation: string;
+  examples: string[];
+}
+
+export interface GlossaryTermsOptions {
+  query?: string;
+  status?: "published";
+  sort?: "name" | "definition" | "abbreviation";
+  direction?: "asc" | "desc";
+  offset?: number;
+  limit?: number;
+}
+
+export interface GlossaryAssignableAsset {
+  id: string;
+  name: string;
+  dataset_id: string | null;
+}
+
+export interface GlossaryImportResult {
+  ok: true;
+  imported: number;
+  failed: number;
+}
+
+export interface ConversationToolTrace {
+  tool: string;
+  arguments: Record<string, unknown>;
+  result: unknown;
+}
+
+export interface ConversationTurn {
+  model_id: string;
+  answer: string;
+  tool_trace: ConversationToolTrace[];
+  query_result: {
+    columns: string[];
+    rows: unknown[][];
+    sql?: string;
+  } | null;
+}
+
+export interface ConversationMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+}
+
+export interface ConversationSummary {
+  id: string;
+  model_id: string;
+  title: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConversationDetail extends ConversationSummary {
+  messages: ConversationMessage[];
+}
+
+export interface ConversationCollection {
+  model_id: string;
+  conversations: ConversationSummary[];
+}
+
+export interface PersistedConversationTurn {
+  conversation: ConversationDetail;
+  turn: ConversationTurn;
+}
+
+export interface AuditEvent {
+  id: string;
+  occurred_at: string;
+  request_id: string | null;
+  session_id: string | null;
+  principal_id: string | null;
+  organization_id: string | null;
+  model_id: string | null;
+  component: string;
+  event_type: string;
+  action: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  outcome: string;
+  severity: string;
+  http_status: number | null;
+  duration_ms: number | null;
+  summary: string;
+  details: Record<string, unknown>;
+  diagnostics?: Record<string, unknown> | null;
+}
+
+export interface AuditEventCollection {
+  items: AuditEvent[];
+  page: {
+    offset: number;
+    limit: number;
+    returned: number;
+    total: number;
+    has_more: boolean;
+  };
+  filters: Record<string, unknown>;
+  available_actions: string[];
+}
+
+export interface AuditSession {
+  session_id: string;
+  principal_id: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  event_count: number;
+  organization_id: string | null;
+}
+
+export interface AuditSessionCollection {
+  sessions: AuditSession[];
+  available_actions: string[];
+}
+
+export interface AuditEventOptions {
+  organizationId?: string;
+  principalId?: string;
+  sessionId?: string;
+  modelId?: string;
+  component?: string;
+  eventType?: string;
+  outcome?: string;
+  severity?: string;
+  includeAll?: boolean;
+  offset?: number;
+  limit?: number;
+}
+
+export interface ClientAuditEvent {
+  action:
+    | "navigation.view"
+    | "context.organization_select"
+    | "context.model_select"
+    | "workspace.collapse"
+    | "workspace.expand"
+    | "canvas.lens_change"
+    | "canvas.node_focus"
+    | "canvas.node_select"
+    | "activity.filter_change";
+  path?: string;
+  resource_type?:
+    | "application"
+    | "organization"
+    | "model"
+    | "workspace"
+    | "canvas"
+    | "node"
+    | "activity";
+  resource_id?: string;
+  model_id?: string;
+}
+
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
+export class ConflictError extends Error {}
 
 export class ApiUnavailableError extends Error {
   constructor(message: string, readonly cause?: unknown) {
@@ -596,7 +813,102 @@ export interface HeliosApi {
     modelId: string,
     runId: string,
   ): Promise<ReviewPublicationResponse>;
+  modelGlossary?(modelId: string): Promise<ModelGlossary>;
+  createModelGlossary?(
+    modelId: string,
+    body: { name: string; description: string },
+  ): Promise<ModelGlossary>;
+  deleteModelGlossary?(modelId: string): Promise<{ ok: true }>;
+  modelGlossaryTerms?(
+    modelId: string,
+    options?: GlossaryTermsOptions,
+  ): Promise<GlossaryTermsResponse>;
+  modelGlossaryTerm?(
+    modelId: string,
+    termId: string,
+  ): Promise<GlossaryTermResponse>;
+  createModelGlossaryTerm?(
+    modelId: string,
+    body: GlossaryTermWrite,
+  ): Promise<GlossaryTermResponse>;
+  updateModelGlossaryTerm?(
+    modelId: string,
+    termId: string,
+    body: GlossaryTermWrite,
+  ): Promise<GlossaryTermResponse>;
+  deleteModelGlossaryTerm?(
+    modelId: string,
+    termId: string,
+  ): Promise<{ ok: true }>;
+  importModelGlossary?(
+    modelId: string,
+    file: File,
+  ): Promise<GlossaryImportResult>;
+  modelGlossaryAssignableAssets?(
+    modelId: string,
+    query?: string,
+  ): Promise<{ items: GlossaryAssignableAsset[] }>;
+  assignModelGlossaryTerm?(
+    modelId: string,
+    termId: string,
+    canvasElementId: string,
+  ): Promise<{ ok: true }>;
+  unassignModelGlossaryTerm?(
+    modelId: string,
+    termId: string,
+    assignmentId: string,
+  ): Promise<{ ok: true }>;
+  createConversationTurn?(
+    modelId: string,
+    message: string,
+  ): Promise<ConversationTurn>;
+  modelConversations?(
+    modelId: string,
+  ): Promise<ConversationCollection>;
+  createModelConversation?(
+    modelId: string,
+    message: string,
+  ): Promise<PersistedConversationTurn>;
+  modelConversation?(
+    modelId: string,
+    conversationId: string,
+  ): Promise<ConversationDetail>;
+  appendModelConversationTurn?(
+    modelId: string,
+    conversationId: string,
+    message: string,
+    expectedVersion: number,
+  ): Promise<PersistedConversationTurn>;
+  auditEvents?(
+    options?: AuditEventOptions,
+  ): Promise<AuditEventCollection>;
+  auditEvent?(eventId: string): Promise<AuditEvent>;
+  auditSessions?(
+    organizationId?: string,
+    includeAll?: boolean,
+  ): Promise<AuditSessionCollection>;
+  recordClientAuditEvent?(
+    event: ClientAuditEvent,
+  ): Promise<{ ok: true }>;
   applicationUrl?(path: string): string;
+}
+
+const SESSION_STORAGE_KEY = "helios.audit.session";
+let fallbackSessionId: string | undefined;
+
+function auditSessionId(): string {
+  try {
+    const existing = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (existing) return existing;
+    const created = window.crypto?.randomUUID?.()
+      ?? `browser-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    window.sessionStorage.setItem(SESSION_STORAGE_KEY, created);
+    return created;
+  } catch {
+    fallbackSessionId ??=
+      `browser-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return fallbackSessionId;
+  }
 }
 
 function configuredApiUrl(): string {
@@ -816,6 +1128,222 @@ export class HeliosApiClient implements HeliosApi {
     );
   }
 
+  modelGlossary(modelId: string): Promise<ModelGlossary> {
+    return this.get<ModelGlossary>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/glossary`,
+    );
+  }
+
+  createModelGlossary(
+    modelId: string,
+    body: { name: string; description: string },
+  ): Promise<ModelGlossary> {
+    return this.post<ModelGlossary>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/glossary`,
+      body,
+    );
+  }
+
+  deleteModelGlossary(modelId: string): Promise<{ ok: true }> {
+    return this.delete<{ ok: true }>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/glossary?confirm=true`,
+    );
+  }
+
+  modelGlossaryTerms(
+    modelId: string,
+    options: GlossaryTermsOptions = {},
+  ): Promise<GlossaryTermsResponse> {
+    const query = new URLSearchParams();
+    if (options.query) query.set("query", options.query);
+    if (options.status) query.set("status", options.status);
+    if (options.sort) query.set("sort", options.sort);
+    if (options.direction) query.set("direction", options.direction);
+    if (options.offset !== undefined) query.set("offset", String(options.offset));
+    if (options.limit !== undefined) query.set("limit", String(options.limit));
+    const suffix = query.size ? `?${query}` : "";
+    return this.get<GlossaryTermsResponse>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/glossary/terms${suffix}`,
+    );
+  }
+
+  modelGlossaryTerm(
+    modelId: string,
+    termId: string,
+  ): Promise<GlossaryTermResponse> {
+    return this.get<GlossaryTermResponse>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/glossary/terms/${encodeURIComponent(termId)}`,
+    );
+  }
+
+  createModelGlossaryTerm(
+    modelId: string,
+    body: GlossaryTermWrite,
+  ): Promise<GlossaryTermResponse> {
+    return this.post<GlossaryTermResponse>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/glossary/terms`,
+      body,
+    );
+  }
+
+  updateModelGlossaryTerm(
+    modelId: string,
+    termId: string,
+    body: GlossaryTermWrite,
+  ): Promise<GlossaryTermResponse> {
+    return this.patch<GlossaryTermResponse>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/glossary/terms/${encodeURIComponent(termId)}`,
+      body,
+    );
+  }
+
+  deleteModelGlossaryTerm(
+    modelId: string,
+    termId: string,
+  ): Promise<{ ok: true }> {
+    return this.delete<{ ok: true }>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/glossary/terms/${encodeURIComponent(termId)}`,
+    );
+  }
+
+  importModelGlossary(
+    modelId: string,
+    file: File,
+  ): Promise<GlossaryImportResult> {
+    const body = new FormData();
+    body.set("file", file);
+    return this.request<GlossaryImportResult>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/glossary/import`,
+      { method: "POST", body },
+    );
+  }
+
+  modelGlossaryAssignableAssets(
+    modelId: string,
+    query = "",
+  ): Promise<{ items: GlossaryAssignableAsset[] }> {
+    const suffix = query.trim()
+      ? `?${new URLSearchParams({ query: query.trim() })}`
+      : "";
+    return this.get<{ items: GlossaryAssignableAsset[] }>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/glossary/assignable-assets${suffix}`,
+    );
+  }
+
+  assignModelGlossaryTerm(
+    modelId: string,
+    termId: string,
+    canvasElementId: string,
+  ): Promise<{ ok: true }> {
+    return this.post<{ ok: true }>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/glossary/terms/${encodeURIComponent(termId)}/assignments`,
+      { canvas_element_id: canvasElementId },
+    );
+  }
+
+  unassignModelGlossaryTerm(
+    modelId: string,
+    termId: string,
+    assignmentId: string,
+  ): Promise<{ ok: true }> {
+    return this.delete<{ ok: true }>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/glossary/terms/${encodeURIComponent(termId)}/assignments/${encodeURIComponent(assignmentId)}`,
+    );
+  }
+
+  createConversationTurn(
+    modelId: string,
+    message: string,
+  ): Promise<ConversationTurn> {
+    return this.post<ConversationTurn>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/conversation/turns`,
+      { message },
+    );
+  }
+
+  modelConversations(modelId: string): Promise<ConversationCollection> {
+    return this.get<ConversationCollection>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/conversations`,
+    );
+  }
+
+  createModelConversation(
+    modelId: string,
+    message: string,
+  ): Promise<PersistedConversationTurn> {
+    return this.post<PersistedConversationTurn>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/conversations`,
+      { message },
+    );
+  }
+
+  modelConversation(
+    modelId: string,
+    conversationId: string,
+  ): Promise<ConversationDetail> {
+    return this.get<ConversationDetail>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/conversations/${encodeURIComponent(conversationId)}`,
+    );
+  }
+
+  appendModelConversationTurn(
+    modelId: string,
+    conversationId: string,
+    message: string,
+    expectedVersion: number,
+  ): Promise<PersistedConversationTurn> {
+    return this.post<PersistedConversationTurn>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/conversations/${encodeURIComponent(conversationId)}/turns`,
+      { message, expected_version: expectedVersion },
+    );
+  }
+
+  auditEvents(
+    options: AuditEventOptions = {},
+  ): Promise<AuditEventCollection> {
+    const query = new URLSearchParams();
+    if (options.organizationId) {
+      query.set("organization_id", options.organizationId);
+    }
+    if (options.principalId) query.set("principal_id", options.principalId);
+    if (options.sessionId) query.set("session_id", options.sessionId);
+    if (options.modelId) query.set("model_id", options.modelId);
+    if (options.component) query.set("component", options.component);
+    if (options.eventType) query.set("event_type", options.eventType);
+    if (options.outcome) query.set("outcome", options.outcome);
+    if (options.severity) query.set("severity", options.severity);
+    if (options.includeAll) query.set("include_all", "true");
+    if (options.offset != null) query.set("offset", String(options.offset));
+    if (options.limit != null) query.set("limit", String(options.limit));
+    const suffix = query.toString() ? `?${query}` : "";
+    return this.get<AuditEventCollection>(`/api/v1/audit/events${suffix}`);
+  }
+
+  auditEvent(eventId: string): Promise<AuditEvent> {
+    return this.get<AuditEvent>(
+      `/api/v1/audit/events/${encodeURIComponent(eventId)}`,
+    );
+  }
+
+  auditSessions(
+    organizationId?: string,
+    includeAll = false,
+  ): Promise<AuditSessionCollection> {
+    const query = new URLSearchParams();
+    if (organizationId) query.set("organization_id", organizationId);
+    if (includeAll) query.set("include_all", "true");
+    const suffix = query.toString() ? `?${query}` : "";
+    return this.get<AuditSessionCollection>(
+      `/api/v1/audit/sessions${suffix}`,
+    );
+  }
+
+  recordClientAuditEvent(
+    event: ClientAuditEvent,
+  ): Promise<{ ok: true }> {
+    return this.post<{ ok: true }>("/api/v1/audit/client-events", event);
+  }
+
   applicationUrl(path: string): string {
     return new URL(path, this.baseUrl).toString();
   }
@@ -836,6 +1364,18 @@ export class HeliosApiClient implements HeliosApi {
     });
   }
 
+  private async patch<T>(path: string, body: unknown): Promise<T> {
+    return this.request<T>(path, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  private async delete<T>(path: string): Promise<T> {
+    return this.request<T>(path, { method: "DELETE" });
+  }
+
   private async request<T>(
     path: string,
     init: RequestInit,
@@ -848,6 +1388,7 @@ export class HeliosApiClient implements HeliosApi {
         ...init,
         headers: {
           Accept: "application/json",
+          "X-Helios-Session-ID": auditSessionId(),
           ...init.headers,
         },
       });
@@ -861,6 +1402,17 @@ export class HeliosApiClient implements HeliosApi {
     if (response.status === 403) {
       throw new AuthorizationError(
         "You do not have access to Helios resources.",
+      );
+    }
+    if (response.status === 409) {
+      let detail: unknown;
+      try {
+        detail = await response.clone().json();
+      } catch {
+        detail = null;
+      }
+      throw new ConflictError(
+        apiErrorMessage(detail) || "The resource changed. Reload and retry.",
       );
     }
     if (!response.ok) {

@@ -5,6 +5,7 @@ glossary CRUD, term CRUD, term <-> entity assignment, entity lookup and lineage.
 from __future__ import annotations
 
 import os
+from io import BytesIO
 from typing import Any
 
 import requests
@@ -30,7 +31,10 @@ class AtlasClient:
 
     # ---------------------------------------------------------------- plumbing
     def _req(self, method: str, path: str, **kw) -> Any:
-        r = self.s.request(method, f"{self.base}{path}", timeout=60, **kw)
+        try:
+            r = self.s.request(method, f"{self.base}{path}", timeout=60, **kw)
+        except requests.RequestException as exc:
+            raise AtlasError(0, "Atlas service is unavailable") from exc
         if r.status_code >= 400:
             try:
                 msg = r.json().get("errorMessage", r.text)
@@ -59,8 +63,17 @@ class AtlasClient:
         self._req("DELETE", f"/glossary/{guid}")
 
     # ---------------------------------------------------------------- terms
-    def list_terms(self, glossary_guid: str, limit: int = 1000) -> list[dict]:
-        return self._req("GET", f"/glossary/{glossary_guid}/terms", params={"limit": limit, "offset": 0}) or []
+    def list_terms(
+        self,
+        glossary_guid: str,
+        limit: int = 1000,
+        offset: int = 0,
+    ) -> list[dict]:
+        return self._req(
+            "GET",
+            f"/glossary/{glossary_guid}/terms",
+            params={"limit": limit, "offset": offset},
+        ) or []
 
     def get_term(self, term_guid: str) -> dict:
         return self._req("GET", f"/glossary/term/{term_guid}")
@@ -84,7 +97,20 @@ class AtlasClient:
 
     def import_csv(self, path: str) -> dict:
         with open(path, "rb") as f:
-            return self._req("POST", "/glossary/import", files={"file": (os.path.basename(path), f, "text/csv")})
+            return self.import_csv_bytes(os.path.basename(path), f.read())
+
+    def import_csv_bytes(self, filename: str, content: bytes) -> dict:
+        return self._req(
+            "POST",
+            "/glossary/import",
+            files={
+                "file": (
+                    os.path.basename(filename) or "glossary.csv",
+                    BytesIO(content),
+                    "text/csv",
+                )
+            },
+        )
 
     # ---------------------------------------------------------------- assignments
     def assigned_entities(self, term_guid: str) -> list[dict]:

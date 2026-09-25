@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-NODE_HOME="${NODE_HOME:/home/cdsw/node-22.14.0}"
+NODE_HOME="${NODE_HOME:-/home/cdsw/node-22.14.0}"
 USER_BIN="${HOME}/.local/bin"
 
 find_first_file() {

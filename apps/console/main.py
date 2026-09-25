@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -13,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 
 from helios_core import __version__
+from helios_core import audit
 from helios_core.atlas import AtlasClient, AtlasError
 from helios_core.config import atlas_config, impala_config
 from helios_core.engines import ImpalaEngine
@@ -20,7 +22,7 @@ from helios_core import runs as runstore
 from fastapi import HTTPException
 
 from helios_core.metadata import SQLiteMetadataRepository
-from .api import api_router
+from .api import api_router, principal_from_request
 from .review import review_router
 
 HERE = Path(__file__).parent
@@ -59,8 +61,13 @@ def configure_cors(application: FastAPI, value: str | None = None) -> list[str]:
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST"],
-        allow_headers=["Accept", "Content-Type"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=[
+            "Accept",
+            "Content-Type",
+            "X-Helios-Session-ID",
+        ],
+        expose_headers=["X-Helios-Request-ID"],
     )
     return origins
 
@@ -68,6 +75,104 @@ def configure_cors(application: FastAPI, value: str | None = None) -> list[str]:
 configure_cors(app)
 app.state.metadata_repository = SQLiteMetadataRepository()
 app.state.metadata_repository.migrate()
+audit.purge_expired(app.state.metadata_repository)
+
+
+def _audit_resource_scope(request: Request) -> tuple[str | None, str | None]:
+    parts = [part for part in request.url.path.split("/") if part]
+    organization_id = None
+    model_id = None
+    if "organizations" in parts:
+        index = parts.index("organizations")
+        if len(parts) > index + 1:
+            organization_id = parts[index + 1]
+    if "models" in parts:
+        index = parts.index("models")
+        if len(parts) > index + 1:
+            model_id = parts[index + 1]
+            model = app.state.metadata_repository.model(model_id)
+            if model is not None:
+                organization_id = model.organization_id
+    return organization_id, model_id
+
+
+@app.middleware("http")
+async def audit_api_request(request: Request, call_next):
+    if not request.url.path.startswith("/api/v1"):
+        return await call_next(request)
+    started = time.perf_counter()
+    request_id = audit.new_request_id()
+    session_id = audit.normalize_correlation_id(
+        request.headers.get("x-helios-session-id")
+    )
+    principal = principal_from_request(request)
+    organization_id, model_id = _audit_resource_scope(request)
+    token = audit.set_context(
+        audit.AuditContext(
+            request_id=request_id,
+            session_id=session_id,
+            principal_id=principal.id if principal else None,
+            organization_id=organization_id,
+            model_id=model_id,
+        )
+    )
+    try:
+        try:
+            response = await call_next(request)
+        except Exception:
+            audit.emit(
+                app.state.metadata_repository,
+                component="api",
+                event_type="http.request",
+                action=f"{request.method} {request.url.path}",
+                outcome="error",
+                severity="error",
+                http_status=500,
+                duration_ms=(time.perf_counter() - started) * 1000,
+                summary="API request failed",
+                details={"method": request.method},
+            )
+            raise
+        route = request.scope.get("route")
+        route_path = getattr(route, "path", request.url.path)
+        status = response.status_code
+        outcome = (
+            "success"
+            if status < 400
+            else "denied"
+            if status in {401, 403}
+            else "error"
+        )
+        audit.emit(
+            app.state.metadata_repository,
+            component="api",
+            event_type=(
+                "domain.mutation"
+                if request.method in {"POST", "PATCH", "PUT", "DELETE"}
+                else "http.request"
+            ),
+            action=f"{request.method} {route_path}",
+            outcome=outcome,
+            severity="info" if status < 400 else "warning",
+            resource_type=(
+                "model"
+                if model_id
+                else "organization"
+                if organization_id
+                else "api"
+            ),
+            resource_id=model_id or organization_id,
+            http_status=status,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            summary=f"{request.method} {route_path} returned {status}",
+            details={"method": request.method},
+        )
+        response.headers["X-Helios-Request-ID"] = request_id
+        return response
+    finally:
+        audit.reset_context(token)
+
+
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 tpl = Jinja2Templates(directory=HERE / "templates")
 app.include_router(api_router)
@@ -107,14 +212,14 @@ def health(request: Request):
     a = atlas_config()
     checks.append(("Atlas", a.base_url if a else "not configured", *(_check(lambda: AtlasClient(a).ping()) if a else ("skipped", "set ATLAS_BASE, ATLAS_USER, ATLAS_PASS"))))
     i = impala_config()
-    checks.append(("Impala", f"{i.host}:{i.port}" if i else "not configured", *(_check(lambda: ImpalaEngine(i).ping()) if i else ("skipped", "set IMPALA_HOST (and IMPALA_USER / IMPALA_PASS if different from Atlas)"))))
+    checks.append(("Impala", f"{i.host}:{i.port}" if i else "not configured", *(_check(lambda: ImpalaEngine(i).ping()) if i else ("skipped", "set IMPALA_HOST, WORKLOAD_USER, and WORKLOAD_PASSWORD"))))
     from helios_core.llm import llm_from_env
     llm = llm_from_env()
     if llm:
         checks.append(("LLM", f"{llm.provider}: {llm.model}", *_check(llm.ping)))
     else:
         checks.append(("LLM", "not configured", "skipped",
-                       "set ANTHROPIC_API_KEY (+ ANTHROPIC_MODEL) or INFERENCE_BASE_URL / INFERENCE_MODEL"))
+                       "set MISTRAL_API_KEY, ANTHROPIC_API_KEY, or INFERENCE_BASE_URL / INFERENCE_MODEL"))
     return render(request, "health.html", checks=checks, active="health")
 
 

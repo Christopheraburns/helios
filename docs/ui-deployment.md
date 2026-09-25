@@ -142,12 +142,16 @@ Set these on the API Application:
 | `HELIOS_PYTHON_DEPS` | Only for a nonstandard dependency location | Defaults to `$CDSW_PROJECT_DIR/.helios-python`. |
 | `HELIOS_METADATA_DB` | Usually leave unset | The default is the persistent `<project>/helios/state/helios.db`; otherwise enter a fully expanded absolute path. |
 | `HELIOS_RUNS_DIR` | Optional | Defaults to `$HELIOS_ROOT/runs`. |
+| `HELIOS_AUDIT_RETENTION_DAYS` | Optional | Product-visible audit retention, from 1 through 3650 days. Defaults to 30. |
 
 The following are feature-specific rather than required for API readiness:
 
 - `ATLAS_BASE`, `ATLAS_USER`, `ATLAS_PASS`
 - `IMPALA_HOST`, `IMPALA_PORT`, `IMPALA_DATABASE`,
-  `IMPALA_HTTP_PATH`, `IMPALA_USER`, `IMPALA_PASS`
+  `IMPALA_HTTP_PATH`, `WORKLOAD_USER`, `WORKLOAD_PASSWORD`
+- `MISTRAL_API_KEY` for Talk to Your Data; Helios defaults to
+  `mistral-small-latest` at `https://api.mistral.ai/v1`. Optional overrides are
+  `MISTRAL_MODEL` and `MISTRAL_BASE_URL`.
 - `INFERENCE_BASE_URL`, `INFERENCE_MODEL`, `INFERENCE_API_KEY`
 
 Store credentials through the Cloudera environment-variable/secret mechanism,
@@ -262,9 +266,34 @@ returns wildcard CORS for credentialed requests, stop. Do not work around it
 with disabled authentication, a UI service identity, a transient container
 address, or disabled TLS verification.
 
+## Logs and audit records
+
+API, UI, MCP, and Job process output continues to stdout/stderr and is available
+in the corresponding Cloudera AI Application or Job logs. This includes startup
+failures and a warning if a persistent audit write fails.
+
+Product activity is stored separately in the persistent metadata database
+(`state/helios.db` by default) and appears under **Activity Logs** in the Helios
+UI. Users see only their own sessions. Organization administrators can opt into
+organization-wide activity for organizations where they have
+`organization.manage`. Audit records are redacted and do not contain
+credentials, prompts, answers, SQL text, query results, or HTTP bodies.
+Unexpected server failures may include a sanitized exception chain and stack
+location in the persisted event. Those diagnostics are returned only to an
+administrator with `organization.manage` for the event's organization. Known
+runtime secrets and generated SQL are removed before persistence. The MCP
+Application log receives the full server traceback with the same request ID
+for restricted operational troubleshooting.
+
+The UI sends an opaque `X-Helios-Session-ID` correlation header; it is not a
+credential. `HELIOS_UI_ORIGINS` remains an exact-origin allowlist, and the API
+CORS configuration permits this header for credentialed browser calls.
+
 ## Failure and restart behavior
 
 - API startup is idempotent: SQLite migrations run on each process start.
+- Audit retention cleanup runs at process initialization. API startup creates
+  the audit schema automatically through the same append-only migration path.
 - Application containers are replaceable. Durable metadata, run artifacts,
   the built UI, and project-local dependencies must remain on the Project
   filesystem, not in container-only locations.

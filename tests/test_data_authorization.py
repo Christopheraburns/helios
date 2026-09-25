@@ -1,6 +1,7 @@
 import pytest
 
 from helios_core import authz
+from helios_core.config import impala_config
 from helios_core.data_authorization import (
     DataAction,
     DataAuthorizationDenied,
@@ -15,6 +16,31 @@ PRINCIPAL = authz.Principal(
     "workbench", "alice", authz.PrincipalKind.HUMAN
 )
 RESOURCE = DataResource("warehouse", "sales.orders")
+
+
+def test_impala_config_uses_workload_credentials(monkeypatch):
+    for name in (
+        "WORKLOAD_USER",
+        "WORKLOAD_PASSWORD",
+        "IMPALA_USER",
+        "IMPALA_PASS",
+        "ATLAS_USER",
+        "ATLAS_PASS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("IMPALA_HOST", "warehouse.example")
+    monkeypatch.setenv("IMPALA_USER", "legacy-user")
+    monkeypatch.setenv("IMPALA_PASS", "legacy-password")
+
+    assert impala_config() is None
+
+    monkeypatch.setenv("WORKLOAD_USER", "workload-user")
+    monkeypatch.setenv("WORKLOAD_PASSWORD", "workload-password")
+    configuration = impala_config()
+
+    assert configuration is not None
+    assert configuration.user == "workload-user"
+    assert configuration.password == "workload-password"
 
 
 class Platform:
@@ -140,5 +166,5 @@ def test_mcp_query_execution_fails_closed_without_identity_propagation(
 
     result = mcp_server.run_query([], model="sales")
 
-    assert result["error"] == "data_authorization_denied"
-    assert "unavailable" in result["reason"]
+    assert result["error"] == "authorization_denied"
+    assert "caller context" in result["message"]

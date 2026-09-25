@@ -32,9 +32,18 @@ def principal_id(subject: str) -> str:
     return f"cloudera-workbench:{subject}"
 
 
+class AtlasStub:
+    def get_glossary(self, guid):
+        return {"guid": guid, "name": "Customer glossary", "terms": []}
+
+    def list_terms(self, glossary_guid, limit=1000, offset=0):
+        return []
+
+
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.delenv("CDSW_USER", raising=False)
+    previous = dict(app.state._state)
     app.state.resource_store = ResourceStore(
         (ORG_ACME, ORG_OTHER), (CUSTOMER, FINANCE)
     )
@@ -57,8 +66,13 @@ def client(monkeypatch):
             ),
         ]
     )
-    with TestClient(app) as test_client:
-        yield test_client
+    app.state.atlas_client = AtlasStub()
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.state._state.clear()
+        app.state._state.update(previous)
 
 
 def test_authorized_model_response_includes_available_actions(client):

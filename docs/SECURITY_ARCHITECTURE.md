@@ -17,11 +17,14 @@ credential appropriate to that workload and construct a
 authentication context but grant no permissions by themselves. Core code does not
 depend on FastAPI, HTTP headers, bearer tokens, or a specific identity provider.
 
-Today the console relies on Workbench SSO and uses `x-forwarded-user` only for
-review audit attribution. The MCP server compares a shared bearer token but does
-not distinguish token users. Jobs and outbound Atlas/Impala connections run with
-configured Workbench workload credentials. These mechanisms remain unchanged
-until boundary adapters are introduced for their credential types.
+The API relies on Workbench SSO and translates the gateway's trusted identity
+header into a Principal. Browser session IDs are correlation metadata, not
+credentials. Server-side conversation requests authenticate to MCP with a
+service bearer token and a short-lived signed Principal assertion that locks the
+organization and model context. MCP verifies both before authorizing tools.
+Jobs and outbound Atlas/Impala connections run with configured Workbench
+workload credentials; Impala execution uses the delegated human identity when
+proxy delegation is configured.
 
 ## 2. Helios resource authorization: what may it do in Helios?
 
@@ -141,3 +144,18 @@ the corresponding action independently.
 Existing server-rendered glossary, run, and review URLs remain available for
 compatibility while their global artifacts are migrated to organization/model
 ownership. New clients should use the model-scoped API.
+
+## Audit visibility and data minimization
+
+Helios writes append-only audit events for API activity, MCP tools, job
+lifecycle, and allowlisted UI navigation/actions. The audit store deliberately
+excludes credentials, authentication headers, cookies, raw HTTP bodies, prompts,
+answers, SQL text, query rows, and stack traces. Frontend callers cannot submit
+arbitrary detail objects or choose a Principal.
+
+The audit APIs always derive identity from SSO. By default, a Principal can read
+only events whose `principal_id` is their own. Cross-user listing and detail
+access requires `organization.manage` for the event's organization and remains
+organization-scoped. Unauthorized event-detail lookups return 404 to avoid
+confirming an event exists. Backend checks remain authoritative regardless of
+which controls the Activity Logs page displays.

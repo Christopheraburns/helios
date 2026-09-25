@@ -1,49 +1,133 @@
-# helios MCP server
+# Helios MCP server
 
-The second helios Application. It exposes published semantic models to agents over the Model Context Protocol
-(Streamable HTTP). An agent discovers what a model can answer, expresses a question as a semantic request, and gets
-SQL or rows back. It never sees the physical schema and never writes SQL; the compiler decides joins from the
-published relationships.
+The MCP Application exposes Helios's governed semantic and data tools to the
+Helios conversation client and to registered external agents. It speaks MCP
+Python SDK 2.x Streamable HTTP with stateless JSON responses.
 
-## Deploy in Cloudera AI Workbench
+See [Talk to Your Data architecture](talk-to-your-data-architecture.md) for
+the complete identity, LLM, authorization, and query flow.
 
-Application → New:
-- Script `helios/apps/mcp/app.py`, subdomain `helios-mcp`, the helios runtime
-- Tick **Enable Unauthenticated Access** (MCP clients cannot complete the Workbench login), and set
-  `HELIOS_MCP_TOKEN` in the project environment; the server then requires `Authorization: Bearer <token>` on `/mcp`
-- `IMPALA_HOST` and credentials as for the jobs, so `run_query` can reach the warehouse
+## Cloudera AI Application
 
-Check `https://helios-mcp.<workbench-domain>/healthz` — it lists the published models.
+Create an Application with:
 
-## Connect a client
+- script `helios/apps/mcp/app.py`;
+- a stable subdomain such as `helios-mcp`;
+- the same standard PBJ Python 3.12 runtime used by the API;
+- **Enable Unauthenticated Access** selected at the Cloudera gateway.
 
-Claude Desktop (`claude_desktop_config.json`) via the reference HTTP bridge:
+The last setting permits non-browser MCP protocol clients to reach the
+Application. It does not make MCP anonymous: `/mcp` always requires the
+configured bearer, and every tool requires a signed UI Principal or a
+registered agent Principal. Missing bearer configuration returns 503.
 
-    {"mcpServers": {"helios": {"command": "npx", "args": ["-y", "mcp-remote", "https://helios-mcp.<domain>/mcp",
-                                "--header", "Authorization: Bearer ${HELIOS_MCP_TOKEN}"],
-                               "env": {"HELIOS_MCP_TOKEN": "<token>"}}}}
+The endpoints are:
 
-Cursor and other clients that speak Streamable HTTP directly: URL `https://helios-mcp.<domain>/mcp`, header
-`Authorization: Bearer <token>`.
+```text
+https://helios-mcp.<workbench-domain>/mcp
+https://helios-mcp.<workbench-domain>/healthz
+```
 
-## Tools
+`/healthz` is public and returns only readiness, version, and model count.
 
-| tool | purpose |
-|---|---|
-| `list_models()` | published models |
-| `describe_model(model_name, include_fields)` | datasets, metrics, dimensions, joins — the menu |
-| `search_model(model_name, query)` | metrics / dimensions / measures matching words in the question |
-| `explain_request(model_name, request)` | fact, joins, columns a request resolves to |
-| `compile_query(model_name, request)` | SQL without running it |
-| `run_query(model_name, request, limit)` | SQL + rows; capped by `HELIOS_MCP_MAX_ROWS` (500) |
+## Environment
 
-A semantic request:
+Required on MCP:
 
-    {"metrics": ["Store Sales Revenue"], "dimensions": ["State", "d_year"],
-     "filters": [["d_year", "=", 2001]], "order_by": ["-Store Sales Revenue"], "limit": 20}
+```text
+HELIOS_MCP_TOKEN=<random bearer credential>
+HELIOS_MCP_DELEGATION_SECRET=<random value of at least 32 bytes>
+HELIOS_MCP_ALLOWED_HOSTS=helios-mcp.<workbench-domain>
+```
 
-Metrics and dimensions may be given by business name, unique column name, or `dataset.column`. Ambiguity is an
-error naming the candidates, which the agent resolves by qualifying. `measures` allows an ad-hoc aggregate over a
-column when no metric fits; `via` pins a relationship when a dataset has several (sold date vs ship date).
+The API Application must receive the same token and delegation secret, plus:
 
-Models are re-read when the published file changes, so publishing from the console takes effect without a restart.
+```text
+HELIOS_MCP_URL=https://helios-mcp.<workbench-domain>/mcp
+```
+
+Configure `HELIOS_METADATA_DB`, `HELIOS_ROOT`, and `HELIOS_RUNS_DIR` only when
+their project-persistent defaults are not correct. The API and MCP Applications
+must resolve the same metadata grants and model artifacts.
+
+For delegated queries, MCP also requires:
+
+```text
+IMPALA_HOST=<Virtual Warehouse JDBC host or URL>
+WORKLOAD_USER=<approved Helios proxy account>
+WORKLOAD_PASSWORD=<workload password>
+IMPALA_PROXY_DELEGATION=true
+```
+
+The Virtual Warehouse must permit that account to proxy SSO subjects through
+`doAs`, and Ranger must enforce the effective user. Helios verifies
+`EFFECTIVE_USER()` before executing compiler-generated SQL. Leave
+`IMPALA_PROXY_DELEGATION` false until this is proven in the target environment.
+
+No custom Cloudera Runtime is required for MCP. Install the pinned API
+requirements into the project-local dependency directory as described in
+`ui-deployment.md`.
+
+## Authentication and model context
+
+The Helios API sends:
+
+```text
+Authorization: Bearer <HELIOS_MCP_TOKEN>
+X-Helios-Principal-Assertion: <short-lived signed assertion>
+```
+
+The assertion carries the API-authenticated Principal, organization, and
+locked model. MCP verifies it and reloads current grants before every tool
+authorization.
+
+For a separately registered external agent, set:
+
+```text
+HELIOS_MCP_DEFAULT_PRINCIPAL=<issuer>:<subject>
+```
+
+The client then sends `X-Helios-Model-ID`. The configured Principal must exist
+in normal Helios grant records. A shared bearer alone never grants access.
+
+## Current tools
+
+- `list_models()` — grant-filtered available models.
+- `describe_model(model)` — datasets, fields, metrics, and relationships.
+- `search_semantics(question, limit, model)` — semantic matches.
+- `describe(name, model)` — one semantic object.
+- `compile_query(metrics, dimensions, filters, limit, engine, model)` —
+  compile semantic inputs to SQL.
+- `run_query(metrics, dimensions, filters, limit, model)` — compile and run
+  through delegated Impala; maximum 1,000 rows.
+- `explain_lineage(column, depth, model)` — Atlas column lineage.
+
+Published `semantic.ossie.json` is the authoritative model source. MCP loads it
+through the same `SemanticModel` and `Compiler` used by other Helios consumers.
+If no model has been published, the latest proposal is converted to that
+canonical in-memory shape before any tool reads it.
+
+Dimensions and filters may use `dataset.field`, a physical
+`database.table.field`, or an unambiguous field name, label, or synonym. Metrics
+may use their canonical names or unambiguous synonyms. Filter objects accept
+`column` for backward compatibility or the equivalent `field` key.
+
+Filters use objects such as:
+
+```json
+{
+  "metrics": ["Store Sales Revenue"],
+  "dimensions": ["sales.store.state"],
+  "filters": [
+    {"column": "sales.date.year", "op": "=", "value": 2001}
+  ],
+  "limit": 20,
+  "model": "sales-model"
+}
+```
+
+Models are re-read when the published artifact changes. Authorization grants
+are loaded from metadata for the current Principal; a requested model that
+does not match the locked context is rejected. Expected lookup, ambiguity, and
+compiler failures return structured `{error, message, retryable}` tool results
+rather than terminating the MCP session.

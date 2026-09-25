@@ -13,6 +13,14 @@ def headers(subject):
     return {"x-forwarded-user": subject}
 
 
+class AtlasStub:
+    def get_glossary(self, guid):
+        return {"guid": guid, "name": "Customer glossary", "terms": []}
+
+    def list_terms(self, glossary_guid, limit=1000, offset=0):
+        return []
+
+
 @pytest.fixture
 def persistent_client(persistent_auth_stack):
     previous = dict(app.state._state)
@@ -23,6 +31,7 @@ def persistent_client(persistent_auth_stack):
     app.state.graph_repository = ArtifactGraphRepository(
         persistent_auth_stack.artifacts
     )
+    app.state.atlas_client = AtlasStub()
     try:
         with TestClient(app) as client:
             yield client

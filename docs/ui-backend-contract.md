@@ -174,8 +174,26 @@ Helios grants receives a successful response with a count of zero.
 `GET /api/v1/models/{model_id}/glossary`
 
 - Requires `glossary.read`.
-- Returns `model_id`, `glossary_id`, and `available_actions`; it does not
-  return glossary content.
+- Returns the model-linked Atlas glossary summary, term count, and
+  `available_actions`. A model without a linked glossary returns
+  `glossary: null`.
+
+The model-scoped glossary contract also provides:
+
+- `POST|DELETE /api/v1/models/{model_id}/glossary` to create/bind or
+  confirmed-delete/unbind the model glossary;
+- `GET|POST /api/v1/models/{model_id}/glossary/terms` for an authorized,
+  paged, searchable, sortable term collection and term creation;
+- `GET|PATCH|DELETE .../glossary/terms/{term_id}` for lazy detail and CRUD;
+- `POST .../glossary/import` for a UTF-8 Atlas CSV whose `GlossaryName`
+  matches the linked glossary;
+- `GET .../glossary/assignable-assets` and term assignment create/delete
+  routes. These accept Helios Canvas element IDs and resolve Atlas entities
+  only after `datasource.read` and graph visibility checks.
+
+Writes require `glossary.edit`. Every term is checked against the glossary
+bound to the requested model, and inaccessible physical assignments are
+omitted rather than exposed. React never calls Atlas directly.
 
 `GET /api/v1/models/{model_id}/semantic`
 
@@ -410,6 +428,38 @@ semantic kinds require `semantic.read`. A `model_consumer` does not have
 `datasource.read`, so its authorized graph can omit datasets, attributes, and
 physical edges even though it can read semantic and ontology resources.
 
+### Persistent audit activity
+
+`GET /api/v1/audit/events`
+
+- Returns paginated, redacted events for the authenticated Principal.
+- Supports organization, Principal, session, model, component, event type,
+  outcome, severity, time range, offset, and limit filters.
+- `include_all=true` and another `principal_id` require
+  `organization.manage` for the requested organization.
+
+`GET /api/v1/audit/events/{event_id}`
+
+- Returns an event owned by the Principal or an event in an organization they
+  manage.
+- Returns 404, rather than 403, for a cross-user event the caller cannot read.
+
+`GET /api/v1/audit/sessions`
+
+- Groups visible events by browser/job session.
+- Uses the same own-session default and organization-admin expansion.
+
+`POST /api/v1/audit/client-events`
+
+- Accepts only allowlisted navigation, context-selection, workspace, Canvas,
+  and activity-filter actions.
+- Does not accept arbitrary details or identity. Model references are checked
+  with `model.read`.
+
+The browser stores an opaque UUID in `sessionStorage` and sends it as
+`X-Helios-Session-ID`. CORS explicitly permits that header. The API returns
+`X-Helios-Request-ID`; correlation IDs never replace SSO identity.
+
 ## User interfaces
 
 The primary visual UI is the React/TypeScript application in `apps/ui`. It
@@ -422,7 +472,8 @@ Implemented routes are:
 - `/models` — model-scoped discovery activity;
 - `/models/runs/{run_id}` — run detail and proposal workspace;
 - `/models/runs/{run_id}/profile/{table_id}` — historical table profile; and
-- `/canvas` — current or historical review graph.
+- `/canvas` — current or historical review graph; and
+- `/activity` — own-session audit activity with organization-admin expansion.
 
 Every route preserves the authorized `organization` and `model` query
 parameters. React does not link to the legacy `/runs` pages.
@@ -453,6 +504,27 @@ display, review, and publish pages. Review interactions use inline JavaScript
 These routes predate the future API-only frontend boundary. Their server-side
 handlers call Atlas clients and filesystem run/artifact helpers directly.
 They are implementation code, not reusable browser contracts.
+
+## Talk to Your Data
+
+The `/talk` UI uses only the model-scoped conversation API:
+
+- `GET /api/v1/models/{model_id}/conversations`
+- `POST /api/v1/models/{model_id}/conversations`
+- `GET /api/v1/models/{model_id}/conversations/{conversation_id}`
+- `POST /api/v1/models/{model_id}/conversations/{conversation_id}/turns`
+
+Every request derives the Principal from the normal authenticated API request
+and requires `model.read`. Conversations are private to their creating
+Principal and selected Model. An append includes `expected_version`; stale
+clients receive HTTP 409 and must reload.
+
+The persistent contract contains conversation summaries and user/assistant
+message text. Current-turn query rows, SQL, and sanitized MCP tool activity are
+returned with create/append responses but deliberately are not persisted. The
+API's server-side conversation layer supplies bounded history to the LLM and
+continues to execute semantic and data operations exclusively through Helios
+MCP. The browser never receives Mistral, MCP, Impala, or delegation secrets.
 
 ## Current UI coverage and remaining limits
 
@@ -498,12 +570,14 @@ Existing APIs need not be redesigned for the covered capabilities.
      require a future producer-owned status store.
    - There is no discovery launch or cancellation endpoint. The UI does not
      invoke job scripts and exposes no cancel action.
-   - Rich glossary CRUD, version history, and producer persistence remain
-     separate follow-up work.
+   - Published glossary CRUD, CSV import, and authorized physical assignments
+     are available through the model-scoped governance API. Semantic-model
+     version history and producer persistence remain separate follow-up work.
 
 Run/profile parity with the legacy `run.html` and `run_table.html` read-only
-evidence is complete. Published Atlas glossary CRUD and assignments remain a
-separate governance capability.
+evidence is complete. Governance → Glossary replaces the legacy Atlas
+glossary/term CRUD, import, and assignment workflows while retaining proposal
+review as a distinct model-run workflow.
 
 ## Verification baseline
 
