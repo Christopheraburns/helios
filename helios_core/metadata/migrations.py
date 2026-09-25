@@ -103,4 +103,71 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ADD COLUMN discovery_run_ids_json TEXT NOT NULL DEFAULT '[]';
         """,
     ),
+    (
+        3,
+        """
+        CREATE TABLE conversations (
+            id TEXT PRIMARY KEY,
+            model_id TEXT NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+            principal_id TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            version INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX conversations_owner_model_idx
+            ON conversations (principal_id, model_id, updated_at DESC);
+
+        CREATE TABLE conversation_messages (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL
+                REFERENCES conversations(id) ON DELETE CASCADE,
+            position INTEGER NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE (conversation_id, position)
+        );
+
+        CREATE INDEX conversation_messages_conversation_idx
+            ON conversation_messages (conversation_id, position);
+        """,
+    ),
+    (
+        4,
+        """
+        CREATE TABLE audit_events (
+            id TEXT PRIMARY KEY,
+            occurred_at TEXT NOT NULL,
+            request_id TEXT,
+            session_id TEXT,
+            principal_id TEXT,
+            organization_id TEXT,
+            model_id TEXT,
+            component TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            action TEXT NOT NULL,
+            resource_type TEXT,
+            resource_id TEXT,
+            outcome TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            http_status INTEGER,
+            duration_ms REAL,
+            summary TEXT NOT NULL,
+            details_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE INDEX audit_events_principal_session_time_idx
+            ON audit_events (
+                principal_id, session_id, occurred_at DESC, id DESC
+            );
+        CREATE INDEX audit_events_organization_time_idx
+            ON audit_events (organization_id, occurred_at DESC, id DESC);
+        CREATE INDEX audit_events_model_time_idx
+            ON audit_events (model_id, occurred_at DESC, id DESC);
+        CREATE INDEX audit_events_component_time_idx
+            ON audit_events (component, occurred_at DESC, id DESC);
+        """,
+    ),
 )

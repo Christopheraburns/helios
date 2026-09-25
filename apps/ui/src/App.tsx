@@ -4,14 +4,13 @@ import {
   Routes,
   useLocation,
 } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { EmptyState, ErrorState, LoadingState } from "./components/AsyncState";
 import PrimaryNavigation from "./components/PrimaryNavigation";
 import TopNavigation from "./components/TopNavigation";
 import { HeliosApi } from "./api/client";
 import { useApplicationContext } from "./hooks/useApplicationContext";
-import CanvasPage from "./pages/CanvasPage";
 import ModelsPage from "./pages/ModelsPage";
 import OverviewPage from "./pages/OverviewPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
@@ -22,6 +21,21 @@ import RunDetailPage, {
 interface AppProps {
   client?: HeliosApi;
 }
+
+const GlossaryPage = lazy(() => import("./pages/GlossaryPage"));
+const CanvasPage = lazy(() => import("./pages/CanvasPage"));
+const TalkPage = lazy(() => import("./pages/TalkPage"));
+const ActivityLogsPage = lazy(() => import("./pages/ActivityLogsPage"));
+const GlossaryTermPage = lazy(() =>
+  import("./pages/GlossaryPage").then((module) => ({
+    default: module.GlossaryTermPage,
+  })),
+);
+const GlossaryProposalsPage = lazy(() =>
+  import("./pages/GlossaryPage").then((module) => ({
+    default: module.GlossaryProposalsPage,
+  })),
+);
 
 const errorTitles = {
   authentication: "Authentication required",
@@ -55,6 +69,61 @@ function ApplicationShell({ client }: AppProps) {
     }
   }, [workspaceCollapsed]);
 
+  useEffect(() => {
+    if (context.status !== "ready") return;
+    const parameters = new URLSearchParams(location.search);
+    void context.recordClientActivity({
+      action: "navigation.view",
+      path: location.pathname,
+      resource_type: context.selectedModelId ? "model" : "application",
+      resource_id: context.selectedModelId || undefined,
+      model_id: context.selectedModelId || undefined,
+    }).catch(() => undefined);
+    if (location.pathname === "/canvas") {
+      const lens = parameters.get("lens");
+      const focus = parameters.get("focus_node_id");
+      const selected = parameters.get("element_id");
+      if (lens) {
+        void context.recordClientActivity({
+          action: "canvas.lens_change",
+          resource_type: "canvas",
+          resource_id: lens,
+          model_id: context.selectedModelId || undefined,
+        }).catch(() => undefined);
+      }
+      if (focus) {
+        void context.recordClientActivity({
+          action: "canvas.node_focus",
+          resource_type: "node",
+          resource_id: focus,
+          model_id: context.selectedModelId || undefined,
+        }).catch(() => undefined);
+      }
+      if (selected) {
+        void context.recordClientActivity({
+          action: "canvas.node_select",
+          resource_type: "node",
+          resource_id: selected,
+          model_id: context.selectedModelId || undefined,
+        }).catch(() => undefined);
+      }
+    }
+    if (location.pathname === "/activity") {
+      void context.recordClientActivity({
+        action: "activity.filter_change",
+        path: location.pathname,
+        resource_type: "activity",
+        model_id: context.selectedModelId || undefined,
+      }).catch(() => undefined);
+    }
+  }, [
+    context.recordClientActivity,
+    context.selectedModelId,
+    context.status,
+    location.pathname,
+    location.search,
+  ]);
+
   return (
     <div className="app">
       <a className="skip-link" href="#main-content">
@@ -70,9 +139,17 @@ function ApplicationShell({ client }: AppProps) {
         <PrimaryNavigation
           context={context}
           collapsed={workspaceCollapsed}
-          onToggleCollapsed={() =>
-            setWorkspaceCollapsed((collapsed) => !collapsed)
-          }
+          onToggleCollapsed={() => {
+            const collapsed = !workspaceCollapsed;
+            setWorkspaceCollapsed(collapsed);
+            void context.recordClientActivity({
+              action: collapsed
+                ? "workspace.collapse"
+                : "workspace.expand",
+              resource_type: "workspace",
+              model_id: context.selectedModelId || undefined,
+            }).catch(() => undefined);
+          }}
         />
         <main
           className={`app__main${canvasActive ? " app__main--canvas" : ""}`}
@@ -87,11 +164,16 @@ function ApplicationShell({ client }: AppProps) {
               onRetry={context.retry}
             />
           ) : (
+            <Suspense fallback={<LoadingState label="Loading workspace…" />}>
             <Routes>
               <Route path="/" element={<OverviewPage context={context} />} />
               <Route
                 path="/canvas"
                 element={<CanvasPage context={context} />}
+              />
+              <Route
+                path="/talk"
+                element={<TalkPage context={context} />}
               />
               <Route
                 path="/models"
@@ -116,12 +198,19 @@ function ApplicationShell({ client }: AppProps) {
               />
               <Route
                 path="/governance"
-                element={
-                  <PlaceholderPage
-                    title="Governance"
-                    description="Review permissions, glossary context, and governance state."
-                  />
-                }
+                element={<GlossaryPage context={context} />}
+              />
+              <Route
+                path="/governance/glossary/terms/:termId"
+                element={<GlossaryTermPage context={context} />}
+              />
+              <Route
+                path="/governance/proposals"
+                element={<GlossaryProposalsPage context={context} />}
+              />
+              <Route
+                path="/activity"
+                element={<ActivityLogsPage context={context} />}
               />
               <Route
                 path="*"
@@ -133,6 +222,7 @@ function ApplicationShell({ client }: AppProps) {
                 }
               />
             </Routes>
+            </Suspense>
           )}
         </main>
       </div>

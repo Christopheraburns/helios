@@ -37,7 +37,7 @@ def seed_organizations_and_principals(repository):
 def test_migrations_are_versioned_and_idempotent(repository):
     repository.migrate()
 
-    assert repository.schema_version() == 2
+    assert repository.schema_version() == 4
     with sqlite3.connect(repository.path) as connection:
         tables = {
             row[0]

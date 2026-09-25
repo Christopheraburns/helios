@@ -133,6 +133,35 @@ class UnavailablePlatformDataAuthorizer:
         )
 
 
+class ImpalaProxyDataAuthorizer:
+    """Confirm that execution will use Impala's Ranger-backed proxy identity."""
+
+    def __init__(self, enabled: bool):
+        self.enabled = enabled
+
+    def can_access(
+        self,
+        principal: Principal,
+        resource: DataResource,
+        action: str | DataAction,
+    ) -> PlatformDataDecision:
+        if action != DataAction.QUERY_EXECUTE and action != DataAction.QUERY_EXECUTE.value:
+            return PlatformDataDecision.deny(
+                "Impala delegation only enforces query execution"
+            )
+        if not self.enabled:
+            return PlatformDataDecision.deny(
+                "Impala proxy-user delegation is not enabled"
+            )
+        if not principal.subject.strip():
+            return PlatformDataDecision.deny(
+                "the delegated principal has no workload identity"
+            )
+        return PlatformDataDecision.allow(
+            "Impala will verify the delegated effective user before execution"
+        )
+
+
 class DataAuthorizationDenied(PermissionError):
     def __init__(
         self,

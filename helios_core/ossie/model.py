@@ -168,10 +168,21 @@ class SemanticModel:
         return ""
 
     def field(self, ref: str) -> Field:
-        """Resolve 'dataset.field', a unique physical field name, or a unique label / synonym (case-insensitive)."""
+        """Resolve dataset/source field refs, physical names, labels, or synonyms."""
         if "." in ref:
             ds, col = ref.rsplit(".", 1)
             d = self.datasets.get(ds)
+            if d is None:
+                source_matches = [
+                    dataset
+                    for dataset in self.datasets.values()
+                    if dataset.source.lower() == ds.lower()
+                ]
+                d = (
+                    source_matches[0]
+                    if len(source_matches) == 1
+                    else None
+                )
             if d and col in d.fields:
                 return d.fields[col]
             raise KeyError(f"unknown field {ref}")

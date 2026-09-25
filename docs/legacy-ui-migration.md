@@ -130,21 +130,21 @@ Status meanings:
 | Process readiness | None in legacy navigation; JSON endpoint already exists | `api_health()` | `GET /api/v1/healthz` | None | Initial connection state calls it | No | Operational endpoint only | Retain operationally |
 | Dependency health dashboard | `GET /` | `health()`; `AtlasClient.ping()`, `ImpalaEngine.ping()`, `llm_from_env().ping()` | `GET /api/v1/models/{model_id}/status`; infrastructure details require `organization.manage` | `model.read` for compact model status; `organization.manage` for infrastructure checks | Overview shows compact API, semantic-model, and discovery/profile status; administrators can expand safe metadata, Atlas, Impala, and proposal-service checks | No for the migrated checks; MCP and Iceberg need explicit backend health contracts before they can be added | Overview → Helios health; detailed checks remain administrator-only | Covered |
 | Principal and accessible-organization diagnostics | No old HTML page | `api_diagnostics()` and metadata grants | `GET /api/v1/diagnostics` | Authenticated Principal | Account indicator and connection state | No | Application shell/account diagnostics | Covered |
-| List glossaries | `GET /glossary` | `glossaries()` → `AtlasClient.list_glossaries()` | `GET /api/v1/models/{model_id}/glossary` returns only `glossary_id` | `glossary.read` | Governance is a placeholder | Add model-scoped glossary collection/summary API | Governance → Glossary | API gap |
-| Show glossary name, description, term count | `GET /glossary` | Atlas glossary documents | No content API | `glossary.read` | None | Include safe glossary summary DTO | Governance → Glossary | API gap |
-| Create glossary | `POST /glossary` | `create_glossary()` → `AtlasClient.create_glossary()` | None | `glossary.edit` | None | Add model/organization-scoped create endpoint with validation and audit identity | Governance → Glossary | API gap |
-| Delete glossary and terms | `POST /glossary/{guid}/delete` | `delete_glossary()` → `AtlasClient.delete_glossary()` | None | `glossary.edit` | None | Add authorized delete endpoint with dependency/impact response and confirmation contract | Governance → Glossary settings | API gap |
-| Glossary detail and term list | `GET /glossary/{guid}` | `terms()` → `AtlasClient.get_glossary()` and `list_terms()` | No content API | `glossary.read` | None | Add paged/filterable glossary-term collection endpoint | Governance → Glossary detail | API gap |
-| Filter terms by name or definition | `GET /glossary/{guid}?q=...` | Python in-memory case-insensitive filter in `terms()` | None | `glossary.read` | None | Add server-side authorized `query`, pagination, and limit parameters | Governance → Glossary search | API gap |
-| Import Atlas glossary CSV | `POST /glossary/{guid}/import` | `import_terms()`; temp file; `AtlasClient.import_csv()` | None | `glossary.edit` | None | Add multipart import endpoint plus structured success/conflict/error DTO | Governance → Glossary import | API gap |
-| New term form | `GET /glossary/{guid}/term/new` | `new_term()` renders Atlas glossary context | None | `glossary.edit` | None | Form itself needs no endpoint beyond glossary detail; create endpoint is required | Governance → Glossary term editor | API gap |
-| Create glossary term | `POST /glossary/{guid}/term` | `create_term()` → `AtlasClient.create_term()` | None | `glossary.edit` | None | Add create-term endpoint for name, short/long description, abbreviation, and examples | Governance → Glossary term editor | API gap |
-| View term details | `GET /term/{guid}` | `term()` → `AtlasClient.get_term()` and `assigned_entities()` | None | `glossary.read` | Proposed terms can appear on Canvas, but published Atlas term detail does not | Add term-detail DTO including authorized assignments | Governance → Glossary term detail; link from Inspector | API gap |
-| Edit glossary term | `GET /term/{guid}/edit`; `POST /term/{guid}` | `edit_term()`, `update_term()` → `AtlasClient.update_term()` | None | `glossary.edit` | Canvas edit applies to discovery proposals, not published Atlas terms | Add update endpoint with validation and audit response | Governance → Glossary term editor | API gap |
-| Delete glossary term | `POST /term/{guid}/delete` | `delete_term()` → `AtlasClient.delete_term()` | None | `glossary.edit` | None | Add authorized delete endpoint | Governance → Glossary term detail | API gap |
-| Show linked Atlas columns | `GET /term/{guid}` | `AtlasClient.assigned_entities()` | No glossary assignment API; graph detail may show proposal business terms only | `glossary.read` and authorized physical visibility | Inspector has partial business-term display | Add authorized term-assignment collection that filters inaccessible assets | Governance term detail and Canvas Inspector | API gap |
-| Link term to `database.table.column` | `POST /term/{guid}/assign` | `assign()`; `AtlasClient.find_column()` then `AtlasClient.assign()` | None | `glossary.edit` plus `datasource.read` for the target | None | Add assignment endpoint using an opaque authorized asset ID; do not require React to query Atlas names | Governance term detail / Canvas Inspector | API gap |
-| Unlink term from column | `POST /term/{guid}/unassign/{entity_guid}` | `unassign()` → `AtlasClient.unassign()` | None | `glossary.edit` plus authorized target visibility | None | Add authorized assignment-delete endpoint with opaque IDs | Governance term detail / Canvas Inspector | API gap |
+| Model-linked glossary summary | `GET /glossary` | `glossaries()` → `AtlasClient.list_glossaries()` | `GET /api/v1/models/{model_id}/glossary` returns the linked glossary summary | `glossary.read` | Governance → Glossary summary | No | Governance → Glossary | Covered |
+| Show glossary name, description, term count | `GET /glossary` | Atlas glossary documents | Included in the model glossary summary | `glossary.read` | Glossary header and count | No | Governance → Glossary | Covered |
+| Create glossary | `POST /glossary` | `create_glossary()` → `AtlasClient.create_glossary()` | `POST /api/v1/models/{model_id}/glossary` creates and binds one glossary | `glossary.edit` | No-glossary empty-state workflow | No | Governance → Glossary | Covered |
+| Delete glossary and terms | `POST /glossary/{guid}/delete` | `delete_glossary()` → `AtlasClient.delete_glossary()` | `DELETE /api/v1/models/{model_id}/glossary?confirm=true` | `glossary.edit` | Confirmed delete action | No | Governance → Glossary settings | Covered |
+| Glossary detail and term list | `GET /glossary/{guid}` | `terms()` → `AtlasClient.get_glossary()` and `list_terms()` | `GET .../glossary/terms` | `glossary.read` | Responsive term cards with paging | No | Governance → Glossary detail | Covered |
+| Filter and sort terms | `GET /glossary/{guid}?q=...` | Python in-memory case-insensitive filter in `terms()` | Authorized `query`, `sort`, `direction`, `offset`, and `limit` parameters | `glossary.read` | URL-backed search, sort, and paging | No | Governance → Glossary search | Covered |
+| Import Atlas glossary CSV | `POST /glossary/{guid}/import` | `import_terms()`; temp file; `AtlasClient.import_csv()` | `POST .../glossary/import` validates model glossary identity and returns structured counts/errors | `glossary.edit` | Glossary CSV import action | No | Governance → Glossary import | Covered |
+| New term form | `GET /glossary/{guid}/term/new` | `new_term()` renders Atlas glossary context | Uses glossary summary plus term create API | `glossary.edit` | Accessible term editor modal | No | Governance → Glossary term editor | Covered |
+| Create glossary term | `POST /glossary/{guid}/term` | `create_term()` → `AtlasClient.create_term()` | `POST .../glossary/terms` | `glossary.edit` | New term workflow | No | Governance → Glossary term editor | Covered |
+| View term details | `GET /term/{guid}` | `term()` → `AtlasClient.get_term()` and `assigned_entities()` | `GET .../glossary/terms/{term_id}` returns safe detail and authorized assignments | `glossary.read` | Deep-linkable term detail | No | Governance → Glossary term detail | Covered |
+| Edit glossary term | `GET /term/{guid}/edit`; `POST /term/{guid}` | `edit_term()`, `update_term()` → `AtlasClient.update_term()` | `PATCH .../glossary/terms/{term_id}` | `glossary.edit` | Typed term editor | No | Governance → Glossary term editor | Covered |
+| Delete glossary term | `POST /term/{guid}/delete` | `delete_term()` → `AtlasClient.delete_term()` | `DELETE .../glossary/terms/{term_id}` | `glossary.edit` | Confirmed term deletion | No | Governance → Glossary term detail | Covered |
+| Show linked Atlas columns | `GET /term/{guid}` | `AtlasClient.assigned_entities()` | Term detail filters assignments through authorized graph visibility | `glossary.read` and authorized physical visibility | Term mappings with Canvas links | No | Governance term detail and Canvas Inspector | Covered |
+| Link term to `database.table.column` | `POST /term/{guid}/assign` | `assign()`; `AtlasClient.find_column()` then `AtlasClient.assign()` | Authorized assignment endpoint accepts a Helios Canvas element ID and resolves Atlas server-side | `glossary.edit` plus `datasource.read` | Authorized asset picker | No | Governance term detail / Canvas Inspector | Covered |
+| Unlink term from column | `POST /term/{guid}/unassign/{entity_guid}` | `unassign()` → `AtlasClient.unassign()` | Authorized assignment delete endpoint rechecks target visibility | `glossary.edit` plus authorized target visibility | Remove mapping action | No | Governance term detail / Canvas Inspector | Covered |
 | List all filesystem runs | `GET /runs` | `runs()` → `runstore.list_runs()` | `GET /api/v1/models/{model_id}/runs` returns only model-associated runs with lifecycle, phases, counts, and actions | `model.read` | Models → Discovery & Activity lists authorized model runs | Pagination may be needed at scale; do not restore a global run list | Models → Discovery Runs | Covered |
 | Run stage status and updated time | `GET /runs` | `runstore.list_runs()` checks `harvest.json`, `profile.json`, `propose.json` | Model runs return artifact-backed phases and nullable lifecycle values | `model.read` | Run cards show returned phases and unavailable evidence explicitly | Producer persistence is needed for live lifecycle values | Models → Discovery Runs | Covered for persisted evidence |
 | Run harvest summary | `GET /runs/{run_id}` | `run_detail()` → `runstore.summary()` and `load("harvest")` | `GET /api/v1/models/{model_id}/runs/{run_id}` verifies model ownership and returns safe artifact-backed summary | `model.read` | Models → Run detail | No for current artifact summary | Models → Run detail | Covered |
@@ -214,11 +214,26 @@ server-rendered pages.
 
 ### Phase 3 — migrate glossary management
 
-1. Add model-scoped glossary and term read APIs.
-2. Add glossary/term create, update, delete, import, assignment, and
-   unassignment APIs with `glossary.edit`.
-3. Filter all physical assignments through datasource authorization.
-4. Implement Governance → Glossary and Inspector links.
+Completed:
+
+1. Model-scoped glossary and term read APIs expose only the glossary bound to
+   the selected model.
+2. Glossary/term create, update, delete, import, assignment, and unassignment
+   APIs enforce `glossary.edit`.
+3. Physical assignments are filtered and mutated only after datasource and
+   authorized-graph checks.
+4. Governance → Glossary provides published-term management, proposed-term
+   review, deep-linkable details, and Canvas focus links.
+
+The legacy routes remain present during the final retirement validation; the
+React application has no dependency on them.
+
+**Glossary retirement status:** ready for removal after deployment smoke
+testing against the configured Atlas instance. Automated parity coverage now
+protects model scoping, authorization, term CRUD, import validation,
+assignment filtering, proposal review, and Canvas links. This status applies
+only to `/glossary*` and `/term*`; the broader Console retirement gate still
+depends on the remaining non-glossary rows in this document.
 
 Direct browser-to-Atlas calls are not an acceptable shortcut.
 

@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
@@ -500,6 +507,163 @@ function successfulClient(): HeliosApi {
       run_id: "run-1",
       manifest: {},
     }),
+    modelGlossary: vi.fn().mockResolvedValue({
+      model_id: "north-model",
+      glossary: {
+        id: "north-glossary",
+        name: "North business glossary",
+        description: "Governed terms for the selected model.",
+        term_count: 1,
+      },
+      available_actions: ["glossary.read", "glossary.edit"],
+    }),
+    modelGlossaryTerms: vi.fn().mockResolvedValue({
+      model_id: "north-model",
+      glossary_id: "north-glossary",
+      items: [
+        {
+          id: "order-id",
+          name: "Order identifier",
+          definition: "A stable identifier for an order.",
+          long_description: "",
+          abbreviation: "OID",
+          examples: [],
+          status: "published",
+          confidence: null,
+          evidence: [],
+        },
+      ],
+      offset: 0,
+      limit: 24,
+      total: 1,
+      truncated: false,
+      available_actions: ["glossary.read", "glossary.edit"],
+    }),
+    modelGlossaryTerm: vi.fn().mockResolvedValue({
+      term: {
+        id: "order-id",
+        name: "Order identifier",
+        definition: "A stable identifier for an order.",
+        long_description: "Used across governed order datasets.",
+        abbreviation: "OID",
+        examples: ["O-100"],
+        status: "published",
+        confidence: null,
+        evidence: [],
+        assignments: [
+          {
+            id: "atlas-column-1",
+            name: "sales.orders.order_id",
+            type: "hive_column",
+            canvas_element_id: "attribute:orders:id",
+            canvas_lens: "physical",
+          },
+        ],
+      },
+      available_actions: ["glossary.read", "glossary.edit"],
+    }),
+    createModelGlossary: vi.fn(),
+    deleteModelGlossary: vi.fn().mockResolvedValue({ ok: true }),
+    createModelGlossaryTerm: vi.fn().mockResolvedValue({
+      term: {
+        id: "new-term",
+        name: "New term",
+        definition: "",
+        long_description: "",
+        abbreviation: "",
+        examples: [],
+        status: "published",
+        confidence: null,
+        evidence: [],
+      },
+      available_actions: ["glossary.read", "glossary.edit"],
+    }),
+    updateModelGlossaryTerm: vi.fn(),
+    deleteModelGlossaryTerm: vi.fn().mockResolvedValue({ ok: true }),
+    importModelGlossary: vi.fn().mockResolvedValue({
+      ok: true,
+      imported: 2,
+      failed: 0,
+    }),
+    modelGlossaryAssignableAssets: vi.fn().mockResolvedValue({
+      items: [],
+    }),
+    assignModelGlossaryTerm: vi.fn().mockResolvedValue({ ok: true }),
+    unassignModelGlossaryTerm: vi.fn().mockResolvedValue({ ok: true }),
+    modelConversations: vi.fn().mockResolvedValue({
+      model_id: "north-model",
+      conversations: [],
+    }),
+    createModelConversation: vi.fn(),
+    modelConversation: vi.fn(),
+    appendModelConversationTurn: vi.fn(),
+    auditEvents: vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: "audit-1",
+          occurred_at: "2026-09-24T12:00:00+00:00",
+          request_id: "request-1",
+          session_id: "session-1",
+          principal_id: "cloudera-workbench:analyst",
+          organization_id: "north",
+          model_id: "north-model",
+          component: "api",
+          event_type: "http.request",
+          action: "GET /api/v1/models/{model_id}",
+          resource_type: "model",
+          resource_id: "north-model",
+          outcome: "success",
+          severity: "info",
+          http_status: 200,
+          duration_ms: 12.5,
+          summary: "API request completed",
+          details: { method: "GET" },
+        },
+      ],
+      page: {
+        offset: 0,
+        limit: 50,
+        returned: 1,
+        total: 1,
+        has_more: false,
+      },
+      filters: {},
+      available_actions: ["audit.read"],
+    }),
+    auditEvent: vi.fn().mockResolvedValue({
+      id: "audit-1",
+      occurred_at: "2026-09-24T12:00:00+00:00",
+      request_id: "request-1",
+      session_id: "session-1",
+      principal_id: "cloudera-workbench:analyst",
+      organization_id: "north",
+      model_id: "north-model",
+      component: "api",
+      event_type: "http.request",
+      action: "GET /api/v1/models/{model_id}",
+      resource_type: "model",
+      resource_id: "north-model",
+      outcome: "success",
+      severity: "info",
+      http_status: 200,
+      duration_ms: 12.5,
+      summary: "API request completed",
+      details: { method: "GET" },
+    }),
+    auditSessions: vi.fn().mockResolvedValue({
+      sessions: [
+        {
+          session_id: "session-1",
+          principal_id: "cloudera-workbench:analyst",
+          first_seen_at: "2026-09-24T11:00:00+00:00",
+          last_seen_at: "2026-09-24T12:00:00+00:00",
+          event_count: 3,
+          organization_id: "north",
+        },
+      ],
+      available_actions: ["audit.read"],
+    }),
+    recordClientAuditEvent: vi.fn().mockResolvedValue({ ok: true }),
     applicationUrl: vi.fn(
       (path: string) => `https://helios-api.example.test${path}`,
     ),
@@ -789,14 +953,14 @@ describe("Helios application shell", () => {
     expect(
       await screen.findByRole("heading", { name: "North Model" }),
     ).toBeInTheDocument();
+    expect(await screen.findByText(/1 attributes are hidden/i))
+      .toBeInTheDocument();
     expect(screen.queryByText("Semantic model")).not.toBeInTheDocument();
     expect(screen.queryByText(/Explore the authorized domains/i))
       .not.toBeInTheDocument();
     expect(document.getElementById("main-content"))
       .toHaveClass("app__main--canvas");
     expect(screen.queryByText("Nothing selected")).not.toBeInTheDocument();
-    expect(await screen.findByText(/1 attributes are hidden/i))
-      .toBeInTheDocument();
     expect(client.modelGraph).toHaveBeenCalledWith("north-model", {
       navigation: true,
       lens: "semantic",
@@ -1357,7 +1521,7 @@ describe("Helios application shell", () => {
 
     render(<App client={client} />);
     await screen.findByRole("heading", { name: "Proposal workspace" });
-    expect(screen.getByText("Customer orders.")).toBeInTheDocument();
+    expect(await screen.findByText("Customer orders.")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Decision"), {
       target: { value: "pending" },
@@ -1461,7 +1625,7 @@ describe("Helios application shell", () => {
 
     render(<App client={client} />);
     await screen.findByRole("heading", { name: "Proposal workspace" });
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
     await waitFor(() =>
       expect(client.decideModelProposal).toHaveBeenLastCalledWith(
         "north-model",
@@ -1627,10 +1791,12 @@ describe("Helios application shell", () => {
         focusNodeId: "dataset:sales.orders",
       }),
     );
-    expect(client.modelGraphDetail).toHaveBeenCalledWith(
-      "north-model",
-      "dataset:sales.orders",
-      undefined,
+    await waitFor(() =>
+      expect(client.modelGraphDetail).toHaveBeenCalledWith(
+        "north-model",
+        "dataset:sales.orders",
+        undefined,
+      ),
     );
     first.unmount();
 
@@ -1651,5 +1817,494 @@ describe("Helios application shell", () => {
     expect(window.location.search).toContain("organization=north");
     expect(window.location.search).toContain("model=north-model");
     expect(document.querySelector('a[href^="/runs/"]')).toBeNull();
+  });
+
+  it("renders model-scoped glossary terms and authorized Canvas mappings", async () => {
+    const client = successfulClient();
+    window.history.replaceState(
+      {},
+      "",
+      "/governance?organization=north&model=north-model",
+    );
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "North business glossary",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("A stable identifier for an order."))
+      .toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("link", { name: "Order identifier" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Mapped model attributes" }),
+    ).toBeInTheDocument();
+    expect(client.modelGlossaryTerm).toHaveBeenCalledWith(
+      "north-model",
+      "order-id",
+    );
+    expect(screen.getByRole("link", { name: "Show in Canvas" }))
+      .toHaveAttribute(
+        "href",
+        "/canvas?organization=north&model=north-model&lens=physical&focus_node_id=attribute%3Aorders%3Aid&element_id=attribute%3Aorders%3Aid",
+      );
+  });
+
+  it("creates a glossary term and reconciles the published collection", async () => {
+    const client = successfulClient();
+    window.history.replaceState(
+      {},
+      "",
+      "/governance?organization=north&model=north-model",
+    );
+    render(<App client={client} />);
+    await screen.findByRole("heading", { name: "North business glossary" });
+
+    fireEvent.click(screen.getByRole("button", { name: "New term" }));
+    fireEvent.change(screen.getByLabelText("Business term"), {
+      target: { value: "Fulfillment status" },
+    });
+    fireEvent.change(screen.getByLabelText("Definition"), {
+      target: { value: "The governed state of fulfillment." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save term" }));
+
+    await waitFor(() =>
+      expect(client.createModelGlossaryTerm).toHaveBeenCalledWith(
+        "north-model",
+        expect.objectContaining({
+          name: "Fulfillment status",
+          definition: "The governed state of fulfillment.",
+        }),
+      ),
+    );
+    expect(await screen.findByText("Glossary term created."))
+      .toBeInTheDocument();
+    expect(client.modelGlossaryTerms).toHaveBeenCalledTimes(2);
+  });
+
+  it("creates and binds a glossary from the model empty state", async () => {
+    const client = successfulClient();
+    vi.mocked(client.modelGlossary!)
+      .mockResolvedValueOnce({
+        model_id: "north-model",
+        glossary: null,
+        available_actions: ["glossary.read", "glossary.edit"],
+      })
+      .mockResolvedValue({
+        model_id: "north-model",
+        glossary: {
+          id: "north-glossary",
+          name: "North vocabulary",
+          description: "Governed business language.",
+          term_count: 0,
+        },
+        available_actions: ["glossary.read", "glossary.edit"],
+      });
+    vi.mocked(client.createModelGlossary!).mockResolvedValue({
+      model_id: "north-model",
+      glossary: {
+        id: "north-glossary",
+        name: "North vocabulary",
+        description: "Governed business language.",
+        term_count: 0,
+      },
+      available_actions: ["glossary.read", "glossary.edit"],
+    });
+    vi.mocked(client.modelGlossaryTerms!).mockResolvedValue({
+      model_id: "north-model",
+      glossary_id: "north-glossary",
+      items: [],
+      offset: 0,
+      limit: 24,
+      total: 0,
+      truncated: false,
+      available_actions: ["glossary.read", "glossary.edit"],
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/governance?organization=north&model=north-model",
+    );
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "No glossary is linked to this model",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Create glossary" }));
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "North vocabulary" },
+    });
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "Governed business language." },
+    });
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Create glossary",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(client.createModelGlossary).toHaveBeenCalledWith(
+        "north-model",
+        {
+          name: "North vocabulary",
+          description: "Governed business language.",
+        },
+      ),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "North vocabulary" }),
+    ).toBeInTheDocument();
+  });
+
+  it("reviews proposed glossary terms and links evidence to Canvas", async () => {
+    const client = successfulClient();
+    vi.mocked(client.modelRunProposals!).mockResolvedValue({
+      model_id: "north-model",
+      run_id: "run-1",
+      section: "glossary_terms",
+      items: [
+        {
+          id: "Order lifecycle",
+          section: "glossary_terms",
+          proposal: {
+            name: "Order lifecycle",
+            definition: "The stages of an order.",
+            columns: ["sales.orders.status"],
+            source: "discovery",
+            confidence: 0.91,
+          },
+          confidence: 0.91,
+          provenance: { source: "discovery", llm: null },
+          review: { decision: "pending", overrides: null, note: null },
+          canvas: {
+            review_run_id: "run-1",
+            element_id: "concept:Order lifecycle",
+            focus_node_id: "concept:Order lifecycle",
+            lens: "ontology",
+          },
+          available_actions: ["accept", "reject", "edit", "view_in_canvas"],
+        },
+      ],
+      page: {
+        offset: 0,
+        limit: 200,
+        returned: 1,
+        total: 1,
+        has_more: false,
+      },
+      filters: { decision: null, query: null },
+      reviewed_at: null,
+      reviewed_by: null,
+      available_actions: ["decide"],
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/governance/proposals?organization=north&model=north-model",
+    );
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Order lifecycle" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("91% confidence")).toBeInTheDocument();
+    expect(screen.getByText("sales.orders.status")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View in Canvas" }))
+      .toHaveAttribute(
+        "href",
+        "/canvas?organization=north&model=north-model&review_run_id=run-1&lens=ontology&focus_node_id=concept%3AOrder+lifecycle&element_id=concept%3AOrder+lifecycle",
+      );
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await waitFor(() =>
+      expect(client.decideModelProposal).toHaveBeenCalledWith(
+        "north-model",
+        "run-1",
+        expect.objectContaining({
+          section: "glossary_terms",
+          element_id: "Order lifecycle",
+          decision: "accept",
+        }),
+      ),
+    );
+  });
+
+  it("creates and continues a persistent MCP-backed conversation", async () => {
+    const client = successfulClient();
+    const firstConversation = {
+      id: "conversation-1",
+      model_id: "north-model",
+      title: "How many orders?",
+      version: 1,
+      created_at: "2026-09-24T16:00:00+00:00",
+      updated_at: "2026-09-24T16:00:00+00:00",
+      messages: [
+        {
+          id: "user-1",
+          role: "user" as const,
+          content: "How many orders?",
+          created_at: "2026-09-24T16:00:00+00:00",
+        },
+        {
+          id: "assistant-1",
+          role: "assistant" as const,
+          content: "There are 12 orders.",
+          created_at: "2026-09-24T16:00:01+00:00",
+        },
+      ],
+    };
+    vi.mocked(client.createModelConversation!).mockResolvedValue({
+      conversation: firstConversation,
+      turn: {
+        model_id: "north-model",
+        answer: "There are 12 orders.",
+        tool_trace: [
+          {
+            tool: "run_query",
+            arguments: { model: "north-model" },
+            result: { columns: ["order_count"], rows: [[12]] },
+          },
+        ],
+        query_result: {
+          columns: ["order_count"],
+          rows: [[12]],
+          sql: "SELECT COUNT(*) FROM sales.orders",
+        },
+      },
+    });
+    vi.mocked(client.appendModelConversationTurn!).mockResolvedValue({
+      conversation: {
+        ...firstConversation,
+        version: 2,
+        updated_at: "2026-09-24T16:01:00+00:00",
+        messages: [
+          ...firstConversation.messages,
+          {
+            id: "user-2",
+            role: "user",
+            content: "Which region has the most?",
+            created_at: "2026-09-24T16:01:00+00:00",
+          },
+          {
+            id: "assistant-2",
+            role: "assistant",
+            content: "The west region has the most orders.",
+            created_at: "2026-09-24T16:01:01+00:00",
+          },
+        ],
+      },
+      turn: {
+        model_id: "north-model",
+        answer: "The west region has the most orders.",
+        tool_trace: [],
+        query_result: null,
+      },
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/talk?organization=north&model=north-model",
+    );
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "North Model" }),
+    ).toBeInTheDocument();
+    const composer = screen.getByLabelText("Ask about this model");
+    fireEvent.change(composer, { target: { value: "How many orders?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask Helios" }));
+
+    expect(
+      await screen.findByText("There are 12 orders."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("order_count")).toBeInTheDocument();
+    expect(screen.getByText("12")).toBeInTheDocument();
+    expect(client.createModelConversation).toHaveBeenCalledWith(
+      "north-model",
+      "How many orders?",
+    );
+    expect(window.location.search).toContain("conversation=conversation-1");
+
+    fireEvent.change(composer, {
+      target: { value: "Which region has the most?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ask Helios" }));
+
+    expect(
+      await screen.findByText("The west region has the most orders."),
+    ).toBeInTheDocument();
+    expect(client.appendModelConversationTurn).toHaveBeenCalledWith(
+      "north-model",
+      "conversation-1",
+      "Which region has the most?",
+      1,
+    );
+  });
+
+  it("loads a deep-linked conversation owned by the selected model", async () => {
+    const client = successfulClient();
+    vi.mocked(client.modelConversations!).mockResolvedValue({
+      model_id: "north-model",
+      conversations: [
+        {
+          id: "saved-1",
+          model_id: "north-model",
+          title: "Saved question",
+          version: 1,
+          created_at: "2026-09-24T16:00:00+00:00",
+          updated_at: "2026-09-24T16:00:00+00:00",
+        },
+      ],
+    });
+    vi.mocked(client.modelConversation!).mockResolvedValue({
+      id: "saved-1",
+      model_id: "north-model",
+      title: "Saved question",
+      version: 1,
+      created_at: "2026-09-24T16:00:00+00:00",
+      updated_at: "2026-09-24T16:00:00+00:00",
+      messages: [
+        {
+          id: "saved-user",
+          role: "user",
+          content: "What metrics are available?",
+          created_at: "2026-09-24T16:00:00+00:00",
+        },
+        {
+          id: "saved-assistant",
+          role: "assistant",
+          content: "Six governed metrics are available.",
+          created_at: "2026-09-24T16:00:01+00:00",
+        },
+      ],
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/talk?organization=north&model=north-model&conversation=saved-1",
+    );
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByText("Six governed metrics are available."),
+    ).toBeInTheDocument();
+    expect(client.modelConversation).toHaveBeenCalledWith(
+      "north-model",
+      "saved-1",
+    );
+    expect(
+      screen.getByRole("link", { name: "Talk to Your Data" }),
+    ).toHaveAttribute(
+      "href",
+      "/talk?organization=north&model=north-model",
+    );
+  });
+
+  it("shows conversation authorization failures without crashing the workspace", async () => {
+    const client = successfulClient();
+    vi.mocked(client.modelConversations!).mockRejectedValue(
+      new AuthorizationError("Conversation access was revoked."),
+    );
+    window.history.replaceState(
+      {},
+      "",
+      "/talk?organization=north&model=north-model",
+    );
+    render(<App client={client} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "You no longer have permission to use this model.",
+    );
+    expect(screen.getByLabelText("Ask about this model")).toBeInTheDocument();
+  });
+
+  it("shows own-session activity and a sanitized event detail", async () => {
+    const client = successfulClient();
+    window.history.replaceState(
+      {},
+      "",
+      "/activity?organization=north&model=north-model",
+    );
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Activity Logs" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Activity Logs" }),
+    ).toHaveAttribute(
+      "href",
+      "/activity?organization=north&model=north-model",
+    );
+    expect(screen.queryByText("Organization activity")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "GET /api/v1/models/{model_id}",
+      }),
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "GET /api/v1/models/{model_id}",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Sanitized details")).toBeInTheDocument();
+    expect(client.auditEvent).toHaveBeenCalledWith("audit-1");
+  });
+
+  it("offers organization-wide activity only to organization admins", async () => {
+    const client = successfulClient();
+    vi.mocked(client.auditEvent!).mockResolvedValue({
+      ...(await client.auditEvent!("audit-1")),
+      outcome: "error",
+      diagnostics: {
+        stage: "impala_query",
+        exception_chain: [
+          {
+            exception_type: "OperationalError",
+            description: "connection refused",
+          },
+        ],
+      },
+    });
+    vi.mocked(client.auditEvents!).mockResolvedValue({
+      ...(await client.auditEvents!()),
+      available_actions: ["audit.read", "audit.read_organization"],
+    });
+    vi.mocked(client.auditSessions!).mockResolvedValue({
+      sessions: [],
+      available_actions: ["audit.read", "audit.read_organization"],
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/activity?organization=north&model=north-model",
+    );
+    render(<App client={client} />);
+
+    const scope = await screen.findByLabelText("Organization activity");
+    fireEvent.click(scope);
+    await waitFor(() =>
+      expect(client.auditEvents).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          organizationId: "north",
+          includeAll: true,
+        }),
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "GET /api/v1/models/{model_id}",
+      }),
+    );
+    expect(
+      await screen.findByText("Administrator diagnostics"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/OperationalError/)).toBeInTheDocument();
   });
 });

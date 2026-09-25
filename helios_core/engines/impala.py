@@ -1,6 +1,8 @@
 """Impala adapter: connects to a Cloudera Data Warehouse Impala Virtual Warehouse over HTTPS with LDAP auth."""
 from __future__ import annotations
 
+from urllib.parse import parse_qsl, urlencode
+
 from ..config import ImpalaConfig
 from .base import Engine, QueryResult
 
@@ -12,17 +14,38 @@ class ImpalaEngine(Engine):
     def __init__(self, cfg: ImpalaConfig):
         self.cfg = cfg
 
-    def _connect(self):
+    def _connect(self, delegated_user: str | None = None):
         from impala.dbapi import connect
+        http_path = self.cfg.http_path
+        if delegated_user:
+            if not self.cfg.proxy_delegation:
+                raise PermissionError("Impala proxy-user delegation is disabled")
+            path, separator, query = http_path.partition("?")
+            parameters = dict(parse_qsl(query, keep_blank_values=True))
+            parameters["doAs"] = delegated_user
+            http_path = f"{path}?{urlencode(parameters)}"
         return connect(host=self.cfg.host, port=self.cfg.port, database=self.cfg.database,
                        user=self.cfg.user, password=self.cfg.password,
                        auth_mechanism="LDAP", use_ssl=True,
-                       use_http_transport=True, http_path=self.cfg.http_path)
+                       use_http_transport=True, http_path=http_path)
 
-    def query(self, sql: str, limit: int | None = 1000) -> QueryResult:
-        conn = self._connect()
+    def query(
+        self,
+        sql: str,
+        limit: int | None = 1000,
+        *,
+        delegated_user: str | None = None,
+    ) -> QueryResult:
+        conn = self._connect(delegated_user)
         try:
             cur = conn.cursor()
+            if delegated_user:
+                cur.execute("SELECT EFFECTIVE_USER()")
+                effective = cur.fetchone()
+                if not effective or effective[0] != delegated_user:
+                    raise PermissionError(
+                        "Impala did not enforce the delegated SSO identity"
+                    )
             cur.execute(sql)
             if cur.description is None:
                 return QueryResult([], [])

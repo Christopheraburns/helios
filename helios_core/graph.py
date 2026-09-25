@@ -812,6 +812,18 @@ def _proposal_detail(
                     "accepted": relationship.get("accepted"),
                 }
             )
+    for term in document.get("glossary_terms", []):
+        if element_id == f"concept:{term.get('name')}":
+            return _compact(
+                {
+                    "description": term.get("definition"),
+                    "business_term": term.get("name"),
+                    "mapped_attributes": term.get("columns"),
+                    "confidence": term.get("confidence"),
+                    "evidence": term.get("evidence"),
+                    "source": term.get("source"),
+                }
+            )
     return {}
 
 

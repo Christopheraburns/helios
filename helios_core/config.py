@@ -29,6 +29,7 @@ class ImpalaConfig:
     password: str
     database: str = "default"
     http_path: str = "cliservice"
+    proxy_delegation: bool = False
 
 
 @dataclass(frozen=True)
@@ -69,12 +70,21 @@ def _parse_impala_host(value: str) -> tuple[str, int | None, str | None]:
 
 
 def impala_config() -> ImpalaConfig | None:
-    raw, user, pw = _env("IMPALA_HOST"), _env("IMPALA_USER") or _env("ATLAS_USER"), _env("IMPALA_PASS") or _env("ATLAS_PASS")
+    raw = _env("IMPALA_HOST")
+    user = _env("WORKLOAD_USER")
+    pw = _env("WORKLOAD_PASSWORD")
     if not (raw and user and pw):
         return None
     host, port, http_path = _parse_impala_host(raw)
-    return ImpalaConfig(host, int(_env("IMPALA_PORT") or port or 443), user, pw,
-                        _env("IMPALA_DATABASE", "default"), _env("IMPALA_HTTP_PATH") or http_path or "cliservice")
+    return ImpalaConfig(
+        host,
+        int(_env("IMPALA_PORT") or port or 443),
+        user,
+        pw,
+        _env("IMPALA_DATABASE", "default"),
+        _env("IMPALA_HTTP_PATH") or http_path or "cliservice",
+        _env("IMPALA_PROXY_DELEGATION", "false").lower() == "true",
+    )
 
 
 def inference_config() -> InferenceConfig:

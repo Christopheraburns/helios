@@ -168,6 +168,7 @@ def test_api_allows_only_configured_credentialed_origin(connectivity_client):
         headers={
             "origin": "https://helios-ui.example.test",
             "access-control-request-method": "GET",
+            "access-control-request-headers": "x-helios-session-id",
         },
     )
     denied = connectivity_client.options(
@@ -184,6 +185,9 @@ def test_api_allows_only_configured_credentialed_origin(connectivity_client):
         == "https://helios-ui.example.test"
     )
     assert allowed.headers["access-control-allow-credentials"] == "true"
+    assert "x-helios-session-id" in allowed.headers[
+        "access-control-allow-headers"
+    ].lower()
     assert denied.status_code == 400
     assert "access-control-allow-origin" not in denied.headers
 
