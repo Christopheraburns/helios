@@ -1106,3 +1106,23 @@ def test_conversation_endpoint_reports_missing_server_configuration(
         "MCP conversation connectivity is not configured"
         in response.json()["detail"]
     )
+
+
+def test_impala_skips_delegation_to_the_connected_user(monkeypatch):
+    captured = {}
+
+    def connect(**kwargs):
+        captured.update(kwargs)
+        return FakeConnection("cburns")
+
+    monkeypatch.setattr(impala_dbapi, "connect", connect)
+    engine = ImpalaEngine(
+        ImpalaConfig(
+            "warehouse.example", 443, "cburns", "secret",
+            http_path="cliservice", proxy_delegation=True,
+        )
+    )
+    result = engine.query("SELECT 7", delegated_user="CBurns")
+
+    assert result.rows == [(7,)]
+    assert "doAs" not in captured["http_path"]

@@ -7,6 +7,15 @@ from ..config import ImpalaConfig
 from .base import Engine, QueryResult
 
 
+def _short_name(user: str) -> str:
+    """Kerberos-style short name: text before the first '/' or '@', lower-cased."""
+    return user.strip().split("/", 1)[0].split("@", 1)[0].lower()
+
+
+def _same_user(a: str, b: str) -> bool:
+    return bool(a and b) and _short_name(a) == _short_name(b)
+
+
 class ImpalaEngine(Engine):
     name = "impala"
     sqlglot_dialect = "hive"   # SQLGlot has no dedicated Impala dialect; Hive is the closest and is post-processed by the compiler
@@ -17,6 +26,10 @@ class ImpalaEngine(Engine):
     def _connect(self, delegated_user: str | None = None):
         from impala.dbapi import connect
         http_path = self.cfg.http_path
+        if delegated_user and _same_user(delegated_user, self.cfg.user):
+            # Already connected as this user. Impala rejects doAs-to-self unless the Virtual
+            # Warehouse has a proxy config, so skip it; query() still verifies EFFECTIVE_USER().
+            delegated_user = None
         if delegated_user:
             if not self.cfg.proxy_delegation:
                 raise PermissionError("Impala proxy-user delegation is disabled")
@@ -42,7 +55,7 @@ class ImpalaEngine(Engine):
             if delegated_user:
                 cur.execute("SELECT EFFECTIVE_USER()")
                 effective = cur.fetchone()
-                if not effective or effective[0] != delegated_user:
+                if not effective or not _same_user(str(effective[0]), delegated_user):
                     raise PermissionError(
                         "Impala did not enforce the delegated SSO identity"
                     )
