@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 from dataclasses import dataclass
@@ -16,6 +17,8 @@ from helios_core import __version__, audit
 from helios_core.authz import Principal
 from helios_core.delegation import issue_assertion
 from helios_core.llm import LLMClient, LLMError, llm_from_env
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ConversationUnavailable(RuntimeError):
@@ -58,6 +61,49 @@ class MCPClientConfig:
         return cls(url, token, secret, timeout_seconds)
 
 
+async def inspect_mcp(
+    mcp: MCPClientConfig,
+    principal: Principal,
+    organization_id: str,
+    model_id: str,
+) -> dict[str, Any]:
+    """Initialize the configured MCP service and return public capabilities."""
+    context = audit.current_context()
+    assertion = issue_assertion(
+        mcp.delegation_secret,
+        principal,
+        organization_id,
+        model_id,
+        request_id=context.request_id if context else None,
+        session_id=context.session_id if context else None,
+    )
+    headers = {
+        "Authorization": f"Bearer {mcp.token}",
+        "X-Helios-Principal-Assertion": assertion,
+    }
+    # A management-page health probe should fail quickly even when the
+    # conversation timeout is deliberately long.
+    timeout = httpx2.Timeout(min(mcp.timeout_seconds, 10.0))
+    async with httpx2.AsyncClient(headers=headers, timeout=timeout) as client:
+        async with streamable_http_client(
+            mcp.url,
+            http_client=client,
+        ) as streams:
+            async with ClientSession(*streams) as session:
+                initialized = await session.initialize()
+                listed = await session.list_tools()
+                return {
+                    "server": _mcp_provenance(initialized),
+                    "tools": [
+                        {
+                            "name": tool.name,
+                            "description": tool.description or "",
+                        }
+                        for tool in listed.tools
+                    ],
+                }
+
+
 class ConversationService:
     def __init__(
         self,
@@ -73,13 +119,21 @@ class ConversationService:
         self.max_result_chars = max_result_chars
 
     @classmethod
-    def from_env(cls) -> "ConversationService":
+    def from_env(
+        cls,
+        *,
+        max_tool_rounds: int = 6,
+    ) -> "ConversationService":
         llm = llm_from_env()
         if llm is None:
             raise ConversationUnavailable(
                 "The conversation LLM is not configured"
             )
-        return cls(llm, MCPClientConfig.from_env())
+        return cls(
+            llm,
+            MCPClientConfig.from_env(),
+            max_tool_rounds=max_tool_rounds,
+        )
 
     async def turn(
         self,
@@ -146,6 +200,10 @@ class ConversationService:
         except ConversationUnavailable:
             raise
         except Exception as exc:
+            unavailable = _nested_exception(exc, ConversationUnavailable)
+            if unavailable is not None:
+                raise ConversationUnavailable(str(unavailable)) from exc
+            LOGGER.exception("unexpected MCP conversation failure")
             raise ConversationUnavailable(
                 "The Helios MCP service is unavailable"
             ) from exc
@@ -306,6 +364,22 @@ def _mcp_provenance(initialized: Any) -> dict[str, Any]:
             getattr(initialized, "protocol_version", None),
         ),
     }
+
+
+def _nested_exception(
+    exception: BaseException,
+    expected: type[ConversationUnavailable],
+) -> ConversationUnavailable | None:
+    if isinstance(exception, expected):
+        return exception
+    for nested in getattr(exception, "exceptions", ()):
+        matched = _nested_exception(nested, expected)
+        if matched is not None:
+            return matched
+    cause = exception.__cause__ or exception.__context__
+    if cause is not None and cause is not exception:
+        return _nested_exception(cause, expected)
+    return None
 
 
 def _tool_result(response: Any) -> Any:

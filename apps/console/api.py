@@ -16,7 +16,7 @@ from typing import Annotated, Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from helios_core import audit, authz
 from helios_core import health as system_health
@@ -44,8 +44,27 @@ from helios_core.metadata import (
     StoredConversation,
 )
 from apps.console.conversation import (
+    MCPClientConfig,
     ConversationService,
     ConversationUnavailable,
+    inspect_mcp,
+)
+from apps.console.mcp_settings import (
+    MAX_TOOL_ROUNDS,
+    MIN_TOOL_ROUNDS,
+    DEFAULT_SESSION_MCP_SETTINGS_STORE,
+    SessionMCPSettings,
+    SessionMCPSettingsStore,
+    environment_max_tool_rounds,
+)
+from apps.console.model_provider import (
+    DEFAULT_SESSION_MODEL_PROVIDER_STORE,
+    SUPPORTED_PROVIDERS,
+    SessionModelProvider,
+    SessionModelProviderStore,
+    environment_provider_summary,
+    llm_for_settings,
+    provider_availability,
 )
 
 api_router = APIRouter(prefix="/api/v1", tags=["api-v1"])
@@ -198,6 +217,23 @@ class PersistedConversationTurnResponse(BaseModel):
 
 class ConversationArchiveRequest(BaseModel):
     archived: bool = True
+
+
+class ModelProviderSettingsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["anthropic", "mistral", "bedrock", "openai"]
+    model: str = Field(min_length=1, max_length=300)
+    api_key: SecretStr
+
+
+class MCPSettingsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_tool_rounds: int = Field(
+        ge=MIN_TOOL_ROUNDS,
+        le=MAX_TOOL_ROUNDS,
+    )
 
 
 class AuditClientEventRequest(BaseModel):
@@ -384,13 +420,67 @@ def atlas_client(request: Request) -> AtlasClient:
     return AtlasClient(configuration)
 
 
-def conversation_service(request: Request) -> ConversationService:
+def _model_provider_store(request: Request) -> SessionModelProviderStore:
+    return getattr(
+        request.app.state,
+        "model_provider_settings",
+        DEFAULT_SESSION_MODEL_PROVIDER_STORE,
+    )
+
+
+def _mcp_settings_store(request: Request) -> SessionMCPSettingsStore:
+    return getattr(
+        request.app.state,
+        "mcp_settings",
+        DEFAULT_SESSION_MCP_SETTINGS_STORE,
+    )
+
+
+def _browser_session_id(request: Request) -> str:
+    session_id = audit.normalize_correlation_id(
+        request.headers.get("x-helios-session-id")
+    )
+    if session_id is None:
+        raise HTTPException(400, "a valid Helios browser session is required")
+    return session_id
+
+
+def conversation_service(
+    request: Request,
+    principal: Annotated[authz.Principal, Depends(current_principal)],
+) -> ConversationService:
     override = getattr(request.app.state, "conversation_service", None)
     if override is not None:
         return override
     try:
-        return ConversationService.from_env()
-    except ConversationUnavailable as exc:
+        session_id = audit.normalize_correlation_id(
+            request.headers.get("x-helios-session-id")
+        )
+        settings = (
+            _model_provider_store(request).get(principal.id, session_id)
+            if session_id is not None
+            else None
+        )
+        mcp_settings = (
+            _mcp_settings_store(request).get(principal.id, session_id)
+            if session_id is not None
+            else None
+        )
+        max_tool_rounds = (
+            mcp_settings.max_tool_rounds
+            if mcp_settings is not None
+            else environment_max_tool_rounds()
+        )
+        if settings is not None:
+            return ConversationService(
+                llm_for_settings(settings),
+                MCPClientConfig.from_env(),
+                max_tool_rounds=max_tool_rounds,
+            )
+        return ConversationService.from_env(
+            max_tool_rounds=max_tool_rounds,
+        )
+    except (ConversationUnavailable, ValueError) as exc:
         raise HTTPException(503, str(exc)) from exc
 
 
@@ -1145,6 +1235,189 @@ def api_diagnostics(
             "kind": principal.kind.value,
         },
         "accessible_organization_count": len(organization_ids),
+    }
+
+
+def _model_provider_settings_response(
+    settings: SessionModelProvider | None,
+) -> dict:
+    environment_provider, environment_model = environment_provider_summary()
+    availability = provider_availability()
+    return {
+        "source": "session" if settings is not None else "environment",
+        "provider": (
+            settings.provider if settings is not None else environment_provider
+        ),
+        "model": settings.model if settings is not None else environment_model,
+        "api_key_configured": settings is not None,
+        "providers": [
+            {"id": provider, "available": availability[provider]}
+            for provider in sorted(SUPPORTED_PROVIDERS)
+        ],
+    }
+
+
+def _mcp_settings_response(
+    settings: SessionMCPSettings | None,
+) -> dict:
+    try:
+        default_rounds = environment_max_tool_rounds()
+    except ValueError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return {
+        "source": "session" if settings is not None else "environment",
+        "max_tool_rounds": (
+            settings.max_tool_rounds
+            if settings is not None
+            else default_rounds
+        ),
+        "default_max_tool_rounds": default_rounds,
+        "limits": {
+            "min_tool_rounds": MIN_TOOL_ROUNDS,
+            "max_tool_rounds": MAX_TOOL_ROUNDS,
+        },
+    }
+
+
+@api_router.get("/model-provider-settings")
+def get_model_provider_settings(
+    request: Request,
+    principal: Annotated[authz.Principal, Depends(current_principal)],
+) -> dict:
+    settings = _model_provider_store(request).get(
+        principal.id,
+        _browser_session_id(request),
+    )
+    return _model_provider_settings_response(settings)
+
+
+@api_router.put("/model-provider-settings")
+def update_model_provider_settings(
+    body: ModelProviderSettingsRequest,
+    request: Request,
+    principal: Annotated[authz.Principal, Depends(current_principal)],
+) -> dict:
+    model = body.model.strip()
+    api_key = body.api_key.get_secret_value().strip()
+    if not model:
+        raise HTTPException(422, "model must not be blank")
+    if not api_key:
+        raise HTTPException(422, "API key must not be blank")
+    if len(api_key) > 10_000:
+        raise HTTPException(422, "API key is too long")
+    availability = provider_availability()
+    if not availability.get(body.provider, False):
+        raise HTTPException(
+            422,
+            "OpenAI-compatible inference is not configured by the administrator",
+        )
+    settings = SessionModelProvider(body.provider, model, api_key)
+    _model_provider_store(request).set(
+        principal.id,
+        _browser_session_id(request),
+        settings,
+    )
+    return _model_provider_settings_response(settings)
+
+
+@api_router.delete("/model-provider-settings")
+def delete_model_provider_settings(
+    request: Request,
+    principal: Annotated[authz.Principal, Depends(current_principal)],
+) -> dict:
+    _model_provider_store(request).delete(
+        principal.id,
+        _browser_session_id(request),
+    )
+    return _model_provider_settings_response(None)
+
+
+@api_router.get("/mcp-settings")
+def get_mcp_settings(
+    request: Request,
+    principal: Annotated[authz.Principal, Depends(current_principal)],
+) -> dict:
+    settings = _mcp_settings_store(request).get(
+        principal.id,
+        _browser_session_id(request),
+    )
+    return _mcp_settings_response(settings)
+
+
+@api_router.put("/mcp-settings")
+def update_mcp_settings(
+    body: MCPSettingsRequest,
+    request: Request,
+    principal: Annotated[authz.Principal, Depends(current_principal)],
+) -> dict:
+    settings = SessionMCPSettings(body.max_tool_rounds)
+    _mcp_settings_store(request).set(
+        principal.id,
+        _browser_session_id(request),
+        settings,
+    )
+    return _mcp_settings_response(settings)
+
+
+@api_router.delete("/mcp-settings")
+def delete_mcp_settings(
+    request: Request,
+    principal: Annotated[authz.Principal, Depends(current_principal)],
+) -> dict:
+    _mcp_settings_store(request).delete(
+        principal.id,
+        _browser_session_id(request),
+    )
+    return _mcp_settings_response(None)
+
+
+@api_router.get("/models/{model_id}/mcp-status")
+async def get_mcp_status(
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+) -> dict:
+    checked_at = datetime.now(timezone.utc).isoformat()
+    try:
+        configuration = MCPClientConfig.from_env()
+    except ConversationUnavailable as exc:
+        return {
+            "status": "unavailable",
+            "checked_at": checked_at,
+            "message": str(exc),
+            "timeout_seconds": None,
+            "server": {},
+            "tools": [],
+        }
+    inspector = getattr(request.app.state, "mcp_inspector", inspect_mcp)
+    try:
+        inspection = await inspector(
+            configuration,
+            context.principal,
+            context.model.organization_id,
+            context.model.id,
+        )
+    except Exception:
+        return {
+            "status": "unavailable",
+            "checked_at": checked_at,
+            "message": "The configured Helios MCP service could not be reached.",
+            "timeout_seconds": configuration.timeout_seconds,
+            "server": {},
+            "tools": [],
+        }
+    return {
+        "status": "available",
+        "checked_at": checked_at,
+        "message": "The configured Helios MCP service is available.",
+        "timeout_seconds": configuration.timeout_seconds,
+        "server": inspection.get("server") or {},
+        "tools": sorted(
+            inspection.get("tools") or [],
+            key=lambda item: str(item.get("name", "")).casefold(),
+        ),
     }
 
 

@@ -349,6 +349,49 @@ function successfulClient(): HeliosApi {
   return {
     health: vi.fn().mockResolvedValue({ status: "ok" }),
     diagnostics: vi.fn().mockResolvedValue(diagnostics),
+    modelProviderSettings: vi.fn().mockResolvedValue({
+      source: "environment",
+      provider: "anthropic",
+      model: "claude-haiku-4-5-20251001",
+      api_key_configured: false,
+      providers: [
+        { id: "anthropic", available: true },
+        { id: "bedrock", available: true },
+        { id: "mistral", available: true },
+        { id: "openai", available: false },
+      ],
+    }),
+    updateModelProviderSettings: vi.fn(),
+    deleteModelProviderSettings: vi.fn(),
+    mcpSettings: vi.fn().mockResolvedValue({
+      source: "environment",
+      max_tool_rounds: 6,
+      default_max_tool_rounds: 6,
+      limits: { min_tool_rounds: 1, max_tool_rounds: 20 },
+    }),
+    updateMcpSettings: vi.fn(),
+    deleteMcpSettings: vi.fn(),
+    mcpStatus: vi.fn().mockResolvedValue({
+      status: "available",
+      checked_at: "2026-09-28T16:00:00+00:00",
+      message: "The configured Helios MCP service is available.",
+      timeout_seconds: 180,
+      server: {
+        server_name: "helios",
+        server_version: "0.1.0",
+        protocol_version: "2025-11-25",
+      },
+      tools: [
+        {
+          name: "describe",
+          description: "Describe a semantic object.",
+        },
+        {
+          name: "run_query",
+          description: "Run a governed semantic query.",
+        },
+      ],
+    }),
     organizations: vi.fn().mockResolvedValue(organizations),
     models: vi.fn((organizationId: string) =>
       Promise.resolve(modelsFor(organizationId)),
@@ -734,6 +777,131 @@ describe("Helios application shell", () => {
     );
   });
 
+  it("manages a session-only AI model provider from Govern", async () => {
+    const client = successfulClient();
+    vi.mocked(client.updateModelProviderSettings!).mockResolvedValue({
+      source: "session",
+      provider: "mistral",
+      model: "mistral-small-latest",
+      api_key_configured: true,
+      providers: [
+        { id: "anthropic", available: true },
+        { id: "bedrock", available: true },
+        { id: "mistral", available: true },
+        { id: "openai", available: false },
+      ],
+    });
+    vi.mocked(client.deleteModelProviderSettings!).mockResolvedValue({
+      source: "environment",
+      provider: "anthropic",
+      model: "claude-haiku-4-5-20251001",
+      api_key_configured: false,
+      providers: [
+        { id: "anthropic", available: true },
+        { id: "bedrock", available: true },
+        { id: "mistral", available: true },
+        { id: "openai", available: false },
+      ],
+    });
+    window.history.replaceState({}, "", "/governance/model-provider");
+
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "AI Model Provider" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", {
+        name: "OpenAI-compatible — administrator setup required",
+      }),
+    ).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Provider"), {
+      target: { value: "mistral" },
+    });
+    fireEvent.change(screen.getByLabelText("API key"), {
+      target: { value: "user-session-secret" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use for this session" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Session override saved. New Talk conversations will use this model.",
+      ),
+    ).toBeInTheDocument();
+    expect(client.updateModelProviderSettings).toHaveBeenCalledWith({
+      provider: "mistral",
+      model: "mistral-small-latest",
+      api_key: "user-session-secret",
+    });
+    expect(screen.getByLabelText("API key")).toHaveValue("");
+    expect(screen.queryByText("user-session-secret")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use project default" }),
+    );
+    expect(
+      await screen.findByText("The project environment default is active."),
+    ).toBeInTheDocument();
+    expect(client.deleteModelProviderSettings).toHaveBeenCalledOnce();
+  });
+
+  it("manages MCP tool rounds and displays server capabilities", async () => {
+    const client = successfulClient();
+    vi.mocked(client.updateMcpSettings!).mockResolvedValue({
+      source: "session",
+      max_tool_rounds: 10,
+      default_max_tool_rounds: 6,
+      limits: { min_tool_rounds: 1, max_tool_rounds: 20 },
+    });
+    vi.mocked(client.deleteMcpSettings!).mockResolvedValue({
+      source: "environment",
+      max_tool_rounds: 6,
+      default_max_tool_rounds: 6,
+      limits: { min_tool_rounds: 1, max_tool_rounds: 20 },
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/governance/mcp?organization=north&model=north-model",
+    );
+
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "MCP Management" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Available")).toBeInTheDocument();
+    expect(screen.getByText("helios · 0.1.0")).toBeInTheDocument();
+    expect(screen.getByText("Describe a semantic object.")).toBeInTheDocument();
+    expect(screen.getByText("Run a governed semantic query."))
+      .toBeInTheDocument();
+    expect(client.mcpStatus).toHaveBeenCalledWith("north-model");
+
+    fireEvent.change(screen.getByLabelText("Maximum tool-call rounds"), {
+      target: { value: "10" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use for this session" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Session override saved. New Talk requests will use this limit.",
+      ),
+    ).toBeInTheDocument();
+    expect(client.updateMcpSettings).toHaveBeenCalledWith(10);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use project default (6)" }),
+    );
+    expect(await screen.findByText("The project MCP limit is active."))
+      .toBeInTheDocument();
+    expect(client.deleteMcpSettings).toHaveBeenCalledOnce();
+  });
+
   it("loads API-backed selectors, account identity, and model overview", async () => {
     const client = successfulClient();
     window.history.replaceState({}, "", "/model-overview");
@@ -759,7 +927,7 @@ describe("Helios application shell", () => {
     expect(screen.queryByRole("link", { name: "Publish" }))
       .not.toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Primary navigation" }))
-      .toHaveTextContent("GovernGlossary");
+      .toHaveTextContent("GovernAI Model ProviderMCP ManagementGlossary");
     expect(
       await screen.findByRole("heading", { name: "Helios health" }),
     ).toBeInTheDocument();

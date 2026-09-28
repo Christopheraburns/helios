@@ -18,6 +18,7 @@ import re
 import time
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -96,6 +97,8 @@ class LLMClient:
             try:
                 if self.provider == "anthropic":
                     return self._anthropic_tool_turn(system, messages, tools)
+                if self.provider == "bedrock":
+                    return self._bedrock_tool_turn(system, messages, tools)
                 return self._openai_tool_turn(system, messages, tools)
             except httpx.HTTPStatusError as exc:
                 if (
@@ -272,6 +275,94 @@ class LLMClient:
             calls,
             choice.get("finish_reason", ""),
         )
+
+    def _bedrock_tool_turn(
+        self,
+        system: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> ToolTurn:
+        bedrock_messages: list[dict[str, Any]] = []
+        for message in messages:
+            role = message["role"]
+            if role == "tool":
+                try:
+                    result = json.loads(message.get("content") or "{}")
+                except json.JSONDecodeError:
+                    result = {"text": message.get("content") or ""}
+                bedrock_messages.append({
+                    "role": "user",
+                    "content": [{
+                        "toolResult": {
+                            "toolUseId": message["tool_call_id"],
+                            "content": [{"json": result}],
+                        },
+                    }],
+                })
+            elif role == "assistant" and message.get("tool_calls"):
+                content: list[dict[str, Any]] = []
+                if message.get("content"):
+                    content.append({"text": message["content"]})
+                content.extend({
+                    "toolUse": {
+                        "toolUseId": call["id"],
+                        "name": call["name"],
+                        "input": call["arguments"],
+                    },
+                } for call in message["tool_calls"])
+                bedrock_messages.append({"role": "assistant", "content": content})
+            else:
+                bedrock_messages.append({
+                    "role": role,
+                    "content": [{"text": message.get("content", "")}],
+                })
+        payload: dict[str, Any] = {
+            "system": [{"text": system}],
+            "messages": bedrock_messages,
+            "inferenceConfig": {
+                "maxTokens": self.max_tokens,
+                "temperature": self.temperature,
+            },
+        }
+        if tools:
+            payload["toolConfig"] = {
+                "tools": [{
+                    "toolSpec": {
+                        "name": tool["name"],
+                        "description": tool.get("description", ""),
+                        "inputSchema": {"json": tool.get("inputSchema", {})},
+                    },
+                } for tool in tools],
+                "toolChoice": {"auto": {}},
+            }
+        response = httpx.post(
+            f"{(self.base_url or '').rstrip('/')}/model/"
+            f"{quote(self.model, safe='')}/converse",
+            timeout=self.timeout,
+            headers={
+                "Authorization": f"Bearer {self.api_key or ''}",
+                "content-type": "application/json",
+            },
+            json=payload,
+        )
+        response.raise_for_status()
+        body = response.json()
+        content = body.get("output", {}).get("message", {}).get("content", [])
+        text = "".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict)
+        )
+        calls = tuple(
+            ToolCall(
+                block["toolUse"]["toolUseId"],
+                block["toolUse"]["name"],
+                block["toolUse"].get("input") or {},
+            )
+            for block in content
+            if isinstance(block, dict) and "toolUse" in block
+        )
+        return ToolTurn(text, calls, body.get("stopReason", ""))
 
     # ------------------------------------------------------------ JSON completion
     def complete_json(self, system: str, user: str) -> Any:

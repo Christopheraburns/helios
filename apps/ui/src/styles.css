@@ -2438,6 +2438,242 @@ a:focus-visible {
   padding-left: 20px;
 }
 
+.provider-settings {
+  max-width: 860px;
+}
+
+.provider-settings__source {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  color: var(--slate-700);
+  font-size: 0.75rem;
+  font-weight: 750;
+  background: var(--slate-100);
+  border: 1px solid var(--slate-200);
+  border-radius: 999px;
+}
+
+.provider-settings__source--session {
+  color: #086d77;
+  background: var(--cyan-100);
+  border-color: #a8dcda;
+}
+
+.provider-settings__security,
+.provider-settings__form {
+  padding: 22px;
+  background: #fff;
+  border: 1px solid var(--slate-200);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.provider-settings__security {
+  margin-bottom: 18px;
+  border-left: 4px solid var(--cyan-600);
+}
+
+.provider-settings__security p {
+  margin: 6px 0 0;
+  color: var(--slate-700);
+  line-height: 1.55;
+}
+
+.provider-settings__form {
+  display: grid;
+  gap: 20px;
+}
+
+.provider-settings__form label {
+  display: grid;
+  gap: 7px;
+  color: var(--navy-900);
+  font-weight: 700;
+}
+
+.provider-settings__form input,
+.provider-settings__form select {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 11px;
+  color: var(--navy-900);
+  font: inherit;
+  background: #fff;
+  border: 1px solid var(--slate-300);
+  border-radius: 7px;
+}
+
+.provider-settings__form input:focus,
+.provider-settings__form select:focus {
+  border-color: var(--cyan-600);
+  outline: 3px solid rgb(8 127 140 / 18%);
+}
+
+.provider-settings__form small {
+  color: var(--slate-500);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.provider-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.mcp-management {
+  max-width: 1100px;
+}
+
+.mcp-management__status,
+.mcp-management__runtime,
+.mcp-management__tools {
+  padding: 22px;
+  background: #fff;
+  border: 1px solid var(--slate-200);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.mcp-management__status {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.mcp-management__status h2,
+.mcp-management__runtime h2,
+.mcp-management__tools h2,
+.mcp-management__form h2 {
+  margin: 0 0 8px;
+}
+
+.mcp-management__status p {
+  margin: 5px 0 0;
+}
+
+.mcp-management__availability {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 750;
+}
+
+.mcp-management__availability span {
+  width: 10px;
+  height: 10px;
+  background: var(--slate-400);
+  border-radius: 50%;
+}
+
+.mcp-management__availability--available {
+  color: #087044;
+}
+
+.mcp-management__availability--available span {
+  background: #18a269;
+  box-shadow: 0 0 0 4px rgb(24 162 105 / 14%);
+}
+
+.mcp-management__availability--unavailable {
+  color: #a33b32;
+}
+
+.mcp-management__availability--unavailable span {
+  background: #c94d43;
+  box-shadow: 0 0 0 4px rgb(201 77 67 / 14%);
+}
+
+.mcp-management__metadata {
+  color: var(--slate-500);
+  font-size: 0.8rem;
+}
+
+.mcp-management__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.mcp-management__grid .provider-settings__form {
+  align-content: start;
+}
+
+.mcp-management__grid .provider-settings__form p,
+.mcp-management__runtime > p,
+.mcp-management__tools > p {
+  color: var(--slate-700);
+  line-height: 1.55;
+}
+
+.mcp-management__runtime dl {
+  margin: 18px 0;
+}
+
+.mcp-management__runtime dl div {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.mcp-management__runtime dt {
+  color: var(--slate-500);
+  font-size: 0.75rem;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mcp-management__runtime dd {
+  margin: 4px 0 0;
+  color: var(--navy-900);
+  font-weight: 650;
+}
+
+.mcp-management__tools-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.mcp-management__tools-heading > span {
+  color: var(--slate-500);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.mcp-management__tools ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.mcp-management__tools li {
+  padding: 16px;
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: 8px;
+}
+
+.mcp-management__tools code {
+  color: var(--cyan-700);
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.mcp-management__tools li p {
+  margin: 8px 0 0;
+  color: var(--slate-700);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -2468,6 +2704,10 @@ a:focus-visible {
   }
 
   .app__body--workspace-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .mcp-management__grid {
     grid-template-columns: 1fr;
   }
 

@@ -27,6 +27,8 @@ const GlossaryPage = lazy(() => import("./pages/GlossaryPage"));
 const CanvasPage = lazy(() => import("./pages/CanvasPage"));
 const TalkPage = lazy(() => import("./pages/TalkPage"));
 const ActivityLogsPage = lazy(() => import("./pages/ActivityLogsPage"));
+const ModelProviderPage = lazy(() => import("./pages/ModelProviderPage"));
+const MCPManagementPage = lazy(() => import("./pages/MCPManagementPage"));
 const GlossaryTermPage = lazy(() =>
   import("./pages/GlossaryPage").then((module) => ({
     default: module.GlossaryTermPage,
@@ -221,6 +223,14 @@ function ApplicationShell({ client }: AppProps) {
               <Route
                 path="/governance/proposals"
                 element={<GlossaryProposalsPage context={context} />}
+              />
+              <Route
+                path="/governance/model-provider"
+                element={<ModelProviderPage context={context} />}
+              />
+              <Route
+                path="/governance/mcp"
+                element={<MCPManagementPage context={context} />}
               />
               <Route
                 path="/activity"

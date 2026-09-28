@@ -13,8 +13,14 @@ from apps.console.conversation import (
     ConversationService,
     ConversationUnavailable,
     MCPClientConfig,
+    _nested_exception,
 )
 from apps.console.main import app
+from apps.console.mcp_settings import (
+    SessionMCPSettingsStore,
+    environment_max_tool_rounds,
+)
+from apps.console.model_provider import SessionModelProviderStore
 from apps.mcp import server as mcp_server
 from helios_core import audit, authz
 from helios_core.config import ImpalaConfig
@@ -32,6 +38,7 @@ from helios_core.engines.impala import (
     ImpalaEngine,
 )
 from helios_core.llm import LLMClient, ToolCall, ToolTurn, llm_from_env
+from helios_core.llm import client as llm_module
 from helios_core.metadata import ConversationVersionConflict
 from helios_core.ossie import SemanticModel, build as build_ossie
 
@@ -132,6 +139,13 @@ def test_signed_delegation_round_trip_and_tamper_rejection():
         verify_assertion(SECRET, token, now=200)
 
 
+def test_nested_conversation_failure_is_not_mislabeled_as_mcp_outage():
+    expected = ConversationUnavailable("The conversation LLM is unavailable")
+    grouped = ExceptionGroup("stream cleanup", [RuntimeError("closed"), expected])
+
+    assert _nested_exception(grouped, ConversationUnavailable) is expected
+
+
 def test_mistral_environment_uses_server_side_openai_compatible_client(
     monkeypatch,
 ):
@@ -207,6 +221,66 @@ def test_mistral_tool_turn_uses_openai_compatible_endpoint(monkeypatch):
     assert captured["headers"]["Authorization"] == "Bearer server-side-secret"
     assert captured["json"]["model"] == "mistral-small-latest"
     assert turn.tool_calls[0].name == "search_semantics"
+
+
+def test_bedrock_tool_turn_uses_bearer_key_and_converse_contract(monkeypatch):
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "output": {
+                    "message": {
+                        "content": [
+                            {"text": "Checking."},
+                            {
+                                "toolUse": {
+                                    "toolUseId": "call-1",
+                                    "name": "describe_model",
+                                    "input": {"model": "customer360"},
+                                }
+                            },
+                        ]
+                    }
+                },
+                "stopReason": "tool_use",
+            }
+
+    def post(url, **kwargs):
+        captured.update(url=url, **kwargs)
+        return Response()
+
+    monkeypatch.setattr(llm_module.httpx, "post", post)
+    client = LLMClient(
+        "bedrock",
+        "amazon.nova-pro-v1:0",
+        "bedrock-session-key",
+        "https://bedrock-runtime.us-east-1.amazonaws.com",
+    )
+
+    turn = client.tool_turn(
+        "Use tools.",
+        [{"role": "user", "content": "Describe the model."}],
+        [{
+            "name": "describe_model",
+            "description": "Describe a model",
+            "inputSchema": {"type": "object"},
+        }],
+    )
+
+    assert captured["url"].endswith(
+        "/model/amazon.nova-pro-v1%3A0/converse"
+    )
+    assert captured["headers"]["Authorization"] == "Bearer bedrock-session-key"
+    assert captured["json"]["toolConfig"]["tools"][0]["toolSpec"]["name"] == (
+        "describe_model"
+    )
+    assert turn.tool_calls == (
+        ToolCall("call-1", "describe_model", {"model": "customer360"}),
+    )
 
 
 def test_conversation_repository_persists_owned_model_history(
@@ -1259,6 +1333,130 @@ def test_conversation_endpoint_reports_missing_server_configuration(
     )
 
 
+def test_session_model_provider_override_is_private_and_drives_conversation(
+    persistent_auth_stack,
+    monkeypatch,
+):
+    monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "environment-secret")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "environment-model")
+    monkeypatch.setenv("HELIOS_MCP_URL", "https://mcp.example/mcp")
+    monkeypatch.setenv("HELIOS_MCP_TOKEN", "mcp-token")
+    monkeypatch.setenv("HELIOS_MCP_DELEGATION_SECRET", SECRET)
+    captured = {}
+
+    async def fake_turn(
+        self,
+        _principal,
+        _organization_id,
+        model_id,
+        _message,
+        history=None,
+    ):
+        captured.update(
+            provider=self.llm.provider,
+            model=self.llm.model,
+            api_key=self.llm.api_key,
+        )
+        return {
+            "model_id": model_id,
+            "answer": "Session provider answer",
+            "tool_trace": [],
+            "query_result": None,
+            "provenance": {
+                "llm": {
+                    "provider": self.llm.provider,
+                    "model": self.llm.model,
+                }
+            },
+            "request_id": "provider-request",
+        }
+
+    monkeypatch.setattr(ConversationService, "turn", fake_turn)
+    previous = dict(app.state._state)
+    store = SessionModelProviderStore()
+    app.state._state.pop("resource_store", None)
+    app.state._state.pop("authorization_policy", None)
+    app.state._state.pop("conversation_service", None)
+    app.state.metadata_repository = persistent_auth_stack.repository
+    app.state.model_provider_settings = store
+    headers = {
+        "x-forwarded-user": "owner",
+        "x-helios-session-id": "3d9d44df-4c14-4c35-8575-d3817589e18a",
+    }
+    try:
+        with TestClient(app) as client:
+            initial = client.get(
+                "/api/v1/model-provider-settings",
+                headers=headers,
+            )
+            updated = client.put(
+                "/api/v1/model-provider-settings",
+                headers=headers,
+                json={
+                    "provider": "mistral",
+                    "model": "mistral-large-latest",
+                    "api_key": "user-session-secret",
+                },
+            )
+            isolated = client.get(
+                "/api/v1/model-provider-settings",
+                headers={
+                    **headers,
+                    "x-helios-session-id":
+                        "0d660ec7-0431-4fbb-9142-f520816c5edf",
+                },
+            )
+            rejected_secret = "s" * 10_001
+            rejected = client.put(
+                "/api/v1/model-provider-settings",
+                headers=headers,
+                json={
+                    "provider": "mistral",
+                    "model": "mistral-large-latest",
+                    "api_key": rejected_secret,
+                },
+            )
+            conversation = client.post(
+                "/api/v1/models/customer360/conversations",
+                headers=headers,
+                json={"message": "Use my selected model"},
+            )
+            cleared = client.delete(
+                "/api/v1/model-provider-settings",
+                headers=headers,
+            )
+    finally:
+        app.state._state.clear()
+        app.state._state.update(previous)
+
+    assert initial.json() | {"providers": []} == {
+        "source": "environment",
+        "provider": "anthropic",
+        "model": "environment-model",
+        "api_key_configured": False,
+        "providers": [],
+    }
+    assert updated.status_code == 200
+    assert updated.json()["source"] == "session"
+    assert updated.json()["api_key_configured"] is True
+    assert "user-session-secret" not in updated.text
+    assert isolated.json()["source"] == "environment"
+    assert rejected.status_code == 422
+    assert rejected_secret not in rejected.text
+    assert conversation.status_code == 200
+    assert captured == {
+        "provider": "mistral",
+        "model": "mistral-large-latest",
+        "api_key": "user-session-secret",
+    }
+    assert cleared.json()["source"] == "environment"
+    assert store.get(
+        principal().id,
+        headers["x-helios-session-id"],
+    ) is None
+
+
 def test_mcp_client_config_reads_validated_timeout_from_environment(
     monkeypatch,
 ):
@@ -1278,6 +1476,121 @@ def test_mcp_client_config_reads_validated_timeout_from_environment(
             match="HELIOS_MCP_TIMEOUT_SECONDS",
         ):
             MCPClientConfig.from_env()
+
+
+def test_session_mcp_settings_drive_conversation_and_report_tools(
+    persistent_auth_stack,
+    monkeypatch,
+):
+    monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "environment-secret")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "environment-model")
+    monkeypatch.setenv("HELIOS_MCP_URL", "https://mcp.example/mcp")
+    monkeypatch.setenv("HELIOS_MCP_TOKEN", "mcp-token")
+    monkeypatch.setenv("HELIOS_MCP_DELEGATION_SECRET", SECRET)
+    monkeypatch.setenv("HELIOS_MCP_TIMEOUT_SECONDS", "180")
+    monkeypatch.setenv("HELIOS_MCP_MAX_TOOL_ROUNDS", "6")
+    captured = {}
+
+    async def fake_turn(
+        self,
+        _principal,
+        _organization_id,
+        model_id,
+        _message,
+        history=None,
+    ):
+        captured["max_tool_rounds"] = self.max_tool_rounds
+        return {
+            "model_id": model_id,
+            "answer": "MCP settings answer",
+            "tool_trace": [],
+            "query_result": None,
+        }
+
+    async def fake_inspector(
+        configuration,
+        _principal,
+        _organization_id,
+        _model_id,
+    ):
+        assert configuration.timeout_seconds == 180
+        return {
+            "server": {
+                "server_name": "helios",
+                "server_version": "1.2.3",
+                "protocol_version": "2025-11-25",
+            },
+            "tools": [
+                {"name": "run_query", "description": "Run a governed query."},
+                {"name": "describe", "description": "Describe an object."},
+            ],
+        }
+
+    monkeypatch.setattr(ConversationService, "turn", fake_turn)
+    previous = dict(app.state._state)
+    store = SessionMCPSettingsStore()
+    app.state._state.pop("resource_store", None)
+    app.state._state.pop("authorization_policy", None)
+    app.state._state.pop("conversation_service", None)
+    app.state.metadata_repository = persistent_auth_stack.repository
+    app.state.mcp_settings = store
+    app.state.mcp_inspector = fake_inspector
+    headers = {
+        "x-forwarded-user": "owner",
+        "x-helios-session-id": "4d9d44df-4c14-4c35-8575-d3817589e18a",
+    }
+    try:
+        with TestClient(app) as client:
+            initial = client.get("/api/v1/mcp-settings", headers=headers)
+            updated = client.put(
+                "/api/v1/mcp-settings",
+                headers=headers,
+                json={"max_tool_rounds": 10},
+            )
+            status = client.get(
+                "/api/v1/models/customer360/mcp-status",
+                headers=headers,
+            )
+            conversation = client.post(
+                "/api/v1/models/customer360/conversations",
+                headers=headers,
+                json={"message": "Use the MCP override"},
+            )
+            rejected = client.put(
+                "/api/v1/mcp-settings",
+                headers=headers,
+                json={"max_tool_rounds": 21},
+            )
+            cleared = client.delete("/api/v1/mcp-settings", headers=headers)
+    finally:
+        app.state._state.clear()
+        app.state._state.update(previous)
+
+    assert initial.json()["max_tool_rounds"] == 6
+    assert initial.json()["source"] == "environment"
+    assert updated.json()["max_tool_rounds"] == 10
+    assert updated.json()["source"] == "session"
+    assert status.json()["status"] == "available"
+    assert status.json()["timeout_seconds"] == 180
+    assert [tool["name"] for tool in status.json()["tools"]] == [
+        "describe",
+        "run_query",
+    ]
+    assert conversation.status_code == 200
+    assert captured["max_tool_rounds"] == 10
+    assert rejected.status_code == 422
+    assert cleared.json()["source"] == "environment"
+
+
+def test_mcp_tool_round_environment_limit_is_validated(monkeypatch):
+    monkeypatch.setenv("HELIOS_MCP_MAX_TOOL_ROUNDS", "12")
+    assert environment_max_tool_rounds() == 12
+
+    for invalid in ("none", "0", "21"):
+        monkeypatch.setenv("HELIOS_MCP_MAX_TOOL_ROUNDS", invalid)
+        with pytest.raises(ValueError, match="HELIOS_MCP_MAX_TOOL_ROUNDS"):
+            environment_max_tool_rounds()
 
 
 def test_impala_skips_delegation_to_the_connected_user(monkeypatch):

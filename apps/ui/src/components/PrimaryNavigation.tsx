@@ -10,6 +10,7 @@ const iconPaths = {
   models: <path d="m12 3 8 4-8 4-8-4zm-8 9 8 4 8-4M4 17l8 4 8-4" />,
   data: <path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zm0 0v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />,
   governance: <path d="M12 3 5 6v5c0 4.6 2.8 8.4 7 10 4.2-1.6 7-5.4 7-10V6zm-3 9 2 2 4-5" />,
+  mcp: <path d="M8 4v4m8-4v4M6 8h12v5a6 6 0 0 1-12 0zm6 11v3m-4 0h8" />,
   activity: <path d="M4 4h16v16H4zM8 9h8M8 13h8M8 17h5" />,
 } as const;
 
@@ -111,6 +112,18 @@ export default function PrimaryNavigation({
     {
       label: "Govern",
       items: [
+        {
+          label: "AI Model Provider",
+          to: "/governance/model-provider",
+          icon: "models",
+        },
+        {
+          label: "MCP Management",
+          to: "/governance/mcp",
+          icon: "mcp",
+          requiresModel: true,
+          requiredAction: "model.read",
+        },
         {
           label: "Glossary",
           to: "/governance",

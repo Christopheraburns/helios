@@ -482,6 +482,7 @@ Implemented routes are:
 - `/canvas` — current or historical semantic model graph;
 - `/data-sources` — governed data-source workspace;
 - `/governance` and `/governance/proposals` — glossary and proposal review;
+- `/governance/model-provider` — per-user, session-only Talk model provider;
 - `/activity` — own-session audit activity with organization-admin expansion.
 
 Every route preserves the authorized `organization` and `model` query
@@ -513,6 +514,22 @@ display, review, and publish pages. Review interactions use inline JavaScript
 These routes predate the future API-only frontend boundary. Their server-side
 handlers call Atlas clients and filesystem run/artifact helpers directly.
 They are implementation code, not reusable browser contracts.
+
+## Model provider settings
+
+Authenticated users can manage a browser-session-scoped Talk override:
+
+```text
+GET    /api/v1/model-provider-settings
+PUT    /api/v1/model-provider-settings
+DELETE /api/v1/model-provider-settings
+```
+
+`PUT` accepts `provider`, `model`, and `api_key`. The API scopes overrides by
+authenticated Principal and `X-Helios-Session-ID`, stores the key only in
+process memory, and never includes it in a response or audit details. `DELETE`
+returns the session to the project environment default. OpenAI-compatible
+base URLs remain administrator-controlled through `INFERENCE_BASE_URL`.
 
 ## Talk to Your Data
 

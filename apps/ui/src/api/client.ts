@@ -16,6 +16,57 @@ export interface ApiDiagnostics {
   accessible_organization_count: number;
 }
 
+export type ModelProviderId =
+  | "anthropic"
+  | "mistral"
+  | "bedrock"
+  | "openai";
+
+export interface ModelProviderSettings {
+  source: "environment" | "session";
+  provider: ModelProviderId | null;
+  model: string | null;
+  api_key_configured: boolean;
+  providers: Array<{
+    id: ModelProviderId;
+    available: boolean;
+  }>;
+}
+
+export interface ModelProviderSettingsWrite {
+  provider: ModelProviderId;
+  model: string;
+  api_key: string;
+}
+
+export interface MCPSettings {
+  source: "environment" | "session";
+  max_tool_rounds: number;
+  default_max_tool_rounds: number;
+  limits: {
+    min_tool_rounds: number;
+    max_tool_rounds: number;
+  };
+}
+
+export interface MCPToolSummary {
+  name: string;
+  description: string;
+}
+
+export interface MCPStatus {
+  status: "available" | "unavailable";
+  checked_at: string;
+  message: string;
+  timeout_seconds: number | null;
+  server: {
+    server_name?: string | null;
+    server_version?: string | null;
+    protocol_version?: string | null;
+  };
+  tools: MCPToolSummary[];
+}
+
 export interface OrganizationSummary {
   id: string;
   name: string;
@@ -767,6 +818,15 @@ function apiErrorMessage(payload: unknown): string | null {
 export interface HeliosApi {
   health(): Promise<ApiHealth>;
   diagnostics(): Promise<ApiDiagnostics>;
+  modelProviderSettings?(): Promise<ModelProviderSettings>;
+  updateModelProviderSettings?(
+    settings: ModelProviderSettingsWrite,
+  ): Promise<ModelProviderSettings>;
+  deleteModelProviderSettings?(): Promise<ModelProviderSettings>;
+  mcpSettings?(): Promise<MCPSettings>;
+  updateMcpSettings?(maxToolRounds: number): Promise<MCPSettings>;
+  deleteMcpSettings?(): Promise<MCPSettings>;
+  mcpStatus?(modelId: string): Promise<MCPStatus>;
   organizations(): Promise<OrganizationsResponse>;
   models(organizationId: string): Promise<ModelsResponse>;
   modelOverview(modelId: string): Promise<ModelOverview>;
@@ -970,6 +1030,46 @@ export class HeliosApiClient implements HeliosApi {
 
   diagnostics(): Promise<ApiDiagnostics> {
     return this.get<ApiDiagnostics>("/api/v1/diagnostics");
+  }
+
+  modelProviderSettings(): Promise<ModelProviderSettings> {
+    return this.get<ModelProviderSettings>("/api/v1/model-provider-settings");
+  }
+
+  updateModelProviderSettings(
+    settings: ModelProviderSettingsWrite,
+  ): Promise<ModelProviderSettings> {
+    return this.put<ModelProviderSettings>(
+      "/api/v1/model-provider-settings",
+      settings,
+    );
+  }
+
+  deleteModelProviderSettings(): Promise<ModelProviderSettings> {
+    return this.delete<ModelProviderSettings>(
+      "/api/v1/model-provider-settings",
+    );
+  }
+
+  mcpSettings(): Promise<MCPSettings> {
+    return this.get<MCPSettings>("/api/v1/mcp-settings");
+  }
+
+  updateMcpSettings(maxToolRounds: number): Promise<MCPSettings> {
+    return this.put<MCPSettings>(
+      "/api/v1/mcp-settings",
+      { max_tool_rounds: maxToolRounds },
+    );
+  }
+
+  deleteMcpSettings(): Promise<MCPSettings> {
+    return this.delete<MCPSettings>("/api/v1/mcp-settings");
+  }
+
+  mcpStatus(modelId: string): Promise<MCPStatus> {
+    return this.get<MCPStatus>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/mcp-status`,
+    );
   }
 
   organizations(): Promise<OrganizationsResponse> {
@@ -1395,6 +1495,14 @@ export class HeliosApiClient implements HeliosApi {
   private async patch<T>(path: string, body: unknown): Promise<T> {
     return this.request<T>(path, {
       method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  private async put<T>(path: string, body: unknown): Promise<T> {
+    return this.request<T>(path, {
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
