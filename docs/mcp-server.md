@@ -28,7 +28,10 @@ https://helios-mcp.<workbench-domain>/mcp
 https://helios-mcp.<workbench-domain>/healthz
 ```
 
-`/healthz` is public and returns only readiness, version, and model count.
+`/healthz` is public and returns readiness, version, model count, and metadata
+repository status. The public `/` route returns only service endpoint
+information so Cloudera root probes do not create authentication failures.
+MCP protocol access at `/mcp` still requires the bearer and Principal context.
 
 ## Environment
 
@@ -63,6 +66,24 @@ The Virtual Warehouse must permit that account to proxy SSO subjects through
 `doAs`, and Ranger must enforce the effective user. Helios verifies
 `EFFECTIVE_USER()` before executing compiler-generated SQL. Leave
 `IMPALA_PROXY_DELEGATION` false until this is proven in the target environment.
+
+Test the two authentication stages independently from a new Workbench Session
+that has the same project environment:
+
+```bash
+cd "$CDSW_PROJECT_DIR/helios"
+python -m helios_core.engines.impala_diagnose \
+  --delegated-user '<Cloudera SSO subject>'
+```
+
+The command prints no credential or SQL. If `service-account authentication`
+fails with HTTP 401, use the CDW workload username and workload password—not
+the Helios MCP bearer or an interactive browser password—and verify the host
+and `httpPath` copied from the Virtual Warehouse JDBC configuration. If the
+service account succeeds but `proxy delegation` fails, configure that workload
+account as an authorized Impala proxy user for the SSO subject. A Talk request
+performs the same distinction after a delegated HTTP 401 and returns either
+`workload_authentication_failed` or `proxy_delegation_denied`.
 
 No custom Cloudera Runtime is required for MCP. Install the pinned API
 requirements into the project-local dependency directory as described in

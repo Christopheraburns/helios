@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 import uuid
@@ -30,6 +31,9 @@ from .repository import (
     StoredOrganization,
 )
 
+LOGGER = logging.getLogger(__name__)
+SUPPORTED_JOURNAL_MODES = frozenset({"DELETE", "TRUNCATE", "PERSIST", "WAL"})
+
 
 def default_database_path() -> str:
     root = os.environ.get("HELIOS_ROOT") or os.path.join(
@@ -50,6 +54,29 @@ class SQLiteMetadataRepository:
         if self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with self._connection() as connection:
+            if self.path != ":memory:":
+                requested_mode = os.environ.get(
+                    "HELIOS_SQLITE_JOURNAL_MODE", "DELETE"
+                ).strip().upper()
+                if requested_mode not in SUPPORTED_JOURNAL_MODES:
+                    raise ValueError(
+                        "HELIOS_SQLITE_JOURNAL_MODE must be one of "
+                        + ", ".join(sorted(SUPPORTED_JOURNAL_MODES))
+                    )
+                actual_mode = str(
+                    connection.execute("PRAGMA journal_mode").fetchone()[0]
+                ).upper()
+                if actual_mode != requested_mode:
+                    actual_mode = str(
+                        connection.execute(
+                            f"PRAGMA journal_mode = {requested_mode}"
+                        ).fetchone()[0]
+                    ).upper()
+                if actual_mode != requested_mode:
+                    raise RuntimeError(
+                        "SQLite journal mode could not be set to "
+                        f"{requested_mode}; active mode is {actual_mode}"
+                    )
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -80,6 +107,24 @@ class SQLiteMetadataRepository:
                 except Exception:
                     connection.rollback()
                     raise
+
+    def integrity_check(self, *, thorough: bool = False) -> tuple[str, ...]:
+        """Return SQLite integrity findings without modifying the database."""
+        pragma = "integrity_check" if thorough else "quick_check(1)"
+        try:
+            if self.path == ":memory:":
+                with self._connection() as connection:
+                    rows = connection.execute(f"PRAGMA {pragma}").fetchall()
+            else:
+                uri = Path(self.path).resolve().as_uri() + "?mode=ro"
+                with sqlite3.connect(uri, uri=True, timeout=10) as connection:
+                    rows = connection.execute(f"PRAGMA {pragma}").fetchall()
+            return tuple(str(row[0]) for row in rows)
+        except sqlite3.Error as exc:
+            return (f"{type(exc).__name__}: {exc}",)
+
+    def is_healthy(self) -> bool:
+        return self.integrity_check() == ("ok",)
 
     def schema_version(self) -> int:
         with self._connection() as connection:
@@ -896,8 +941,6 @@ class SQLiteMetadataRepository:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("PRAGMA busy_timeout = 10000")
-        if self.path != ":memory:":
-            connection.execute("PRAGMA journal_mode = WAL")
         try:
             with connection:
                 yield connection

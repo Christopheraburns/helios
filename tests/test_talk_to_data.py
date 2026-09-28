@@ -23,7 +23,10 @@ from helios_core.delegation import (
     issue_assertion,
     verify_assertion,
 )
-from helios_core.engines.impala import ImpalaEngine
+from helios_core.engines.impala import (
+    ImpalaAuthenticationError,
+    ImpalaEngine,
+)
 from helios_core.llm import LLMClient, ToolCall, ToolTurn, llm_from_env
 from helios_core.metadata import ConversationVersionConflict
 from helios_core.ossie import SemanticModel, build as build_ossie
@@ -531,6 +534,42 @@ def test_mcp_run_query_uses_delegated_identity(
     assert denied["error"] == "query_denied"
     assert "Ranger denied owner" in denied["message"]
 
+    def proxy_rejected(_self, _sql, _limit=1000, *, delegated_user=None):
+        if delegated_user:
+            raise ImpalaAuthenticationError("delegated HTTP 401")
+        return SimpleNamespace(columns=["1"], rows=[(1,)])
+
+    monkeypatch.setattr(ImpalaEngine, "query", proxy_rejected)
+    context_token = mcp_server._caller_context.set(
+        mcp_server.MCPCaller(principal(), "customer360", "acme")
+    )
+    try:
+        rejected = mcp_server.run_query(
+            ["Customer count"], model="customer360"
+        )
+    finally:
+        mcp_server._caller_context.reset(context_token)
+    assert rejected["error"] == "proxy_delegation_denied"
+    assert not rejected["retryable"]
+    assert "_audit_diagnostics" not in rejected
+
+    def workload_rejected(_self, _sql, _limit=1000, *, delegated_user=None):
+        raise ImpalaAuthenticationError("service HTTP 401")
+
+    monkeypatch.setattr(ImpalaEngine, "query", workload_rejected)
+    context_token = mcp_server._caller_context.set(
+        mcp_server.MCPCaller(principal(), "customer360", "acme")
+    )
+    try:
+        rejected = mcp_server.run_query(
+            ["Customer count"], model="customer360"
+        )
+    finally:
+        mcp_server._caller_context.reset(context_token)
+    assert rejected["error"] == "workload_authentication_failed"
+    assert "username or password" in rejected["message"]
+    assert not rejected["retryable"]
+
     monkeypatch.setenv("WORKLOAD_PASSWORD", "private-password")
 
     def warehouse_unavailable(
@@ -609,6 +648,42 @@ class FakeConnection:
 
     def close(self):
         pass
+
+
+class HttpUnauthorized(Exception):
+    code = 401
+
+
+class FailedOpenConnection:
+    def cursor(self):
+        raise HttpUnauthorized("HTTP code 401: Unauthorized")
+
+    def close(self):
+        raise AttributeError("'NoneType' object has no attribute 'close'")
+
+
+def test_impala_preserves_http_authentication_error_when_cleanup_fails(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        impala_dbapi,
+        "connect",
+        lambda **_kwargs: FailedOpenConnection(),
+    )
+    engine = ImpalaEngine(
+        ImpalaConfig(
+            "warehouse.example",
+            443,
+            "workload-user",
+            "secret",
+        )
+    )
+
+    with pytest.raises(ImpalaAuthenticationError) as captured:
+        engine.ping()
+
+    assert isinstance(captured.value.__cause__, HttpUnauthorized)
+    assert "workload authentication" in str(captured.value)
 
 
 def test_impala_proxy_delegation_verifies_effective_user(monkeypatch):

@@ -56,6 +56,7 @@ from helios_core.identity import Principal, PrincipalKind
 from helios_core.metadata import SQLiteMetadataRepository
 from helios_core.ossie import SemanticModel, build as build_ossie
 
+LOGGER = logging.getLogger(__name__)
 ROOT = runstore.ROOT
 artifact_store = ArtifactStore(ROOT)
 _initial_impala_config = impala_config()
@@ -68,9 +69,13 @@ data_policy = DataPolicy(
     )
 )
 metadata_repository = SQLiteMetadataRepository()
-metadata_repository.migrate()
-audit.purge_expired(metadata_repository)
-LOGGER = logging.getLogger(__name__)
+_metadata_findings = metadata_repository.integrity_check()
+if _metadata_findings != ("ok",):
+    LOGGER.error(
+        "metadata is unavailable; start the Helios API to initialize or "
+        "repair it before MCP findings=%s",
+        _metadata_findings,
+    )
 
 
 @dataclass(frozen=True)
@@ -237,6 +242,24 @@ def search(
 
 def _error(code: str, message: str, *, retryable: bool = False) -> dict:
     return {"error": code, "message": message, "retryable": retryable}
+
+
+def _diagnostic_error(
+    code: str,
+    message: str,
+    exc: BaseException,
+    *,
+    stage: str,
+    retryable: bool = False,
+    excluded_values: tuple[str, ...] = (),
+) -> dict:
+    result = _error(code, message, retryable=retryable)
+    result["_audit_diagnostics"] = audit.exception_diagnostics(
+        exc,
+        stage=stage,
+        excluded_values=excluded_values,
+    )
+    return result
 
 
 def _semantic_request(
@@ -426,6 +449,7 @@ def _audited_tool(name: str):
                         "authorization_denied",
                         "authentication_required",
                         "data_authorization_denied",
+                        "proxy_delegation_denied",
                         "query_denied",
                     }
                     else "error"
@@ -602,7 +626,11 @@ def compile_query(metrics: list[str], dimensions: list[str] | None = None, filte
 @_audited_tool("run_query")
 def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: list[dict] | None = None,
               limit: int = 100, model: str | None = None) -> dict:
-    from helios_core.engines import ImpalaEngine
+    from helios_core.engines import (
+        ImpalaAuthenticationError,
+        ImpalaEngine,
+        ImpalaProxyDelegationError,
+    )
     caller, authorized_model, denied = _authorized_tool(
         authz.Action.QUERY_EXECUTE, model
     )
@@ -656,6 +684,55 @@ def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: 
             safe_limit,
             delegated_user=caller.principal.subject,
         )
+    except ImpalaAuthenticationError as exc:
+        LOGGER.warning(
+            "delegated Impala authentication failed request_id=%s",
+            caller.request_id,
+        )
+        try:
+            service_authenticated = ImpalaEngine(cfg).ping()
+        except ImpalaAuthenticationError as service_exc:
+            return _diagnostic_error(
+                "workload_authentication_failed",
+                "CDW rejected the configured workload username or password",
+                service_exc,
+                stage="impala_service_authentication",
+            )
+        except Exception as diagnostic_exc:
+            LOGGER.exception(
+                "Impala service-account diagnostic failed request_id=%s",
+                caller.request_id,
+            )
+            return _diagnostic_error(
+                "impala_authentication_failed",
+                "CDW rejected the delegated query and service-account "
+                "authentication could not be confirmed",
+                diagnostic_exc,
+                stage="impala_authentication_diagnostic",
+                retryable=True,
+            )
+        if service_authenticated:
+            return _diagnostic_error(
+                "proxy_delegation_denied",
+                "The workload account connected to CDW, but CDW rejected "
+                "delegation to the authenticated Helios user",
+                exc,
+                stage="impala_proxy_delegation",
+            )
+        return _diagnostic_error(
+            "impala_authentication_failed",
+            "CDW authentication could not be confirmed",
+            exc,
+            stage="impala_authentication",
+            retryable=True,
+        )
+    except ImpalaProxyDelegationError as exc:
+        return _diagnostic_error(
+            "proxy_delegation_denied",
+            str(exc),
+            exc,
+            stage="impala_effective_user",
+        )
     except (
         CompileError,
         KeyError,
@@ -671,17 +748,14 @@ def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: 
             context.request_id if context else None,
             type(exc).__name__,
         )
-        result = _error(
+        return _diagnostic_error(
             "query_unavailable",
             "The delegated Impala query could not be completed",
-            retryable=True,
-        )
-        result["_audit_diagnostics"] = audit.exception_diagnostics(
             exc,
             stage="impala_query",
+            retryable=True,
             excluded_values=(compiled_sql,),
         )
-        return result
     return {
         "sql": compiled["sql"],
         "columns": res.columns,
@@ -729,16 +803,46 @@ def _json(v):
 @server.custom_route("/healthz", methods=["GET"])
 async def healthz(_: Request) -> JSONResponse:
     try:
+        metadata_findings = metadata_repository.integrity_check()
+        if metadata_findings != ("ok",):
+            return JSONResponse(
+                {
+                    "status": "unavailable",
+                    "version": __version__,
+                    "components": {
+                        "metadata_repository": {
+                            "status": "unavailable",
+                            "message": "metadata integrity check failed",
+                        }
+                    },
+                },
+                status_code=503,
+            )
         srcs = store.sources()
         return JSONResponse(
             {
                 "status": "ok",
                 "version": __version__,
                 "model_count": len(srcs),
+                "components": {
+                    "metadata_repository": {"status": "healthy"}
+                },
             }
         )
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"status": "degraded", "error": str(e)}, status_code=503)
+
+
+@server.custom_route("/", methods=["GET"])
+async def service_root(_: Request) -> JSONResponse:
+    return JSONResponse(
+        {
+            "service": "helios-mcp",
+            "status": "ok",
+            "health": "/healthz",
+            "endpoint": "/mcp",
+        }
+    )
 
 
 # ---------------------------------------------------------------------------- ASGI app
@@ -791,7 +895,10 @@ async def app(scope, receive, send):
     """Bearer-token gate around the MCP app; /healthz stays open."""
     context_token = None
     audit_token = None
-    if scope["type"] == "http" and scope.get("path") != "/healthz":
+    if scope["type"] == "http" and scope.get("path") not in {
+        "/",
+        "/healthz",
+    }:
         headers = {
             k.decode().lower(): v.decode()
             for k, v in scope.get("headers", [])

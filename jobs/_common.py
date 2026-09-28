@@ -46,7 +46,12 @@ def audit_job(stage: str, run_id: str, model_id: str | None = None):
     from helios_core.metadata import SQLiteMetadataRepository
 
     repository = SQLiteMetadataRepository()
-    repository.migrate()
+    findings = repository.integrity_check()
+    if findings != ("ok",):
+        raise RuntimeError(
+            "Helios metadata is unavailable; initialize or repair it through "
+            f"the API Application before running Jobs ({findings[0]})"
+        )
     model = repository.model(model_id) if model_id else None
     subject = os.environ.get("CDSW_USER") or os.environ.get(
         "HELIOS_JOB_PRINCIPAL"

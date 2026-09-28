@@ -131,6 +131,41 @@ def test_exception_diagnostics_redact_known_secrets_and_excluded_sql(
     assert rendered.count("[redacted]") == 2
 
 
+def test_audit_persistence_failures_are_rate_limited(
+    monkeypatch,
+    caplog,
+):
+    class FailingRepository:
+        def append_audit_event(self, _event):
+            raise RuntimeError("database disk image is malformed")
+
+    times = iter((100.0, 101.0, 200.0))
+    monkeypatch.setattr(audit.time, "monotonic", lambda: next(times))
+    monkeypatch.setattr(audit, "_failure_signature", None)
+    monkeypatch.setattr(audit, "_failure_last_logged", 0.0)
+    monkeypatch.setattr(audit, "_failure_suppressed", 0)
+    caplog.set_level("ERROR", logger="helios.audit")
+
+    for _ in range(3):
+        audit.emit(
+            FailingRepository(),
+            component="mcp",
+            event_type="mcp.transport",
+            action="authenticate",
+            outcome="error",
+            summary="authentication failed",
+        )
+
+    records = [
+        record
+        for record in caplog.records
+        if "failed to persist audit event" in record.getMessage()
+    ]
+    assert len(records) == 2
+    assert "suppressed_since_last=0" in records[0].getMessage()
+    assert "suppressed_since_last=1" in records[1].getMessage()
+
+
 @pytest.fixture
 def audit_client(persistent_auth_stack):
     previous = dict(app.state._state)
@@ -338,6 +373,7 @@ def test_job_audit_records_success_and_failure_without_error_contents(
     monkeypatch.setenv("HELIOS_METADATA_DB", str(database))
     monkeypatch.setenv("CDSW_USER", "job-owner")
     monkeypatch.setenv("CDSW_JOB_ID", "job-session")
+    SQLiteMetadataRepository(database).migrate()
     from jobs._common import audit_job
 
     with audit_job("profile", "run-success"):

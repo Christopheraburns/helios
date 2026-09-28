@@ -141,6 +141,7 @@ Set these on the API Application:
 | `HELIOS_ROOT` | Only for a nonstandard checkout | Defaults to `$CDSW_PROJECT_DIR/helios`. |
 | `HELIOS_PYTHON_DEPS` | Only for a nonstandard dependency location | Defaults to `$CDSW_PROJECT_DIR/.helios-python`. |
 | `HELIOS_METADATA_DB` | Usually leave unset | The default is the persistent `<project>/helios/state/helios.db`; otherwise enter a fully expanded absolute path. |
+| `HELIOS_SQLITE_JOURNAL_MODE` | Usually leave unset | Defaults to `DELETE`, which avoids cross-host WAL shared memory. Use `WAL` only for a verified single-host deployment. |
 | `HELIOS_RUNS_DIR` | Optional | Defaults to `$HELIOS_ROOT/runs`. |
 | `HELIOS_AUDIT_RETENTION_DAYS` | Optional | Product-visible audit retention, from 1 through 3650 days. Defaults to 30. |
 
@@ -167,13 +168,13 @@ After startup:
 
 ```text
 GET https://helios-api.<workbench-domain>/api/v1/healthz
--> {"status":"ok"}
+-> {"status":"ok","components":{"metadata_repository":{"status":"healthy"}}}
 ```
 
 The endpoint proves that imports, metadata-directory creation, SQLite
-migrations, and route startup succeeded. It intentionally does not make Atlas,
-Impala, or inference calls. The legacy console root page performs those deeper
-optional checks.
+migrations, route startup, and a read-only metadata integrity check succeeded.
+It returns HTTP 503 when metadata integrity is unavailable. It intentionally
+does not make Atlas, Impala, or inference calls.
 
 ## 2. Create the Helios UI Application
 
@@ -291,9 +292,13 @@ CORS configuration permits this header for credentialed browser calls.
 
 ## Failure and restart behavior
 
-- API startup is idempotent: SQLite migrations run on each process start.
-- Audit retention cleanup runs at process initialization. API startup creates
-  the audit schema automatically through the same append-only migration path.
+- API startup is idempotent: SQLite migrations run on each API process start.
+  MCP and Jobs require the API-initialized schema and do not migrate it.
+- Audit retention cleanup runs at API initialization. API startup creates the
+  audit schema automatically through the same append-only migration path.
+- API and MCP readiness return 503 rather than silently recreating corrupt
+  metadata. Follow the backup-first recovery procedure in
+  `docs/operational-metadata.md`.
 - Application containers are replaceable. Durable metadata, run artifacts,
   the built UI, and project-local dependencies must remain on the Project
   filesystem, not in container-only locations.
@@ -314,11 +319,12 @@ CORS configuration permits this header for credentialed browser calls.
    gateway.
 2. `apps/ui/dist` is not committed. A fresh checkout is undeployable until the
    build step succeeds or CI supplies the artifact.
-3. SQLite is suitable for one API Application process on the shared Project
-   filesystem, not horizontally replicated API instances or high write
-   concurrency.
-4. `/api/v1/healthz` is process readiness, not a deep Atlas/Impala/inference
-   health check.
+3. SQLite remains interim storage. `DELETE` journaling avoids unsafe cross-host
+   WAL shared memory, but the project filesystem must still provide reliable
+   POSIX locks. Move to a transactional shared database before horizontal
+   replicas or high write concurrency.
+4. `/api/v1/healthz` includes metadata integrity but is not a deep
+   Atlas/Impala/inference health check.
 5. Recreating either Application can change its public origin. Update the
    opposite Application's configuration and restart it.
 6. The project-local Python dependency directory is tied to Python 3.12 and

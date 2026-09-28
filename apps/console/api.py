@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Annotated, Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from helios_core import audit, authz
@@ -1073,8 +1074,30 @@ def _can_manage_organization(
 
 
 @api_router.get("/healthz")
-def api_health() -> dict:
-    return {"status": "ok"}
+def api_health(request: Request) -> JSONResponse:
+    repository: MetadataRepository = request.app.state.metadata_repository
+    findings = repository.integrity_check()
+    if findings != ("ok",):
+        return JSONResponse(
+            {
+                "status": "unavailable",
+                "components": {
+                    "metadata_repository": {
+                        "status": "unavailable",
+                        "message": "metadata integrity check failed",
+                    }
+                },
+            },
+            status_code=503,
+        )
+    return JSONResponse(
+        {
+            "status": "ok",
+            "components": {
+                "metadata_repository": {"status": "healthy"}
+            },
+        }
+    )
 
 
 @api_router.get("/diagnostics")

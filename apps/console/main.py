@@ -1,6 +1,7 @@
 """helios console: FastAPI application. Server-rendered pages with HTMX for in-place updates."""
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 import time
@@ -26,6 +27,7 @@ from .api import api_router, principal_from_request
 from .review import review_router
 
 HERE = Path(__file__).parent
+LOGGER = logging.getLogger(__name__)
 app = FastAPI(title="helios console")
 
 
@@ -74,8 +76,18 @@ def configure_cors(application: FastAPI, value: str | None = None) -> list[str]:
 
 configure_cors(app)
 app.state.metadata_repository = SQLiteMetadataRepository()
-app.state.metadata_repository.migrate()
-audit.purge_expired(app.state.metadata_repository)
+_metadata_findings = app.state.metadata_repository.integrity_check()
+if _metadata_findings == ("ok",) or not Path(
+    app.state.metadata_repository.path
+).exists():
+    app.state.metadata_repository.migrate()
+    audit.purge_expired(app.state.metadata_repository)
+else:
+    LOGGER.error(
+        "metadata integrity check failed; API readiness will remain "
+        "unavailable findings=%s",
+        _metadata_findings,
+    )
 
 
 def _audit_resource_scope(request: Request) -> tuple[str | None, str | None]:
