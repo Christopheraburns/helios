@@ -23,6 +23,14 @@ interface TalkPageProps {
 }
 
 const RESULT_PAGE_SIZE = 50;
+const WORKING_MESSAGES = [
+  "Searching governed datastores…",
+  "Reviewing the semantic model…",
+  "Planning a secure query…",
+  "Waiting for the data platform…",
+  "Interpreting query results…",
+  "Working on your answer…",
+] as const;
 
 function conversationError(error: unknown): string {
   if (error instanceof AuthenticationError) {
@@ -158,6 +166,7 @@ export default function TalkPage({ context }: TalkPageProps) {
   const [turns, setTurns] = useState<Record<string, ConversationTurn>>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [workingMessageIndex, setWorkingMessageIndex] = useState(0);
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState("");
   const transcriptRef = useRef<HTMLDivElement>(null);
@@ -224,6 +233,19 @@ export default function TalkPage({ context }: TalkPageProps) {
       transcript.scrollTop = transcript.scrollHeight;
     }
   }, [active?.messages.length, busy]);
+
+  useEffect(() => {
+    if (!busy) {
+      setWorkingMessageIndex(0);
+      return;
+    }
+    const interval = window.setInterval(() => {
+      setWorkingMessageIndex(
+        (current) => (current + 1) % WORKING_MESSAGES.length,
+      );
+    }, 4_000);
+    return () => window.clearInterval(interval);
+  }, [busy]);
 
   const selectConversation = async (conversationId: string) => {
     if (!modelId || conversationId === active?.id) return;
@@ -398,17 +420,37 @@ export default function TalkPage({ context }: TalkPageProps) {
                     </article>
                   ))
                 )}
-                {busy ? (
-                  <div className="talk-thinking" role="status">
-                    <span aria-hidden="true" />
-                    Helios is reasoning through the model and MCP tools…
-                  </div>
-                ) : null}
               </div>
 
               {error ? (
                 <div className="inline-message inline-message--error" role="alert">
                   {error}
+                </div>
+              ) : null}
+
+              {busy ? (
+                <div
+                  className="talk-progress"
+                  role="status"
+                  aria-live="polite"
+                  aria-label="Helios is working on your answer"
+                >
+                  <span className="talk-progress__activity" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                  <span
+                    className="talk-progress__message"
+                    key={workingMessageIndex}
+                    aria-hidden="true"
+                  >
+                    {WORKING_MESSAGES[workingMessageIndex]}
+                  </span>
+                  <span className="sr-only">
+                    Helios is working on your answer. This can take several
+                    minutes.
+                  </span>
                 </div>
               ) : null}
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -33,6 +34,7 @@ class MCPClientConfig:
         url = os.environ.get("HELIOS_MCP_URL", "").strip()
         token = os.environ.get("HELIOS_MCP_TOKEN", "").strip()
         secret = os.environ.get("HELIOS_MCP_DELEGATION_SECRET", "")
+        raw_timeout = os.environ.get("HELIOS_MCP_TIMEOUT_SECONDS", "45")
         if not url or not token or not secret:
             raise ConversationUnavailable(
                 "Helios MCP conversation connectivity is not configured"
@@ -43,7 +45,17 @@ class MCPClientConfig:
             raise ConversationUnavailable(
                 "HELIOS_MCP_URL must use HTTPS outside local development"
             )
-        return cls(url, token, secret)
+        try:
+            timeout_seconds = float(raw_timeout)
+        except ValueError as exc:
+            raise ConversationUnavailable(
+                "HELIOS_MCP_TIMEOUT_SECONDS must be a positive number"
+            ) from exc
+        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+            raise ConversationUnavailable(
+                "HELIOS_MCP_TIMEOUT_SECONDS must be a positive number"
+            )
+        return cls(url, token, secret, timeout_seconds)
 
 
 class ConversationService:

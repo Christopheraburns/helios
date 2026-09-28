@@ -2147,6 +2147,40 @@ describe("Helios application shell", () => {
     );
   });
 
+  it("cycles visible progress messages while Helios is working", async () => {
+    const client = successfulClient();
+    vi.mocked(client.createModelConversation!).mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    window.history.replaceState(
+      {},
+      "",
+      "/talk?organization=north&model=north-model",
+    );
+    render(<App client={client} />);
+    await screen.findByRole("heading", { name: "North Model" });
+    vi.useFakeTimers();
+
+    fireEvent.change(screen.getByLabelText("Ask about this model"), {
+      target: { value: "How many orders?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ask Helios" }));
+
+    expect(
+      screen.getByRole("status", {
+        name: "Helios is working on your answer",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Searching governed datastores…"))
+      .toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(4_000);
+    });
+    expect(screen.getByText("Reviewing the semantic model…"))
+      .toBeInTheDocument();
+  });
+
   it("loads a deep-linked conversation owned by the selected model", async () => {
     const client = successfulClient();
     vi.mocked(client.modelConversations!).mockResolvedValue({

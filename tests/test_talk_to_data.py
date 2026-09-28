@@ -9,7 +9,11 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 from apps.console import conversation as conversation_module
-from apps.console.conversation import ConversationService, MCPClientConfig
+from apps.console.conversation import (
+    ConversationService,
+    ConversationUnavailable,
+    MCPClientConfig,
+)
 from apps.console.main import app
 from apps.mcp import server as mcp_server
 from helios_core import audit, authz
@@ -1181,6 +1185,27 @@ def test_conversation_endpoint_reports_missing_server_configuration(
         "MCP conversation connectivity is not configured"
         in response.json()["detail"]
     )
+
+
+def test_mcp_client_config_reads_validated_timeout_from_environment(
+    monkeypatch,
+):
+    monkeypatch.setenv("HELIOS_MCP_URL", "https://mcp.example/mcp")
+    monkeypatch.setenv("HELIOS_MCP_TOKEN", "token")
+    monkeypatch.setenv("HELIOS_MCP_DELEGATION_SECRET", SECRET)
+    monkeypatch.setenv("HELIOS_MCP_TIMEOUT_SECONDS", "180")
+
+    configuration = MCPClientConfig.from_env()
+
+    assert configuration.timeout_seconds == 180
+
+    for invalid in ("zero", "0", "-1", "nan", "inf"):
+        monkeypatch.setenv("HELIOS_MCP_TIMEOUT_SECONDS", invalid)
+        with pytest.raises(
+            ConversationUnavailable,
+            match="HELIOS_MCP_TIMEOUT_SECONDS",
+        ):
+            MCPClientConfig.from_env()
 
 
 def test_impala_skips_delegation_to_the_connected_user(monkeypatch):

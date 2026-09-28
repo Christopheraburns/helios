@@ -221,8 +221,16 @@ Helios API Application:
 HELIOS_MCP_URL=https://<helios-mcp-application>/mcp
 HELIOS_MCP_TOKEN=<random server credential>
 HELIOS_MCP_DELEGATION_SECRET=<random value of at least 32 bytes>
+HELIOS_MCP_TIMEOUT_SECONDS=180
 MISTRAL_API_KEY=<secret>
 ```
+
+`HELIOS_MCP_TIMEOUT_SECONDS` controls how long the API conversation layer waits
+for each MCP operation. It defaults to 45 seconds and must be a positive number.
+Set it high enough for the target Virtual Warehouse's cold-start and query
+latency. The UI displays cycling progress messages while the request remains
+active, but long-running production queries should eventually move to an
+asynchronous execution and polling contract.
 
 When `MISTRAL_API_KEY` is present and `LLM_PROVIDER` is unset, Helios uses
 Mistral's OpenAI-compatible `https://api.mistral.ai/v1` endpoint with
