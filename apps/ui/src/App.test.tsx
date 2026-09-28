@@ -835,14 +835,29 @@ describe("Helios application shell", () => {
     fireEvent.change(screen.getByLabelText("Provider"), {
       target: { value: "openai" },
     });
-    expect(
-      screen.getByPlaceholderText("Enter the provider model ID"),
-    ).toHaveValue("claude-haiku-4-5");
+    expect(screen.getByLabelText("Provider model"))
+      .toHaveValue("claude-haiku-4-5");
     expect(screen.getByText(/Cloudera LiteLLM gateway/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Provider"), {
       target: { value: "mistral" },
     });
+    const modelSelect = screen.getByLabelText("Provider model");
+    expect(
+      within(modelSelect).getByRole("option", {
+        name: "mistral-small-latest",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(modelSelect).getByRole("option", {
+        name: "mistral-medium-latest",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(modelSelect).getByRole("option", {
+        name: "mistral-large-latest",
+      }),
+    ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("API key"), {
       target: { value: "user-session-secret" },
     });
@@ -937,7 +952,7 @@ describe("Helios application shell", () => {
     render(<App client={client} />);
 
     expect(
-      await screen.findByRole("heading", { name: "MCP traces" }),
+      await screen.findByRole("region", { name: "MCP traces" }),
     ).toBeInTheDocument();
     expect(
       await screen.findByText("No traces have been recorded for this model yet."),
@@ -947,6 +962,18 @@ describe("Helios application shell", () => {
       expect.objectContaining({ includeAll: false }),
     );
     expect(document.querySelector("main")).toHaveClass("app__main--trace");
+
+    const collapse = screen.getByRole("button", {
+      name: "Hide trace list",
+    });
+    expect(collapse).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(collapse);
+    expect(
+      screen.getByRole("button", { name: "Show trace list" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("complementary", { name: "Trace runs" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows model comparison metrics to organization administrators", async () => {

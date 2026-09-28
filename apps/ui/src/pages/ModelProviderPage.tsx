@@ -78,6 +78,7 @@ export default function ModelProviderPage({
     () => PROVIDERS.find((item) => item.id === provider) ?? PROVIDERS[0],
     [provider],
   );
+  const customModelSelected = !selectedProvider.models.includes(model);
   const availability = new Map(
     settings?.providers.map((item) => [item.id, item.available]) ?? [],
   );
@@ -227,20 +228,35 @@ export default function ModelProviderPage({
 
         <label>
           <span>Model</span>
-          <input
-            aria-label="Model"
-            list={`provider-models-${provider}`}
-            value={model}
-            maxLength={300}
-            required
-            placeholder="Enter the provider model ID"
-            onChange={(event) => setModel(event.currentTarget.value)}
-          />
-          <datalist id={`provider-models-${provider}`}>
+          <select
+            aria-label="Provider model"
+            value={customModelSelected ? "__custom__" : model}
+            onChange={(event) => {
+              setModel(
+                event.currentTarget.value === "__custom__"
+                  ? ""
+                  : event.currentTarget.value,
+              );
+              setSaveState("idle");
+            }}
+          >
             {selectedProvider.models.map((item) => (
-              <option value={item} key={item} />
+              <option value={item} key={item}>
+                {item}
+              </option>
             ))}
-          </datalist>
+            <option value="__custom__">Custom model ID…</option>
+          </select>
+          {customModelSelected ? (
+            <input
+              aria-label="Custom model ID"
+              value={model}
+              maxLength={300}
+              required
+              placeholder="Enter the provider model ID"
+              onChange={(event) => setModel(event.currentTarget.value)}
+            />
+          ) : null}
           <small>
             Select a suggested model or enter an exact model ID supported by
             your account.
