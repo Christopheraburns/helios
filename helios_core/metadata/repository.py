@@ -43,6 +43,19 @@ class ConversationMessage:
 
 
 @dataclass(frozen=True)
+class StoredConversationTurn:
+    id: str
+    conversation_id: str
+    user_message_id: str
+    assistant_message_id: str
+    created_at: datetime
+    request_id: str | None = None
+    tool_trace: tuple[dict[str, Any], ...] = ()
+    query_result: dict[str, Any] | None = None
+    provenance: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
 class StoredConversation:
     id: str
     model_id: str
@@ -51,7 +64,9 @@ class StoredConversation:
     version: int
     created_at: datetime
     updated_at: datetime
+    archived_at: datetime | None = None
     messages: tuple[ConversationMessage, ...] = ()
+    turns: tuple[StoredConversationTurn, ...] = ()
 
 
 class ConversationVersionConflict(RuntimeError):
@@ -159,12 +174,15 @@ class MetadataRepository(Protocol):
         title: str,
         user_content: str,
         assistant_content: str,
+        turn: dict[str, Any] | None = None,
     ) -> StoredConversation: ...
 
     def conversations_for_principal(
         self,
         model_id: str,
         principal_id: str,
+        *,
+        include_archived: bool = False,
     ) -> list[StoredConversation]: ...
 
     def conversation_for_principal(
@@ -182,6 +200,16 @@ class MetadataRepository(Protocol):
         expected_version: int,
         user_content: str,
         assistant_content: str,
+        turn: dict[str, Any] | None = None,
+    ) -> StoredConversation: ...
+
+    def archive_conversation(
+        self,
+        conversation_id: str,
+        model_id: str,
+        principal_id: str,
+        *,
+        archived: bool,
     ) -> StoredConversation: ...
 
     def append_audit_event(self, event: AuditEvent) -> AuditEvent: ...

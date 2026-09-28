@@ -170,4 +170,35 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON audit_events (component, occurred_at DESC, id DESC);
         """,
     ),
+    (
+        5,
+        """
+        ALTER TABLE conversations
+            ADD COLUMN archived_at TEXT;
+
+        CREATE INDEX conversations_owner_model_active_idx
+            ON conversations (
+                principal_id, model_id, archived_at, updated_at DESC
+            );
+
+        CREATE TABLE conversation_turns (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL
+                REFERENCES conversations(id) ON DELETE CASCADE,
+            user_message_id TEXT NOT NULL
+                REFERENCES conversation_messages(id) ON DELETE CASCADE,
+            assistant_message_id TEXT NOT NULL UNIQUE
+                REFERENCES conversation_messages(id) ON DELETE CASCADE,
+            request_id TEXT,
+            tool_trace_json TEXT NOT NULL DEFAULT '[]',
+            query_result_json TEXT,
+            provenance_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            UNIQUE (conversation_id, user_message_id, assistant_message_id)
+        );
+
+        CREATE INDEX conversation_turns_conversation_idx
+            ON conversation_turns (conversation_id, created_at, id);
+        """,
+    ),
 )

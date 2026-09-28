@@ -194,6 +194,11 @@ export interface ApplicationContextState {
     message: string,
     expectedVersion: number,
   ) => Promise<PersistedConversationTurn>;
+  archiveModelConversation: (
+    modelId: string,
+    conversationId: string,
+    archived?: boolean,
+  ) => Promise<ConversationDetail>;
   loadAuditEvents: (
     options?: AuditEventOptions,
   ) => Promise<AuditEventCollection>;
@@ -785,6 +790,17 @@ export function useApplicationContext(
       expectedVersion,
     );
   }, [client]);
+  const archiveModelConversation = useCallback((
+    modelId: string,
+    conversationId: string,
+    archived = true,
+  ) => {
+    const api = client();
+    if (!api.archiveModelConversation) {
+      throw new ApiUnavailableError("Conversation archiving is unavailable.");
+    }
+    return api.archiveModelConversation(modelId, conversationId, archived);
+  }, [client]);
   const loadAuditEvents = useCallback((options?: AuditEventOptions) => {
     const api = client();
     if (!api.auditEvents) {
@@ -868,6 +884,7 @@ export function useApplicationContext(
     createModelConversation,
     loadModelConversation,
     appendModelConversationTurn,
+    archiveModelConversation,
     loadAuditEvents,
     loadAuditEvent,
     loadAuditSessions,

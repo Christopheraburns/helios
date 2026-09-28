@@ -12,7 +12,7 @@ import httpx2
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
-from helios_core import audit
+from helios_core import __version__, audit
 from helios_core.authz import Principal
 from helios_core.delegation import issue_assertion
 from helios_core.llm import LLMClient, LLMError, llm_from_env
@@ -111,7 +111,7 @@ class ConversationService:
                     self.mcp.url, http_client=http_client
                 ) as streams:
                     async with ClientSession(*streams) as session:
-                        await session.initialize()
+                        initialized = await session.initialize()
                         listed = await session.list_tools()
                         tools = [
                             {
@@ -131,6 +131,17 @@ class ConversationService:
                             model_id,
                             message,
                             history=history,
+                            provenance={
+                                "helios": {"api_version": __version__},
+                                "llm": {
+                                    "provider": self.llm.provider,
+                                    "model": self.llm.model,
+                                },
+                                "mcp": _mcp_provenance(initialized),
+                            },
+                            request_id=(
+                                context.request_id if context else None
+                            ),
                         )
         except ConversationUnavailable:
             raise
@@ -147,6 +158,8 @@ class ConversationService:
         message: str,
         *,
         history: list[dict[str, str]] | None = None,
+        provenance: dict[str, Any] | None = None,
+        request_id: str | None = None,
     ) -> dict[str, Any]:
         tool_by_name = {tool["name"]: tool for tool in tools}
         messages: list[dict[str, Any]] = [
@@ -180,6 +193,8 @@ class ConversationService:
                     "answer": turn.text,
                     "tool_trace": trace,
                     "query_result": _last_query_result(trace),
+                    "provenance": provenance or {},
+                    "request_id": request_id,
                 }
             calls = [
                 {
@@ -268,10 +283,29 @@ class ConversationService:
                         "answer": answer,
                         "tool_trace": trace,
                         "query_result": _last_query_result(trace),
+                        "provenance": provenance or {},
+                        "request_id": request_id,
                     }
         raise ConversationUnavailable(
             "The conversation exceeded the MCP tool-call limit"
         )
+
+
+def _mcp_provenance(initialized: Any) -> dict[str, Any]:
+    server_info = getattr(
+        initialized,
+        "serverInfo",
+        getattr(initialized, "server_info", None),
+    )
+    return {
+        "server_name": getattr(server_info, "name", None),
+        "server_version": getattr(server_info, "version", None),
+        "protocol_version": getattr(
+            initialized,
+            "protocolVersion",
+            getattr(initialized, "protocol_version", None),
+        ),
+    }
 
 
 def _tool_result(response: Any) -> Any:

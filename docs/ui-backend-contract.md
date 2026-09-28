@@ -463,16 +463,25 @@ The browser stores an opaque UUID in `sessionStorage` and sends it as
 ## User interfaces
 
 The primary visual UI is the React/TypeScript application in `apps/ui`. It
-uses only this HTTP contract for selectors, overview, Canvas navigation,
-Inspector details, and proposal review.
+uses only this HTTP contract for selectors, conversations, overview, semantic
+model navigation, Inspector details, and proposal review. Helios uses a
+conversation-first information architecture: `/` redirects to `/talk`, the
+top bar retains Organization and Model context, and the left navigation groups
+authorized destinations under Ask, Build, and Govern. Model-scoped links are
+derived from API-provided `available_actions`; the API remains authoritative.
+On narrow screens the grouped navigation is exposed as a dismissible drawer.
 
 Implemented routes are:
 
-- `/` — selected model overview;
+- `/` — redirect to the Talk to Your Data home;
+- `/talk` — model-scoped conversation history and question answering;
+- `/model-overview` — selected model overview;
 - `/models` — model-scoped discovery activity;
 - `/models/runs/{run_id}` — run detail and proposal workspace;
 - `/models/runs/{run_id}/profile/{table_id}` — historical table profile; and
-- `/canvas` — current or historical review graph; and
+- `/canvas` — current or historical semantic model graph;
+- `/data-sources` — governed data-source workspace;
+- `/governance` and `/governance/proposals` — glossary and proposal review;
 - `/activity` — own-session audit activity with organization-admin expansion.
 
 Every route preserves the authorized `organization` and `model` query
@@ -512,19 +521,24 @@ The `/talk` UI uses only the model-scoped conversation API:
 - `GET /api/v1/models/{model_id}/conversations`
 - `POST /api/v1/models/{model_id}/conversations`
 - `GET /api/v1/models/{model_id}/conversations/{conversation_id}`
+- `PATCH /api/v1/models/{model_id}/conversations/{conversation_id}`
 - `POST /api/v1/models/{model_id}/conversations/{conversation_id}/turns`
 
 Every request derives the Principal from the normal authenticated API request
 and requires `model.read`. Conversations are private to their creating
 Principal and selected Model. An append includes `expected_version`; stale
-clients receive HTTP 409 and must reload.
+clients receive HTTP 409 and must reload. `PATCH` changes the archive state
+without deleting history. Archived conversations reject new turns and are
+omitted from the default list; administrators do not gain access to another
+Principal's conversation through organization-wide audit permissions.
 
-The persistent contract contains conversation summaries and user/assistant
-message text. Current-turn query rows, SQL, and sanitized MCP tool activity are
-returned with create/append responses but deliberately are not persisted. The
-API's server-side conversation layer supplies bounded history to the LLM and
-continues to execute semantic and data operations exclusively through Helios
-MCP. The browser never receives Mistral, MCP, Impala, or delegation secrets.
+The persistent contract links each user message and assistant message to its
+bounded MCP tool trace, query result, generated SQL, request ID, and
+LLM/MCP/API provenance. Reopening a conversation returns these records so the
+UI can restore results and “How Helios produced this answer.” Only message text
+is supplied as bounded history to later LLM calls; prior rows and tool results
+are not replayed into prompts. The browser never receives Mistral, MCP, Impala,
+or delegation secrets.
 
 ## Current UI coverage and remaining limits
 

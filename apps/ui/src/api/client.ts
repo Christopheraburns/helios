@@ -159,7 +159,7 @@ export interface DiscoveryRun {
     engine: string | null;
     databases: string[];
   };
-  provenance?: {
+  provenance: {
     llm: Record<string, unknown> | null;
   };
   missing?: boolean;
@@ -218,7 +218,7 @@ export interface HistoricalProfileSummary {
   relationships: RelationshipEvidence[];
   suggested_relationships: RelationshipEvidence[];
   rejected_candidates: RelationshipEvidence[];
-  provenance: {
+  provenance?: {
     artifacts: Array<"harvest" | "profile">;
     run_id: string;
   };
@@ -604,6 +604,16 @@ export interface ConversationTurn {
     rows: unknown[][];
     sql?: string;
   } | null;
+  provenance?: {
+    helios?: { api_version?: string | null };
+    llm?: { provider?: string | null; model?: string | null };
+    mcp?: {
+      server_name?: string | null;
+      server_version?: string | null;
+      protocol_version?: string | null;
+    };
+  };
+  request_id?: string | null;
 }
 
 export interface ConversationMessage {
@@ -611,6 +621,7 @@ export interface ConversationMessage {
   role: "user" | "assistant";
   content: string;
   created_at: string;
+  turn?: ConversationTurn | null;
 }
 
 export interface ConversationSummary {
@@ -620,6 +631,7 @@ export interface ConversationSummary {
   version: number;
   created_at: string;
   updated_at: string;
+  archived_at?: string | null;
 }
 
 export interface ConversationDetail extends ConversationSummary {
@@ -879,6 +891,11 @@ export interface HeliosApi {
     message: string,
     expectedVersion: number,
   ): Promise<PersistedConversationTurn>;
+  archiveModelConversation?(
+    modelId: string,
+    conversationId: string,
+    archived?: boolean,
+  ): Promise<ConversationDetail>;
   auditEvents?(
     options?: AuditEventOptions,
   ): Promise<AuditEventCollection>;
@@ -1295,6 +1312,17 @@ export class HeliosApiClient implements HeliosApi {
     return this.post<PersistedConversationTurn>(
       `/api/v1/models/${encodeURIComponent(modelId)}/conversations/${encodeURIComponent(conversationId)}/turns`,
       { message, expected_version: expectedVersion },
+    );
+  }
+
+  archiveModelConversation(
+    modelId: string,
+    conversationId: string,
+    archived = true,
+  ): Promise<ConversationDetail> {
+    return this.patch<ConversationDetail>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/conversations/${encodeURIComponent(conversationId)}`,
+      { archived },
     );
   }
 

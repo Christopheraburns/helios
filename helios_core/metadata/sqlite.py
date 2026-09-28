@@ -27,6 +27,7 @@ from .repository import (
     ConversationVersionConflict,
     PrincipalRecord,
     StoredConversation,
+    StoredConversationTurn,
     StoredModel,
     StoredOrganization,
 )
@@ -482,6 +483,7 @@ class SQLiteMetadataRepository:
         title: str,
         user_content: str,
         assistant_content: str,
+        turn: dict | None = None,
     ) -> StoredConversation:
         title = title.strip()
         _validate_conversation_text(title, "conversation title", 200)
@@ -490,6 +492,8 @@ class SQLiteMetadataRepository:
             assistant_content, "assistant message", 100_000
         )
         conversation_id = str(uuid.uuid4())
+        user_message_id = str(uuid.uuid4())
+        assistant_message_id = str(uuid.uuid4())
         now = _now()
         with self._connection() as connection:
             try:
@@ -517,7 +521,7 @@ class SQLiteMetadataRepository:
                     """,
                     (
                         (
-                            str(uuid.uuid4()),
+                            user_message_id,
                             conversation_id,
                             1,
                             "user",
@@ -525,7 +529,7 @@ class SQLiteMetadataRepository:
                             now,
                         ),
                         (
-                            str(uuid.uuid4()),
+                            assistant_message_id,
                             conversation_id,
                             2,
                             "assistant",
@@ -534,6 +538,15 @@ class SQLiteMetadataRepository:
                         ),
                     ),
                 )
+                if turn is not None:
+                    _insert_conversation_turn(
+                        connection,
+                        conversation_id,
+                        user_message_id,
+                        assistant_message_id,
+                        turn,
+                        now,
+                    )
             except sqlite3.IntegrityError as exc:
                 raise ValueError(str(exc)) from exc
         conversation = self.conversation_for_principal(
@@ -547,6 +560,8 @@ class SQLiteMetadataRepository:
         self,
         model_id: str,
         principal_id: str,
+        *,
+        include_archived: bool = False,
     ) -> list[StoredConversation]:
         with self._connection() as connection:
             rows = connection.execute(
@@ -554,9 +569,10 @@ class SQLiteMetadataRepository:
                 SELECT *
                 FROM conversations
                 WHERE model_id = ? AND principal_id = ?
+                    AND (? OR archived_at IS NULL)
                 ORDER BY updated_at DESC, id
                 """,
-                (model_id, principal_id),
+                (model_id, principal_id, include_archived),
             ).fetchall()
             return [
                 self._conversation_from_row(
@@ -594,6 +610,7 @@ class SQLiteMetadataRepository:
         expected_version: int,
         user_content: str,
         assistant_content: str,
+        turn: dict | None = None,
     ) -> StoredConversation:
         _validate_conversation_text(user_content, "user message", 10_000)
         _validate_conversation_text(
@@ -603,7 +620,7 @@ class SQLiteMetadataRepository:
         with self._connection() as connection:
             row = connection.execute(
                 """
-                SELECT version
+                SELECT version, archived_at
                 FROM conversations
                 WHERE id = ? AND model_id = ? AND principal_id = ?
                 """,
@@ -611,6 +628,10 @@ class SQLiteMetadataRepository:
             ).fetchone()
             if row is None:
                 raise LookupError("conversation not found")
+            if row["archived_at"] is not None:
+                raise ConversationVersionConflict(
+                    "archived conversations cannot accept new messages"
+                )
             if row["version"] != expected_version:
                 raise ConversationVersionConflict(
                     "conversation changed; reload before sending another message"
@@ -625,6 +646,8 @@ class SQLiteMetadataRepository:
                     (conversation_id,),
                 ).fetchone()["position"]
             )
+            user_message_id = str(uuid.uuid4())
+            assistant_message_id = str(uuid.uuid4())
             updated = connection.execute(
                 """
                 UPDATE conversations
@@ -652,7 +675,7 @@ class SQLiteMetadataRepository:
                 """,
                 (
                     (
-                        str(uuid.uuid4()),
+                        user_message_id,
                         conversation_id,
                         position + 1,
                         "user",
@@ -660,7 +683,7 @@ class SQLiteMetadataRepository:
                         now,
                     ),
                     (
-                        str(uuid.uuid4()),
+                        assistant_message_id,
                         conversation_id,
                         position + 2,
                         "assistant",
@@ -669,6 +692,50 @@ class SQLiteMetadataRepository:
                     ),
                 ),
             )
+            if turn is not None:
+                _insert_conversation_turn(
+                    connection,
+                    conversation_id,
+                    user_message_id,
+                    assistant_message_id,
+                    turn,
+                    now,
+                )
+        conversation = self.conversation_for_principal(
+            conversation_id, model_id, principal_id
+        )
+        if conversation is None:
+            raise RuntimeError("conversation was not persisted")
+        return conversation
+
+    def archive_conversation(
+        self,
+        conversation_id: str,
+        model_id: str,
+        principal_id: str,
+        *,
+        archived: bool,
+    ) -> StoredConversation:
+        now = _now()
+        with self._connection() as connection:
+            updated = connection.execute(
+                """
+                UPDATE conversations
+                SET archived_at = ?,
+                    updated_at = ?,
+                    version = version + 1
+                WHERE id = ? AND model_id = ? AND principal_id = ?
+                """,
+                (
+                    now if archived else None,
+                    now,
+                    conversation_id,
+                    model_id,
+                    principal_id,
+                ),
+            )
+            if updated.rowcount != 1:
+                raise LookupError("conversation not found")
         conversation = self.conversation_for_principal(
             conversation_id, model_id, principal_id
         )
@@ -904,6 +971,7 @@ class SQLiteMetadataRepository:
         include_messages: bool,
     ) -> StoredConversation:
         messages: tuple[ConversationMessage, ...] = ()
+        turns: tuple[StoredConversationTurn, ...] = ()
         if include_messages:
             messages = tuple(
                 ConversationMessage(
@@ -924,6 +992,32 @@ class SQLiteMetadataRepository:
                     (row["id"],),
                 )
             )
+            turns = tuple(
+                StoredConversationTurn(
+                    id=turn["id"],
+                    conversation_id=turn["conversation_id"],
+                    user_message_id=turn["user_message_id"],
+                    assistant_message_id=turn["assistant_message_id"],
+                    request_id=turn["request_id"],
+                    tool_trace=tuple(json.loads(turn["tool_trace_json"])),
+                    query_result=(
+                        json.loads(turn["query_result_json"])
+                        if turn["query_result_json"]
+                        else None
+                    ),
+                    provenance=json.loads(turn["provenance_json"]),
+                    created_at=datetime.fromisoformat(turn["created_at"]),
+                )
+                for turn in connection.execute(
+                    """
+                    SELECT *
+                    FROM conversation_turns
+                    WHERE conversation_id = ?
+                    ORDER BY created_at, id
+                    """,
+                    (row["id"],),
+                )
+            )
         return StoredConversation(
             id=row["id"],
             model_id=row["model_id"],
@@ -932,7 +1026,13 @@ class SQLiteMetadataRepository:
             version=row["version"],
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
+            archived_at=(
+                datetime.fromisoformat(row["archived_at"])
+                if row["archived_at"]
+                else None
+            ),
             messages=messages,
+            turns=turns,
         )
 
     @contextmanager
@@ -988,6 +1088,59 @@ def _audit_event(row: sqlite3.Row) -> AuditEvent:
         summary=row["summary"],
         details=json.loads(row["details_json"]),
     )
+
+
+def _insert_conversation_turn(
+    connection: sqlite3.Connection,
+    conversation_id: str,
+    user_message_id: str,
+    assistant_message_id: str,
+    turn: dict,
+    created_at: str,
+) -> None:
+    tool_trace = turn.get("tool_trace")
+    query_result = turn.get("query_result")
+    provenance = turn.get("provenance") or {}
+    if not isinstance(tool_trace, list):
+        raise ValueError("conversation tool trace must be a list")
+    if query_result is not None and not isinstance(query_result, dict):
+        raise ValueError("conversation query result must be an object")
+    if not isinstance(provenance, dict):
+        raise ValueError("conversation provenance must be an object")
+    request_id = turn.get("request_id")
+    if request_id is not None and not isinstance(request_id, str):
+        raise ValueError("conversation request ID must be a string")
+    connection.execute(
+        """
+        INSERT INTO conversation_turns (
+            id, conversation_id, user_message_id, assistant_message_id,
+            request_id, tool_trace_json, query_result_json,
+            provenance_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            str(uuid.uuid4()),
+            conversation_id,
+            user_message_id,
+            assistant_message_id,
+            request_id,
+            _conversation_json(tool_trace, "tool trace", 1_000_000),
+            (
+                _conversation_json(query_result, "query result", 1_000_000)
+                if query_result is not None
+                else None
+            ),
+            _conversation_json(provenance, "provenance", 100_000),
+            created_at,
+        ),
+    )
+
+
+def _conversation_json(value: object, label: str, maximum: int) -> str:
+    encoded = json.dumps(value, separators=(",", ":"), default=str)
+    if len(encoded.encode()) > maximum:
+        raise ValueError(f"conversation {label} exceeds the persistence limit")
+    return encoded
 
 
 def _now() -> str:

@@ -1,5 +1,6 @@
 import {
   BrowserRouter,
+  Navigate,
   Route,
   Routes,
   useLocation,
@@ -154,6 +155,7 @@ function ApplicationShell({ client }: AppProps) {
         <main
           className={`app__main${canvasActive ? " app__main--canvas" : ""}`}
           id="main-content"
+          tabIndex={-1}
         >
           {context.status === "loading" ? (
             <LoadingState />
@@ -166,7 +168,19 @@ function ApplicationShell({ client }: AppProps) {
           ) : (
             <Suspense fallback={<LoadingState label="Loading workspace…" />}>
             <Routes>
-              <Route path="/" element={<OverviewPage context={context} />} />
+              <Route
+                path="/"
+                element={
+                  <Navigate
+                    to={{ pathname: "/talk", search: location.search }}
+                    replace
+                  />
+                }
+              />
+              <Route
+                path="/model-overview"
+                element={<OverviewPage context={context} />}
+              />
               <Route
                 path="/canvas"
                 element={<CanvasPage context={context} />}

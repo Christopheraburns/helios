@@ -8,6 +8,7 @@ from .repository import (
     MetadataRepository,
     PrincipalRecord,
     StoredConversation,
+    StoredConversationTurn,
     StoredModel,
     StoredOrganization,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "PrincipalRecord",
     "SQLiteMetadataRepository",
     "StoredConversation",
+    "StoredConversationTurn",
     "StoredModel",
     "StoredOrganization",
     "default_database_path",

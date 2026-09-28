@@ -171,7 +171,9 @@ export default function OverviewPage({ context }: OverviewPageProps) {
       </header>
 
       {context.modelStatus === "loading" ||
-      (model && context.overviewStatus === "loading") ? (
+      (model
+        && (context.overviewStatus === "idle"
+          || context.overviewStatus === "loading")) ? (
         <div className="summary-grid" aria-label="Loading model overview">
           {[0, 1, 2, 3].map((item) => (
             <div className="summary-card summary-card--loading" key={item}>

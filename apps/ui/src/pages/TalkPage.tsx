@@ -15,7 +15,11 @@ import {
   ConversationSummary,
   ConversationTurn,
 } from "../api/client";
-import { EmptyState, LoadingState } from "../components/AsyncState";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from "../components/AsyncState";
 import { ApplicationContextState } from "../hooks/useApplicationContext";
 
 interface TalkPageProps {
@@ -48,6 +52,19 @@ function conversationError(error: unknown): string {
 function summary(conversation: ConversationDetail): ConversationSummary {
   const { messages: _messages, ...item } = conversation;
   return item;
+}
+
+function conversationTurns(
+  conversation: ConversationDetail,
+): Record<string, ConversationTurn> {
+  return Object.fromEntries(
+    conversation.messages
+      .filter(
+        (message): message is typeof message & { turn: ConversationTurn } =>
+          message.role === "assistant" && Boolean(message.turn),
+      )
+      .map((message) => [message.id, message.turn]),
+  );
 }
 
 function QueryResult({ turn }: { turn: ConversationTurn }) {
@@ -130,29 +147,69 @@ function QueryResult({ turn }: { turn: ConversationTurn }) {
 }
 
 function ToolActivity({ turn }: { turn: ConversationTurn }) {
-  if (turn.tool_trace.length === 0) return null;
+  const provenance = turn.provenance;
+  const hasProvenance = Boolean(
+    provenance?.llm?.provider
+    || provenance?.llm?.model
+    || provenance?.mcp?.server_version
+    || provenance?.helios?.api_version
+    || turn.request_id,
+  );
+  if (turn.tool_trace.length === 0 && !hasProvenance) return null;
   return (
     <details className="talk-details">
       <summary>How Helios produced this answer</summary>
-      <ol className="talk-tools">
-        {turn.tool_trace.map((item, index) => {
-          const result =
-            item.result && typeof item.result === "object"
-              ? item.result as Record<string, unknown>
-              : null;
-          return (
-            <li key={`${item.tool}-${index}`}>
-              <strong>{item.tool}</strong>
-              <pre>{JSON.stringify(item.arguments, null, 2)}</pre>
-              {typeof result?.message === "string" ? (
-                <p className={result.error ? "inline-message inline-message--error" : ""}>
-                  {result.message}
-                </p>
-              ) : null}
-            </li>
-          );
-        })}
-      </ol>
+      {hasProvenance ? (
+        <dl className="talk-provenance">
+          <div>
+            <dt>LLM</dt>
+            <dd>
+              {[provenance?.llm?.provider, provenance?.llm?.model]
+                .filter(Boolean).join(" · ") || "Not recorded"}
+            </dd>
+          </div>
+          <div>
+            <dt>MCP server</dt>
+            <dd>
+              {[provenance?.mcp?.server_name, provenance?.mcp?.server_version]
+                .filter(Boolean).join(" · ") || "Not recorded"}
+            </dd>
+          </div>
+          <div>
+            <dt>MCP protocol</dt>
+            <dd>{provenance?.mcp?.protocol_version || "Not recorded"}</dd>
+          </div>
+          <div>
+            <dt>Helios API</dt>
+            <dd>{provenance?.helios?.api_version || "Not recorded"}</dd>
+          </div>
+          <div>
+            <dt>Request</dt>
+            <dd>{turn.request_id || "Not recorded"}</dd>
+          </div>
+        </dl>
+      ) : null}
+      {turn.tool_trace.length ? (
+        <ol className="talk-tools">
+          {turn.tool_trace.map((item, index) => {
+            const result =
+              item.result && typeof item.result === "object"
+                ? item.result as Record<string, unknown>
+                : null;
+            return (
+              <li key={`${item.tool}-${index}`}>
+                <strong>{item.tool}</strong>
+                <pre>{JSON.stringify(item.arguments, null, 2)}</pre>
+                {typeof result?.message === "string" ? (
+                  <p className={result.error ? "inline-message inline-message--error" : ""}>
+                    {result.message}
+                  </p>
+                ) : null}
+              </li>
+            );
+          })}
+        </ol>
+      ) : null}
     </details>
   );
 }
@@ -166,6 +223,7 @@ export default function TalkPage({ context }: TalkPageProps) {
   const [turns, setTurns] = useState<Record<string, ConversationTurn>>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [archivingId, setArchivingId] = useState<string>();
   const [workingMessageIndex, setWorkingMessageIndex] = useState(0);
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState("");
@@ -206,6 +264,7 @@ export default function TalkPage({ context }: TalkPageProps) {
         const loaded = await context.loadModelConversation(modelId, targetId);
         if (cancelled) return;
         setActive(loaded);
+        setTurns(conversationTurns(loaded));
         if (!requestedConversationId) {
           setConversationParam(targetId, true);
         }
@@ -257,6 +316,7 @@ export default function TalkPage({ context }: TalkPageProps) {
         conversationId,
       );
       setActive(loaded);
+      setTurns(conversationTurns(loaded));
       setConversationParam(conversationId);
     } catch (loadError) {
       setError(conversationError(loadError));
@@ -267,15 +327,49 @@ export default function TalkPage({ context }: TalkPageProps) {
 
   const startConversation = () => {
     setActive(undefined);
+    setTurns({});
     setMessage("");
     setError(undefined);
     setConversationParam("new");
   };
 
+  const archiveConversation = async (
+    conversation: ConversationSummary,
+  ) => {
+    if (!modelId || busy || archivingId) return;
+    setArchivingId(conversation.id);
+    setError(undefined);
+    try {
+      await context.archiveModelConversation(
+        modelId,
+        conversation.id,
+      );
+      setConversations((items) =>
+        items.filter((item) => item.id !== conversation.id)
+      );
+      if (active?.id === conversation.id) {
+        setActive(undefined);
+        setTurns({});
+        setMessage("");
+        setConversationParam("new");
+      }
+    } catch (archiveError) {
+      setError(conversationError(archiveError));
+    } finally {
+      setArchivingId(undefined);
+    }
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const question = message.trim();
-    if (!modelId || !question || question.length > 10_000 || busy) return;
+    if (
+      !modelId
+      || !question
+      || question.length > 10_000
+      || busy
+      || active?.archived_at
+    ) return;
     setBusy(true);
     setError(undefined);
     try {
@@ -329,11 +423,53 @@ export default function TalkPage({ context }: TalkPageProps) {
     }
   };
 
-  if (!modelId) {
+  if (context.organizations.length === 0) {
     return (
       <EmptyState
-        title="Select a model to start a conversation"
-        message="Talk to Your Data uses the active Helios model and its permissions."
+        title="No organizations available"
+        message="Your account does not currently have access to a Helios organization."
+        actionLabel="Refresh access"
+        onAction={context.retry}
+      />
+    );
+  }
+
+  if (
+    !modelId
+    && (context.modelStatus === "loading" || context.modelStatus === "idle")
+  ) {
+    return <LoadingState label="Loading semantic models…" />;
+  }
+
+  if (!modelId && context.modelStatus === "error") {
+    return (
+      <ErrorState
+        title="Semantic models could not be loaded"
+        message={context.errorMessage ?? "The API request failed."}
+        onRetry={context.retry}
+      />
+    );
+  }
+
+  if (!modelId) {
+    const organization = context.organizations.find(
+      (item) => item.id === context.selectedOrganizationId,
+    );
+    const canCreateModel = organization?.available_actions.includes(
+      "model.create",
+    );
+    return (
+      <EmptyState
+        title={
+          context.models.length === 0
+            ? "No semantic models available"
+            : "Select a model to start a conversation"
+        }
+        message={
+          canCreateModel
+            ? "Create a semantic model from the Build workspace, then select it from the Model menu above."
+            : "Choose an available model from the Model menu above. If none are listed, ask your Helios administrator for model access."
+        }
       />
     );
   }
@@ -363,10 +499,12 @@ export default function TalkPage({ context }: TalkPageProps) {
           ) : (
             <ul>
               {conversations.map((item) => (
-                <li key={item.id}>
+                <li className="talk-history__item" key={item.id}>
                   <button
                     type="button"
-                    className={item.id === active?.id ? "is-active" : ""}
+                    className={`talk-history__select ${
+                      item.id === active?.id ? "is-active" : ""
+                    }`}
                     aria-current={item.id === active?.id ? "page" : undefined}
                     onClick={() => void selectConversation(item.id)}
                   >
@@ -374,6 +512,16 @@ export default function TalkPage({ context }: TalkPageProps) {
                     <span>
                       {new Date(item.updated_at).toLocaleDateString()}
                     </span>
+                  </button>
+                  <button
+                    className="talk-history__archive"
+                    type="button"
+                    aria-label={`Archive ${item.title}`}
+                    title="Archive conversation"
+                    disabled={busy || Boolean(archivingId)}
+                    onClick={() => void archiveConversation(item)}
+                  >
+                    {archivingId === item.id ? "Archiving…" : "Archive"}
                   </button>
                 </li>
               ))}
@@ -454,6 +602,13 @@ export default function TalkPage({ context }: TalkPageProps) {
                 </div>
               ) : null}
 
+              {active?.archived_at ? (
+                <div className="inline-message" role="status">
+                  This conversation is archived and cannot accept new
+                  questions.
+                </div>
+              ) : null}
+
               <form className="talk-composer" onSubmit={submit}>
                 <label htmlFor="talk-message">Ask about this model</label>
                 <textarea
@@ -461,7 +616,7 @@ export default function TalkPage({ context }: TalkPageProps) {
                   value={message}
                   maxLength={10_000}
                   rows={3}
-                  disabled={busy}
+                  disabled={busy || Boolean(active?.archived_at)}
                   placeholder="Ask a question about your governed data…"
                   onChange={(event) => setMessage(event.target.value)}
                   onKeyDown={(event) => {
@@ -480,7 +635,9 @@ export default function TalkPage({ context }: TalkPageProps) {
                   <button
                     className="button button--primary"
                     type="submit"
-                    disabled={busy || !message.trim()}
+                    disabled={
+                      busy || !message.trim() || Boolean(active?.archived_at)
+                    }
                   >
                     {busy ? "Asking…" : "Ask Helios"}
                   </button>
