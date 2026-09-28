@@ -143,7 +143,9 @@ export default function MCPManagementPage({
   ].filter(Boolean).join(" · ");
 
   return (
-    <div className="mcp-management">
+    <div className={`mcp-management${
+      tab === "traces" ? " mcp-management--traces" : ""
+    }`}>
       <header className="page-header">
         <div>
           <p className="page-header__eyebrow">Govern</p>

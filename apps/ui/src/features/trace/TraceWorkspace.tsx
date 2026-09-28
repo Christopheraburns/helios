@@ -190,6 +190,7 @@ export default function TraceWorkspace({
               fitView
               minZoom={0.25}
               maxZoom={1.6}
+              style={{ width: "100%", height: "100%" }}
               onNodeClick={(_event, node) => {
                 setSelectedSpan(
                   detail.spans.find((span) => span.id === node.id),

@@ -14,6 +14,7 @@ SUPPORTED_PROVIDERS = frozenset({
     "bedrock",
     "openai",
 })
+LITELLM_GATEWAY_URL = "https://ai-gateway.cloudops.cloudera.com"
 
 
 @dataclass(frozen=True)
@@ -99,12 +100,12 @@ def llm_for_settings(settings: SessionModelProvider) -> LLMClient:
             f"https://bedrock-runtime.{region}.amazonaws.com",
         )
     if provider == "openai":
-        base_url = os.environ.get("INFERENCE_BASE_URL", "").strip()
-        if not base_url:
-            raise ValueError(
-                "OpenAI-compatible inference is not configured by the administrator"
-            )
-        return LLMClient(provider, settings.model, settings.api_key, base_url)
+        return LLMClient(
+            provider,
+            settings.model,
+            settings.api_key,
+            openai_compatible_base_url(),
+        )
     raise ValueError("unsupported model provider")
 
 
@@ -115,10 +116,16 @@ def environment_provider_summary() -> tuple[str | None, str | None]:
     return configured.provider, configured.model
 
 
+def openai_compatible_base_url() -> str:
+    """Use the deployment override, otherwise the Cloudera LiteLLM gateway."""
+    configured = os.environ.get("INFERENCE_BASE_URL", "").strip()
+    return configured or LITELLM_GATEWAY_URL
+
+
 def provider_availability() -> dict[str, bool]:
     return {
         "anthropic": True,
         "mistral": True,
         "bedrock": True,
-        "openai": bool(os.environ.get("INFERENCE_BASE_URL", "").strip()),
+        "openai": True,
     }

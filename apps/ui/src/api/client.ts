@@ -744,6 +744,11 @@ export interface ConversationToolTrace {
 export interface ConversationTurn {
   model_id: string;
   answer: string;
+  failure?: {
+    code: string;
+    message: string;
+    retryable: boolean;
+  } | null;
   tool_trace: ConversationToolTrace[];
   query_result: {
     columns: string[];

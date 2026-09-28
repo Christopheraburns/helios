@@ -528,8 +528,10 @@ DELETE /api/v1/model-provider-settings
 `PUT` accepts `provider`, `model`, and `api_key`. The API scopes overrides by
 authenticated Principal and `X-Helios-Session-ID`, stores the key only in
 process memory, and never includes it in a response or audit details. `DELETE`
-returns the session to the project environment default. OpenAI-compatible
-base URLs remain administrator-controlled through `INFERENCE_BASE_URL`.
+returns the session to the project environment default. The
+OpenAI-compatible provider uses the Cloudera LiteLLM gateway. Its base URL is
+not accepted from the browser; `INFERENCE_BASE_URL` can override the default
+gateway for a deployment.
 
 ## Talk to Your Data
 
@@ -548,6 +550,8 @@ clients receive HTTP 409 and must reload. `PATCH` changes the archive state
 without deleting history. Archived conversations reject new turns and are
 omitted from the default list; administrators do not gain access to another
 Principal's conversation through organization-wide audit permissions.
+If a model-provider response exceeds `HELIOS_LLM_TIMEOUT_SECONDS`, the API
+ends the active turn with HTTP 503 and a safe message for the UI alert.
 
 The persistent contract links each user message and assistant message to its
 bounded MCP tool trace, query result, generated SQL, request ID, and
@@ -556,6 +560,11 @@ UI can restore results and “How Helios produced this answer.” Only message t
 is supplied as bounded history to later LLM calls; prior rows and tool results
 are not replayed into prompts. The browser never receives Mistral, MCP, Impala,
 or delegation secrets.
+
+An unresolved MCP error is returned as an optional structured `failure` on the
+turn with `code`, `message`, and `retryable`. The assistant message is generated
+deterministically from that code—semantic-model, data-access, Impala
+authentication, and Impala-service failures are not labeled interchangeably.
 
 ## MCP traces and model evaluation
 

@@ -247,6 +247,18 @@ def _error(code: str, message: str, *, retryable: bool = False) -> dict:
     return {"error": code, "message": message, "retryable": retryable}
 
 
+def _semantic_error_message(exc: BaseException) -> str:
+    detail = (
+        str(exc.args[0])
+        if isinstance(exc, KeyError) and exc.args
+        else str(exc)
+    )
+    return (
+        f"{detail}. Use an exact metric name from search_semantics and use "
+        "database.table.column identifiers for dimensions and filters."
+    )
+
+
 def _diagnostic_error(
     code: str,
     message: str,
@@ -551,10 +563,16 @@ class MCPTraceMiddleware:
 server = MCPServer(
     name="helios",
     version=__version__,
-    instructions=("helios exposes a governed semantic layer over a Cloudera data warehouse. Start with "
-                  "search_semantics to find the right metrics and dimensions for a question, then compile_query "
-                  "or run_query. Use describe for definitions. Metrics are named; dimensions and filters use "
-                  "database.table.column."),
+    instructions=(
+        "helios exposes a governed semantic layer over a Cloudera data "
+        "warehouse. Always call search_semantics before compile_query or "
+        "run_query. Copy metric names exactly from search results; never "
+        "invent or convert them to physical column names. Dimensions and "
+        "filter columns must use the exact database.table.column identifier "
+        "returned by search_semantics or describe. Use describe for "
+        "definitions. If a semantic query is invalid, search again and "
+        "correct the identifiers; do not describe it as an Impala failure."
+    ),
     middleware=[MCPTraceMiddleware()],
 )
 
@@ -674,8 +692,10 @@ def describe(name: str, model: str | None = None) -> dict:
     )
 
 
-@server.tool(description="Compile a semantic request into SQL. metrics: metric names; dimensions: database.table.column to group by; "
-                         "filters: [{column, op, value}] with op in = != < <= > >= IN LIKE BETWEEN; engine: impala | hive | spark.")
+@server.tool(description="Compile a semantic request into SQL. Call search_semantics first and copy metric names exactly from its results. "
+                         "Dimensions and filter columns must be exact database.table.column identifiers returned by search_semantics or describe; "
+                         "never invent or shorten identifiers. filters: [{column, op, value}] with op in = != < <= > >= IN LIKE BETWEEN; "
+                         "engine: impala | hive | spark.")
 @_audited_tool("compile_query")
 def compile_query(metrics: list[str], dimensions: list[str] | None = None, filters: list[dict] | None = None,
                   limit: int = 100, engine: str = "impala", model: str | None = None) -> dict:
@@ -696,10 +716,15 @@ def compile_query(metrics: list[str], dimensions: list[str] | None = None, filte
         )
         return compiled
     except (CompileError, KeyError, TypeError, ValueError) as exc:
-        return _error("invalid_semantic_query", str(exc))
+        return _error(
+            "invalid_semantic_query",
+            _semantic_error_message(exc),
+        )
 
 
-@server.tool(description="Compile a semantic request and run it on the warehouse. Same arguments as compile_query. Returns columns and rows.")
+@server.tool(description="Compile a semantic request and run it on the warehouse. Call search_semantics first, copy metric names exactly, and use "
+                         "full database.table.column identifiers for dimensions and filters. Semantic validation happens before Impala execution. "
+                         "Same arguments as compile_query. Returns columns and rows.")
 @_audited_tool("run_query")
 def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: list[dict] | None = None,
               limit: int = 100, model: str | None = None) -> dict:
@@ -810,13 +835,12 @@ def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: 
             exc,
             stage="impala_effective_user",
         )
-    except (
-        CompileError,
-        KeyError,
-        TypeError,
-        ValueError,
-        PermissionError,
-    ) as exc:
+    except (CompileError, KeyError, TypeError, ValueError) as exc:
+        return _error(
+            "invalid_semantic_query",
+            _semantic_error_message(exc),
+        )
+    except PermissionError as exc:
         return _error("query_denied", str(exc))
     except Exception as exc:
         context = audit.current_context()

@@ -17,7 +17,12 @@ from mcp.client.streamable_http import streamable_http_client
 from helios_core import __version__, audit
 from helios_core.authz import Principal
 from helios_core.delegation import issue_assertion
-from helios_core.llm import LLMClient, LLMError, llm_from_env
+from helios_core.llm import (
+    LLMClient,
+    LLMError,
+    LLMTimeoutError,
+    llm_from_env,
+)
 from helios_core.metadata import MetadataRepository
 from helios_core.tracing import TraceRecorder, utcnow
 
@@ -118,6 +123,9 @@ class ConversationService:
         trace_repository: MetadataRepository | None = None,
     ):
         self.llm = llm
+        self.provider_timeout_seconds = float(
+            getattr(llm, "timeout", 30.0)
+        )
         self.mcp = mcp
         self.max_tool_rounds = max_tool_rounds
         self.max_result_chars = max_result_chars
@@ -273,20 +281,89 @@ class ConversationService:
         ]
         trace: list[dict[str, Any]] = []
         non_retryable_failures: set[str] = set()
+        unresolved_tool_error: dict[str, Any] | None = None
+        semantic_failure_count = 0
         tokens_in = 0
         tokens_out = 0
         system = (
             "You are the Helios data assistant. Use only the supplied Helios "
             "MCP tools for semantic metadata, compilation, lineage, and data. "
             f"The authorized model is {model_id!r}; never request another "
-            "model. Explain results accurately and do not invent data."
+            "model. Before compiling or running a query, call "
+            "search_semantics and copy metric names exactly from its results. "
+            "Dimensions and filter columns must use exact "
+            "database.table.column identifiers returned by search_semantics "
+            "or describe. Never invent, shorten, or convert semantic names. "
+            "If a tool reports an invalid semantic query, search again and "
+            "correct the identifiers. Never label semantic validation, "
+            "authorization, or tool-argument errors as an Impala outage. "
+            "Explain results accurately and do not invent data."
         )
+
+        def failure_result(result: dict[str, Any]) -> dict[str, Any]:
+            code = str(result.get("error") or "tool_error")
+            answer = _user_facing_tool_error(result)
+            if recorder and not recorder.finished:
+                recorder.finish(
+                    status="failed",
+                    termination_reason=code,
+                    answer=answer,
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                )
+            return {
+                "model_id": model_id,
+                "answer": answer,
+                "failure": {
+                    "code": code,
+                    "message": answer,
+                    "retryable": result.get("retryable") is True,
+                },
+                "tool_trace": trace,
+                "query_result": _last_query_result(trace),
+                "provenance": provenance or {},
+                "request_id": request_id,
+                "trace_run_id": recorder.run.id if recorder else None,
+            }
+
         for round_index in range(self.max_tool_rounds):
             llm_started = utcnow()
             try:
-                turn = await anyio.to_thread.run_sync(
-                    lambda: self.llm.tool_turn(system, messages, tools)
+                with anyio.fail_after(self.provider_timeout_seconds):
+                    turn = await anyio.to_thread.run_sync(
+                        lambda: self.llm.tool_turn(system, messages, tools),
+                        abandon_on_cancel=True,
+                    )
+            except (LLMTimeoutError, TimeoutError) as exc:
+                message = (
+                    "The model provider took too long to respond, so this "
+                    "request was ended. Please try again or check the model "
+                    "provider connection."
                 )
+                if recorder:
+                    recorder.span(
+                        component="agent",
+                        kind="llm",
+                        name=f"LLM round {round_index + 1}",
+                        status="error",
+                        started_at=llm_started,
+                        completed_at=utcnow(),
+                        input={
+                            "system": system,
+                            "messages": messages,
+                            "tools": tools,
+                        },
+                        error=str(exc) or message,
+                        attributes={"round": round_index + 1},
+                    )
+                    recorder.finish(
+                        status="failed",
+                        termination_reason="timeout",
+                        answer=message,
+                        tokens_in=tokens_in,
+                        tokens_out=tokens_out,
+                    )
+                raise ConversationUnavailable(message) from exc
             except LLMError as exc:
                 if recorder:
                     recorder.span(
@@ -352,6 +429,8 @@ class ConversationService:
                     },
                 )
             if not turn.tool_calls:
+                if unresolved_tool_error is not None:
+                    return failure_result(unresolved_tool_error)
                 if not turn.text.strip():
                     if recorder:
                         recorder.finish(
@@ -446,6 +525,23 @@ class ConversationService:
                         "message": "The MCP tool call failed",
                         "retryable": True,
                     }
+                if isinstance(result, dict) and result.get("error"):
+                    error_code = str(result["error"])
+                    if error_code in _SEMANTIC_ERROR_CODES:
+                        semantic_failure_count += 1
+                        result = {
+                            **result,
+                            "recovery": (
+                                "Call search_semantics again. Copy metric "
+                                "names exactly and use full "
+                                "database.table.column field identifiers "
+                                "from the tool results before retrying."
+                            ),
+                        }
+                    unresolved_tool_error = result
+                elif call.name in {"compile_query", "run_query"}:
+                    unresolved_tool_error = None
+                    semantic_failure_count = 0
                 encoded = json.dumps(result, default=str)
                 if len(encoded) > self.max_result_chars:
                     result = {
@@ -529,31 +625,16 @@ class ConversationService:
                         "content": encoded,
                     }
                 )
+                if (
+                    isinstance(result, dict)
+                    and result.get("error") in _SEMANTIC_ERROR_CODES
+                    and semantic_failure_count >= 2
+                ):
+                    return failure_result(result)
                 if repeated_failure:
-                    detail = result.get("message")
-                    answer = (
-                        str(detail)
-                        if detail
-                        else "Helios could not resolve that request "
-                        "against the authorized semantic model."
-                    )
-                    if recorder:
-                        recorder.finish(
-                            status="completed",
-                            termination_reason="repeated_non_retryable_error",
-                            answer=answer,
-                            tokens_in=tokens_in,
-                            tokens_out=tokens_out,
-                        )
-                    return {
-                        "model_id": model_id,
-                        "answer": answer,
-                        "tool_trace": trace,
-                        "query_result": _last_query_result(trace),
-                        "provenance": provenance or {},
-                        "request_id": request_id,
-                        "trace_run_id": recorder.run.id if recorder else None,
-                    }
+                    return failure_result(result)
+        if unresolved_tool_error is not None:
+            return failure_result(unresolved_tool_error)
         if recorder:
             recorder.finish(
                 status="failed",
@@ -565,6 +646,52 @@ class ConversationService:
         raise ConversationUnavailable(
             "The conversation exceeded the MCP tool-call limit"
         )
+
+
+_SEMANTIC_ERROR_CODES = frozenset({
+    "invalid_semantic_query",
+    "invalid_semantic_reference",
+    "semantic_not_found",
+})
+_ACCESS_ERROR_CODES = frozenset({
+    "data_authorization_denied",
+    "proxy_delegation_denied",
+    "query_denied",
+})
+_IMPALA_AUTH_ERROR_CODES = frozenset({
+    "impala_authentication_failed",
+    "workload_authentication_failed",
+})
+_IMPALA_SERVICE_ERROR_CODES = frozenset({
+    "impala_unavailable",
+    "query_unavailable",
+})
+
+
+def _user_facing_tool_error(result: dict[str, Any]) -> str:
+    code = str(result.get("error") or "tool_error")
+    detail = str(result.get("message") or "").strip()
+    if code in _SEMANTIC_ERROR_CODES:
+        fallback = (
+            "The requested metric or field is not available in the "
+            "authorized semantic model."
+        )
+        return f"Semantic model issue: {detail or fallback}"
+    if code in _ACCESS_ERROR_CODES:
+        fallback = (
+            "The current user is not authorized to run the requested query."
+        )
+        return f"Data access issue: {detail or fallback}"
+    if code in _IMPALA_AUTH_ERROR_CODES:
+        fallback = "Impala authentication could not be completed."
+        return f"Impala authentication issue: {detail or fallback}"
+    if code in _IMPALA_SERVICE_ERROR_CODES:
+        fallback = "The Impala query service is temporarily unavailable."
+        return f"Impala service issue: {detail or fallback}"
+    if code in {"invalid_tool_arguments", "unknown_tool"}:
+        fallback = "The model produced an invalid MCP tool request."
+        return f"Model tool-call issue: {detail or fallback}"
+    return f"MCP tool issue: {detail or 'The requested operation failed.'}"
 
 
 def _mcp_provenance(initialized: Any) -> dict[str, Any]:
