@@ -2807,9 +2807,14 @@ a:focus-visible {
 .talk-message--assistant { align-self: start; width: min(830px, 92%); background: var(--slate-50); border: 1px solid var(--slate-200); }
 .talk-message__role { margin: 0 0 6px; color: var(--slate-500); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
 .talk-message__content { white-space: pre-wrap; }
-.talk-thinking { display: flex; gap: 9px; align-items: center; padding: 8px; color: var(--slate-500); }
-.talk-thinking span { width: 10px; height: 10px; background: var(--cyan-600); border-radius: 50%; animation: talk-pulse 1.2s ease-in-out infinite; }
-@keyframes talk-pulse { 50% { opacity: 0.3; transform: scale(0.8); } }
+.talk-progress { display: flex; gap: 12px; align-items: center; min-height: 48px; padding: 10px clamp(16px, 4vw, 64px); color: var(--navy-900); background: linear-gradient(90deg, rgb(0 143 173 / 7%), rgb(0 143 173 / 2%)); border-top: 1px solid rgb(0 143 173 / 18%); }
+.talk-progress__activity { display: inline-flex; flex: 0 0 auto; gap: 4px; align-items: center; height: 18px; }
+.talk-progress__activity span { width: 7px; height: 7px; background: var(--cyan-600); border-radius: 50%; animation: talk-progress-dot 1.25s ease-in-out infinite; }
+.talk-progress__activity span:nth-child(2) { animation-delay: 160ms; }
+.talk-progress__activity span:nth-child(3) { animation-delay: 320ms; }
+.talk-progress__message { font-size: 0.86rem; font-weight: 700; animation: talk-progress-message 320ms ease-out; }
+@keyframes talk-progress-dot { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-4px); } }
+@keyframes talk-progress-message { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 .talk-composer { display: grid; gap: 7px; padding: 16px clamp(16px, 4vw, 64px); border-top: 1px solid var(--slate-200); }
 .talk-composer label { font-size: 0.82rem; font-weight: 750; }
 .talk-composer textarea { min-height: 72px; padding: 12px; font: inherit; line-height: 1.45; resize: vertical; border: 1px solid var(--slate-300); border-radius: 9px; }
@@ -2836,7 +2841,7 @@ a:focus-visible {
   .talk-layout { grid-template-columns: 1fr; min-height: 670px; }
   .talk-history { max-height: 190px; overflow-y: auto; border-right: 0; border-bottom: 1px solid var(--slate-200); }
   .talk-message, .talk-message--assistant { width: auto; max-width: 100%; }
-  .talk-transcript, .talk-composer { padding-right: 16px; padding-left: 16px; }
+  .talk-transcript, .talk-composer, .talk-progress { padding-right: 16px; padding-left: 16px; }
 }
 
 /* Persistent audit activity */

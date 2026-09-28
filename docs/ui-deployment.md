@@ -153,6 +153,11 @@ The following are feature-specific rather than required for API readiness:
 - `MISTRAL_API_KEY` for Talk to Your Data; Helios defaults to
   `mistral-small-latest` at `https://api.mistral.ai/v1`. Optional overrides are
   `MISTRAL_MODEL` and `MISTRAL_BASE_URL`.
+- `HELIOS_MCP_URL`, `HELIOS_MCP_TOKEN`, and
+  `HELIOS_MCP_DELEGATION_SECRET` connect the API's server-side conversation
+  client to MCP. `HELIOS_MCP_TIMEOUT_SECONDS` controls its per-operation
+  timeout. It defaults to 45 seconds; use `180` for the current warehouse
+  latency.
 - `INFERENCE_BASE_URL`, `INFERENCE_MODEL`, `INFERENCE_API_KEY`
 
 Store credentials through the Cloudera environment-variable/secret mechanism,

@@ -1,5 +1,9 @@
 # Operational metadata
 
+See [Helios operational metadata database](helios-metadata-database.md) for a
+detailed explanation of `helios.db`, journal modes, WAL checkpoints, SHM files,
+locking, restart order, and recovery.
+
 Helios stores organizations, principals, memberships, DataSource definitions,
 Models, Model-to-DataSource references, and RBAC grants in SQLite. This is
 separate from:

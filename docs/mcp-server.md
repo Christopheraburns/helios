@@ -47,7 +47,12 @@ The API Application must receive the same token and delegation secret, plus:
 
 ```text
 HELIOS_MCP_URL=https://helios-mcp.<workbench-domain>/mcp
+HELIOS_MCP_TIMEOUT_SECONDS=180
 ```
+
+The timeout is consumed by the API's server-side conversation client, not by
+browser JavaScript or the MCP Application. It defaults to 45 seconds and must
+be a positive number.
 
 Configure `HELIOS_METADATA_DB`, `HELIOS_ROOT`, and `HELIOS_RUNS_DIR` only when
 their project-persistent defaults are not correct. The API and MCP Applications
