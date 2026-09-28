@@ -43,6 +43,7 @@ from helios_core.metadata import (
     AuditSession,
     ConversationVersionConflict,
     MetadataRepository,
+    SemanticRevision,
     StoredConversation,
     EvaluationRun,
 )
@@ -293,6 +294,7 @@ class TraceRunResponse(BaseModel):
     duration_ms: float | None
     tokens_in: int
     tokens_out: int
+    semantic_revision_id: str | None
 
 
 class EvaluationCreateRequest(BaseModel):
@@ -1231,6 +1233,7 @@ def _trace_run_response(run) -> dict:
         "duration_ms": run.duration_ms,
         "tokens_in": run.tokens_in,
         "tokens_out": run.tokens_out,
+        "semantic_revision_id": run.semantic_revision_id,
     }
 
 
@@ -1251,6 +1254,347 @@ def _trace_span_response(span) -> dict:
         "output": span.output,
         "attributes": span.attributes or {},
         "error": span.error,
+    }
+
+
+def _semantic_trace_evidence(
+    run,
+    spans,
+    repository: MetadataRepository,
+    model,
+) -> dict:
+    revision = (
+        repository.semantic_revision(run.semantic_revision_id)
+        if run.semantic_revision_id
+        else None
+    )
+    document: dict[str, Any] | None = None
+    verification_error: str | None = None
+    if revision:
+        try:
+            artifact_path = ArtifactStore(
+                runstore.ROOT
+            ).revision_ossie_path(
+                revision.model_id, revision.id, "json"
+            )
+            with artifact_path.open() as handle:
+                document = json.load(handle)
+            if document.get("model_id") not in {None, run.model_id}:
+                raise RuntimeError(
+                    "semantic revision belongs to a different model"
+                )
+        except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+            verification_error = str(exc)
+
+    datasets = (document or {}).get("datasets") or []
+    metrics = (document or {}).get("metrics") or []
+    dataset_by_name = {
+        str(item.get("name", "")).casefold(): (index, item)
+        for index, item in enumerate(datasets)
+    }
+    dataset_by_source = {
+        str(item.get("source", "")).casefold(): (index, item)
+        for index, item in enumerate(datasets)
+    }
+    metric_by_name = {
+        str(item.get("name", "")).casefold(): (index, item)
+        for index, item in enumerate(metrics)
+    }
+    semantic_objects: dict[str, dict] = {}
+    physical_sources: set[str] = set()
+    tools = []
+    query: dict[str, Any] | None = None
+
+    def add_dataset(index: int, item: dict) -> None:
+        pointer = f"/datasets/{index}"
+        source = str(item.get("source") or "")
+        semantic_objects[pointer] = {
+            "id": f"{run.semantic_revision_id}#{pointer}",
+            "kind": "dataset",
+            "name": item.get("name"),
+            "description": item.get("description") or "",
+            "ossie_pointer": pointer,
+            "canvas_element_id": f"dataset:{item.get('name')}",
+        }
+        if source:
+            physical_sources.add(source)
+
+    def add_reference(value: object) -> None:
+        if not isinstance(value, str):
+            return
+        folded = value.casefold()
+        metric_match = metric_by_name.get(folded)
+        if metric_match:
+            index, item = metric_match
+            pointer = f"/metrics/{index}"
+            semantic_objects[pointer] = {
+                "id": f"{run.semantic_revision_id}#{pointer}",
+                "kind": "metric",
+                "name": item.get("name"),
+                "description": item.get("description") or "",
+                "ossie_pointer": pointer,
+                "canvas_element_id": f"metric:{item.get('name')}",
+            }
+            dataset_name = item.get("dataset")
+            if isinstance(dataset_name, str):
+                match = (
+                    dataset_by_name.get(dataset_name.casefold())
+                    or dataset_by_source.get(dataset_name.casefold())
+                )
+                if match:
+                    add_dataset(*match)
+            return
+        for dataset_index, dataset in enumerate(datasets):
+            source = str(dataset.get("source") or "")
+            name = str(dataset.get("name") or "")
+            if folded in {source.casefold(), name.casefold()}:
+                add_dataset(dataset_index, dataset)
+                return
+            for field_index, field in enumerate(dataset.get("fields") or []):
+                field_name = str(
+                    field.get("name") or field.get("column") or ""
+                )
+                qualified = f"{source}.{field_name}".casefold()
+                if folded not in {field_name.casefold(), qualified}:
+                    continue
+                add_dataset(dataset_index, dataset)
+                pointer = (
+                    f"/datasets/{dataset_index}/fields/{field_index}"
+                )
+                semantic_objects[pointer] = {
+                    "id": f"{run.semantic_revision_id}#{pointer}",
+                    "kind": "field",
+                    "name": field.get("label") or field_name,
+                    "description": field.get("description") or "",
+                    "physical_name": qualified,
+                    "ossie_pointer": pointer,
+                    "canvas_element_id": (
+                        f"attribute:{dataset.get('name')}:{field_name}"
+                    ),
+                }
+                return
+
+    agent_tools = sorted(
+        (
+            span
+            for span in spans
+            if span.component == "agent" and span.kind == "tool"
+        ),
+        key=lambda span: span.sequence,
+    )
+    for span in agent_tools:
+        arguments = (
+            span.input.get("parsed_arguments", {})
+            if isinstance(span.input, dict)
+            else {}
+        )
+        output = span.output if isinstance(span.output, dict) else {}
+        tools.append(
+            {
+                "id": span.id,
+                "name": span.name,
+                "status": span.status,
+                "error": span.error,
+                "arguments": arguments,
+            }
+        )
+        for name in arguments.get("metrics") or []:
+            add_reference(name)
+        for name in arguments.get("dimensions") or []:
+            add_reference(name)
+        for item in arguments.get("filters") or []:
+            if isinstance(item, dict):
+                add_reference(item.get("field") or item.get("column"))
+        add_reference(arguments.get("name"))
+        for match in output.get("matches") or []:
+            if not isinstance(match, dict):
+                continue
+            add_reference(
+                match.get("column")
+                or match.get("table")
+                or match.get("name")
+            )
+        for source in [output.get("dataset"), *(output.get("joins") or [])]:
+            if isinstance(source, str):
+                physical_sources.add(source)
+                match = dataset_by_source.get(source.casefold())
+                if match:
+                    add_dataset(*match)
+        if isinstance(output.get("sql"), str):
+            query = {
+                "sql": output["sql"],
+                "columns": output.get("columns") or [],
+                "row_count": (
+                    len(output["rows"])
+                    if isinstance(output.get("rows"), list)
+                    else None
+                ),
+            }
+
+    for index, relationship in enumerate(
+        (document or {}).get("relationships") or []
+    ):
+        from_match = dataset_by_name.get(
+            str(relationship.get("from") or "").casefold()
+        )
+        to_match = dataset_by_name.get(
+            str(relationship.get("to") or "").casefold()
+        )
+        if not from_match or not to_match:
+            continue
+        from_source = str(from_match[1].get("source") or "")
+        to_source = str(to_match[1].get("source") or "")
+        if not {from_source, to_source} <= physical_sources:
+            continue
+        pointer = f"/relationships/{index}"
+        semantic_objects[pointer] = {
+            "id": f"{run.semantic_revision_id}#{pointer}",
+            "kind": "relationship",
+            "name": relationship.get("name"),
+            "description": relationship.get("description") or "",
+            "ossie_pointer": pointer,
+            "canvas_element_id": (
+                f"relationship:{relationship.get('name')}"
+            ),
+        }
+
+    data_sources = []
+    references = list(getattr(model, "data_sources", ()) or ())
+    for source in sorted(physical_sources):
+        matching_ids = [
+            reference.data_source_id
+            for reference in references
+            if not reference.selected_assets
+            or source in reference.selected_assets
+        ]
+        data_sources.append(
+            {
+                "id": (
+                    f"{run.semantic_revision_id}#physical:{source}"
+                ),
+                "semantic_dataset": (
+                    dataset_by_source.get(source.casefold(), (None, {}))[1]
+                    .get("name")
+                ),
+                "physical_name": source,
+                "data_source_id": (
+                    matching_ids[0] if len(matching_ids) == 1 else None
+                ),
+            }
+        )
+
+    semantic_items = list(semantic_objects.values())
+    edges = [
+        {
+            "id": "question-assistant",
+            "source": "question",
+            "target": "assistant",
+            "type": "interpreted_by",
+        }
+    ]
+    tool_ids = [tool["id"] for tool in tools]
+    for tool_id in tool_ids:
+        edges.append({
+            "id": f"assistant-{tool_id}",
+            "source": "assistant",
+            "target": tool_id,
+            "type": "used_controlled_tool",
+        })
+    upstream_ids = tool_ids or ["assistant"]
+    semantic_ids = [item["id"] for item in semantic_items]
+    for source_id in upstream_ids:
+        for target_id in semantic_ids:
+            edges.append({
+                "id": f"{source_id}-{target_id}",
+                "source": source_id,
+                "target": target_id,
+                "type": "resolved_definition",
+            })
+    if revision:
+        for target_id in semantic_ids:
+            edges.append({
+                "id": f"revision-{target_id}",
+                "source": "revision",
+                "target": target_id,
+                "type": "defined_by_revision",
+            })
+    dataset_ids = [item["id"] for item in data_sources]
+    for source_id in semantic_ids or upstream_ids:
+        for target_id in dataset_ids:
+            edges.append({
+                "id": f"{source_id}-{target_id}",
+                "source": source_id,
+                "target": target_id,
+                "type": "mapped_to_physical_data",
+            })
+    terminal_sources = dataset_ids or semantic_ids or upstream_ids
+    if query:
+        query["id"] = "query"
+        for source_id in terminal_sources:
+            edges.append({
+                "id": f"{source_id}-query",
+                "source": source_id,
+                "target": "query",
+                "type": "used_in_query",
+            })
+        terminal_sources = ["query"]
+    for source_id in terminal_sources:
+        edges.append({
+            "id": f"{source_id}-answer",
+            "source": source_id,
+            "target": "answer",
+            "type": "supported_answer",
+        })
+
+    incomplete_reasons = []
+    if not run.semantic_revision_id:
+        incomplete_reasons.append(
+            "This trace predates semantic revision tracking."
+        )
+    elif verification_error:
+        incomplete_reasons.append(
+            "The pinned semantic definition could not be verified."
+        )
+    if run.status != "completed":
+        incomplete_reasons.append(
+            "The request did not complete successfully."
+        )
+    return {
+        "status": "incomplete" if incomplete_reasons else "complete",
+        "incomplete_reasons": incomplete_reasons,
+        "question": run.question,
+        "assistant": {
+            "provider": run.llm_provider,
+            "model": run.llm_model,
+            "prompt_version": run.prompt_version,
+        },
+        "revision": (
+            {
+                "id": revision.id,
+                "sha256": revision.sha256,
+                "ossie_version": revision.ossie_version,
+                "discovery_run_id": revision.discovery_run_id,
+                "published_at": revision.published_at,
+                "verified": verification_error is None,
+                "verification_error": verification_error,
+            }
+            if revision
+            else None
+        ),
+        "tools": tools,
+        "semantic_objects": semantic_items,
+        "datasets": data_sources,
+        "query": query,
+        "edges": edges,
+        "answer": run.answer,
+        "error": (
+            {
+                "reason": run.termination_reason,
+                "message": run.answer,
+            }
+            if run.status != "completed"
+            else None
+        ),
     }
 
 
@@ -1620,12 +1964,16 @@ def get_model_trace(
     if run is None:
         raise HTTPException(404, "trace run not found")
     _require_trace_access(run, context)
+    spans = repository.trace_spans(run.id)
     return {
         "run": _trace_run_response(run),
         "spans": [
             _trace_span_response(span)
-            for span in repository.trace_spans(run.id)
+            for span in spans
         ],
+        "semantic_evidence": _semantic_trace_evidence(
+            run, spans, repository, context.model
+        ),
     }
 
 
@@ -2879,6 +3227,7 @@ def reset_model_review(
 
 @api_router.post("/models/{model_id}/reviews/{run_id}/publish")
 def publish_model_review(
+    request: Request,
     context: Annotated[
         AuthorizedModel,
         Depends(authorize_model(authz.Action.MODEL_PUBLISH)),
@@ -2896,6 +3245,7 @@ def publish_model_review(
             run_id=run_id,
             proposal=proposal,
             review=review,
+            published_by=context.principal.id,
         )
     except publication.PublicationValidationError as exc:
         raise HTTPException(
@@ -2904,6 +3254,24 @@ def publish_model_review(
                 "code": "publication_validation_failed",
                 "errors": list(exc.errors),
             },
+        )
+    manifest = result.manifest
+    repository: MetadataRepository = request.app.state.metadata_repository
+    if repository.model(context.model.id) is not None:
+        repository.save_semantic_revision(
+            SemanticRevision(
+                id=manifest["revision_id"],
+                model_id=context.model.id,
+                sha256=manifest["sha256"],
+                artifact_path=manifest["path"],
+                ossie_version=manifest.get("ossie_version"),
+                discovery_run_id=run_id,
+                published_at=datetime.fromisoformat(
+                    manifest["published_at"]
+                ),
+                published_by=context.principal.id,
+                size_bytes=manifest["size_bytes"],
+            )
         )
     return {
         "ok": True,

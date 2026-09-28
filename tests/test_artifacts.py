@@ -123,6 +123,31 @@ def test_legacy_flat_published_artifact_remains_readable(tmp_path):
     assert "legacy" in store.published_model_ids()
 
 
+def test_legacy_published_artifact_is_bootstrapped_to_a_revision(tmp_path):
+    published = tmp_path / "models" / "published"
+    published.mkdir(parents=True)
+    yaml_text = "name: Legacy\nversion: legacy\n"
+    (published / "legacy.ossie.yaml").write_text(yaml_text)
+    (published / "legacy.ossie.json").write_text(
+        json.dumps(ossie_document("Legacy", "legacy model"))
+    )
+    (published / "legacy.publish.json").write_text(
+        json.dumps({
+            "run_id": "legacy-run",
+            "published_at": "2026-09-28T09:00:00+00:00",
+        })
+    )
+
+    revision = ArtifactStore(tmp_path).ensure_published_revision("legacy")
+
+    assert revision is not None
+    assert revision["run_id"] == "legacy-run"
+    assert (
+        tmp_path
+        / revision["path"]
+    ).exists()
+
+
 def test_artifact_model_identity_cannot_be_reassigned(tmp_path):
     store = ArtifactStore(tmp_path)
 
@@ -132,6 +157,46 @@ def test_artifact_model_identity_cannot_be_reassigned(tmp_path):
             "run-1",
             {"model_id": "customer360", "datasets": []},
         )
+
+
+def test_published_ossie_revisions_are_immutable_and_verifiable(tmp_path):
+    store = ArtifactStore(tmp_path)
+    first = ossie_document("Customer model", "first definition")
+    first_manifest = {
+        "run_id": "run-1",
+        "published_at": "2026-09-28T10:00:00+00:00",
+    }
+    store.write_published_ossie(
+        "customer360",
+        first,
+        "name: Customer model\ndescription: first definition\n",
+        first_manifest,
+    )
+    first_revision = first_manifest["revision_id"]
+
+    second = ossie_document("Customer model", "second definition")
+    second_manifest = {
+        "run_id": "run-2",
+        "published_at": "2026-09-28T11:00:00+00:00",
+    }
+    store.write_published_ossie(
+        "customer360",
+        second,
+        "name: Customer model\ndescription: second definition\n",
+        second_manifest,
+    )
+
+    assert first_revision != second_manifest["revision_id"]
+    first_path = store.revision_ossie_path(
+        "customer360", first_revision, "json"
+    )
+    assert json.loads(first_path.read_text())["description"] == (
+        "first definition"
+    )
+
+    first_path.write_text("{}\n")
+    with pytest.raises(RuntimeError, match="hash verification"):
+        store.revision_ossie_path("customer360", first_revision, "json")
 
 
 def test_explicit_model_id_replaces_only_legacy_default():

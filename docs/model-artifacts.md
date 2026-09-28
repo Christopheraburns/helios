@@ -12,6 +12,11 @@ models/
       semantic.ossie.yaml
       semantic.ossie.json
       manifest.json
+    revisions/
+      <sha256>/
+        semantic.ossie.yaml
+        semantic.ossie.json
+        manifest.json
 ```
 
 The proposal remains at `runs/<run-id>/propose.json` as well, preserving the
@@ -42,3 +47,18 @@ To migrate an existing model:
 All code should use `helios_core.artifacts.ArtifactStore` or
 `SemanticModel.load_published(model_id)` rather than constructing paths or
 deriving artifact names from a DataSource.
+
+## Immutable revisions
+
+Each publication also writes a content-addressed snapshot under `revisions/`.
+The revision ID is the SHA-256 digest of the exact Ossie YAML bytes. The
+revision manifest records that digest, a separate JSON digest, size, Ossie
+version, discovery run, publication time, and publisher. Existing revision
+files are compared byte-for-byte and are never overwritten.
+
+At the start of a Talk turn, Helios snapshots a legacy current artifact when
+needed, records the selected revision on the trace, and signs that revision ID
+into the delegated MCP context. Every tool call in the turn loads and verifies
+that exact snapshot. Republishing a model during the turn therefore cannot
+change the definitions used by the in-flight answer. A missing or modified
+snapshot fails closed.

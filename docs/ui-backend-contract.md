@@ -561,10 +561,16 @@ is supplied as bounded history to later LLM calls; prior rows and tool results
 are not replayed into prompts. The browser never receives Mistral, MCP, Impala,
 or delegation secrets.
 
+The expanded answer details include a compact, plain-language path and a link
+to the full immutable Answer path in MCP Management.
+
 An unresolved MCP error is returned as an optional structured `failure` on the
 turn with `code`, `message`, and `retryable`. The assistant message is generated
 deterministically from that code—semantic-model, data-access, Impala
 authentication, and Impala-service failures are not labeled interchangeably.
+`invalid_filter_value_type` identifies a filter whose JSON value cannot be
+safely converted to the datatype of its resolved Ossie field. It is reported as
+a correctable query-filter issue, not as an Impala outage.
 
 ## MCP traces and model evaluation
 
@@ -582,6 +588,14 @@ Users see their own traces. `include_all=true` requires
 detail includes sanitized, bounded run and span data; ownership failures return
 404 rather than disclosing another user's run. Conversation turns include a
 `trace_run_id` for direct navigation to Govern > MCP Management > Traces.
+
+Trace detail also returns `semantic_evidence`: the pinned and hash-verified
+Ossie revision, normalized tool activity, stable semantic-object pointers,
+semantic-to-physical dataset mappings, generated query evidence, answer, and
+explicit incomplete/error state. This evidence is resolved server-side from
+the exact revision recorded on the trace. The trace UI offers an **Answer
+path** view for this contract and an **Execution details** view for raw spans;
+`view=semantic` selects the former in a deep link.
 
 The administrator-only evaluation contract is:
 

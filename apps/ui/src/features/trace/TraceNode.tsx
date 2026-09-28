@@ -3,10 +3,20 @@ import { Handle, NodeProps, Position } from "@xyflow/react";
 export interface TraceNodeData extends Record<string, unknown> {
   label: string;
   detail: string;
-  category: "question" | "llm" | "tool" | "server" | "result";
+  category:
+    | "question"
+    | "llm"
+    | "tool"
+    | "server"
+    | "semantic"
+    | "dataset"
+    | "query"
+    | "result";
   status: string;
   latencyMs?: number | null;
   tokens?: number;
+  explanation?: string;
+  semanticId?: string;
 }
 
 export default function TraceNode({ data, selected }: NodeProps) {
@@ -28,6 +38,12 @@ export default function TraceNode({ data, selected }: NodeProps) {
         ) : null}
         {node.tokens ? <span>{node.tokens} tokens</span> : null}
       </div>
+      {node.explanation ? (
+        <details className="trace-node__help">
+          <summary aria-label={`Explain ${node.label}`}>What is this?</summary>
+          <p>{node.explanation}</p>
+        </details>
+      ) : null}
       <Handle type="source" position={Position.Right} />
     </div>
   );

@@ -15,6 +15,7 @@ from helios_core.metadata import (
     EvaluationResult,
     EvaluationRun,
     PrincipalRecord,
+    SemanticRevision,
     SQLiteMetadataRepository,
     TraceRun,
     TraceSpan,
@@ -48,7 +49,7 @@ def seed_organizations_and_principals(repository):
 def test_migrations_are_versioned_and_idempotent(repository):
     repository.migrate()
 
-    assert repository.schema_version() == 6
+    assert repository.schema_version() == 7
     with sqlite3.connect(repository.path) as connection:
         tables = {
             row[0]
@@ -67,6 +68,7 @@ def test_migrations_are_versioned_and_idempotent(repository):
         "model_memberships",
         "agent_trace_runs",
         "agent_trace_spans",
+        "semantic_artifact_revisions",
         "evaluation_runs",
         "evaluation_results",
     } <= tables
@@ -88,6 +90,22 @@ def test_trace_and_evaluation_records_round_trip(repository):
         created_by=principal("alice").id,
     )
     now = datetime.now(UTC)
+    revision = SemanticRevision(
+        id="a" * 64,
+        model_id="customer360",
+        sha256="a" * 64,
+        artifact_path=(
+            "models/customer360/revisions/"
+            + ("a" * 64)
+            + "/semantic.ossie.yaml"
+        ),
+        ossie_version="0.2.0",
+        discovery_run_id="discovery-1",
+        published_at=now,
+        published_by=principal("alice").id,
+        size_bytes=100,
+    )
+    repository.save_semantic_revision(revision)
     trace = TraceRun(
         id="trace-1",
         principal_id="cloudera-workbench:alice",
@@ -101,6 +119,7 @@ def test_trace_and_evaluation_records_round_trip(repository):
         prompt_version="talk-v1",
         status="running",
         started_at=now,
+        semantic_revision_id=revision.id,
     )
     repository.create_trace_run(trace)
     repository.append_trace_span(
@@ -130,6 +149,8 @@ def test_trace_and_evaluation_records_round_trip(repository):
 
     assert finished.answer == "Two channels."
     assert repository.trace_run(trace.id) == finished
+    assert repository.semantic_revision(revision.id) == revision
+    assert repository.latest_semantic_revision("customer360") == revision
     assert repository.trace_spans(trace.id)[0].input == {"metric": "revenue"}
     trace_runs, total = repository.trace_runs(
         model_id="customer360",

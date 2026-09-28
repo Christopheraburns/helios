@@ -19,7 +19,10 @@ How it works
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 
 import sqlglot
 from sqlglot import exp
@@ -76,6 +79,10 @@ class Compiled:
 
 
 class CompileError(ValueError):
+    pass
+
+
+class FilterValueTypeError(CompileError):
     pass
 
 
@@ -165,7 +172,7 @@ class Compiler:
             q = q.join(table(new_side), on=on, join_type="inner")
 
         for f, flt in filters:
-            q = q.where(_condition(col(f), flt))
+            q = q.where(_condition(col(f), flt, f))
         if dims and (metrics or measures):
             q = q.group_by(*[col(d) for d in dims])
         for o in req.order_by:
@@ -206,14 +213,41 @@ def _tables_in(q: exp.Select) -> set[str]:
 def _literal(v):
     if isinstance(v, bool):
         return exp.Boolean(this=v)
+    if isinstance(v, Decimal):
+        return exp.Literal.number(str(v))
     if isinstance(v, (int, float)):
         return exp.Literal.number(v)
+    if isinstance(v, datetime):
+        return exp.cast(
+            exp.Literal.string(v.isoformat(sep=" ")), "TIMESTAMP"
+        )
+    if isinstance(v, date):
+        return exp.cast(exp.Literal.string(v.isoformat()), "DATE")
     return exp.Literal.string(str(v))
 
 
-def _condition(column: exp.Expression, flt: Filter) -> exp.Expression:
+def _condition(
+    column: exp.Expression,
+    flt: Filter,
+    field: Field,
+) -> exp.Expression:
     op = flt.op.lower()
     v = flt.value
+    if op not in {"is null", "is not null"}:
+        if op in {"in", "not in"}:
+            values = v if isinstance(v, (list, tuple)) else [v]
+            v = [_typed_filter_value(field, value, flt.field) for value in values]
+        elif op == "between":
+            if not isinstance(v, (list, tuple)) or len(v) != 2:
+                raise CompileError(
+                    f"filter {flt.field} with BETWEEN requires two values"
+                )
+            v = [
+                _typed_filter_value(field, value, flt.field)
+                for value in v
+            ]
+        else:
+            v = _typed_filter_value(field, v, flt.field)
     if op == "=":
         return exp.EQ(this=column, expression=_literal(v))
     if op in ("!=", "<>"):
@@ -227,7 +261,10 @@ def _condition(column: exp.Expression, flt: Filter) -> exp.Expression:
     if op == "<=":
         return exp.LTE(this=column, expression=_literal(v))
     if op == "in":
-        return exp.In(this=column, expressions=[_literal(x) for x in (v if isinstance(v, (list, tuple)) else [v])])
+        return exp.In(
+            this=column,
+            expressions=[_literal(x) for x in v],
+        )
     if op == "not in":
         return exp.Not(this=exp.In(this=column, expressions=[_literal(x) for x in v]))
     if op == "between":
@@ -240,6 +277,128 @@ def _condition(column: exp.Expression, flt: Filter) -> exp.Expression:
     if op == "is not null":
         return exp.Not(this=exp.Is(this=column, expression=exp.Null()))
     raise CompileError(f"unsupported operator {flt.op!r}")
+
+
+def _typed_filter_value(
+    field: Field,
+    value: object,
+    requested_name: str,
+) -> object:
+    datatype = (field.datatype or "Opaque").strip().upper()
+    base = re.split(r"[\s(]", datatype, maxsplit=1)[0]
+    if value is None:
+        raise _filter_type_error(requested_name, datatype, value)
+    if base in {"TINYINT", "SMALLINT", "INT", "INTEGER", "BIGINT"}:
+        if isinstance(value, bool):
+            raise _filter_type_error(requested_name, datatype, value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        if isinstance(value, str) and re.fullmatch(
+            r"[+-]?\d+", value.strip()
+        ):
+            return int(value)
+        raise _filter_type_error(
+            requested_name,
+            datatype,
+            value,
+            "Use a JSON number such as 2002 without quotes. If this is a "
+            "calendar date, filter an approved date or year field instead "
+            "of a numeric surrogate key.",
+        )
+    if base in {
+        "DECIMAL",
+        "NUMERIC",
+        "FLOAT",
+        "DOUBLE",
+        "REAL",
+    }:
+        if isinstance(value, bool):
+            raise _filter_type_error(requested_name, datatype, value)
+        try:
+            number = Decimal(str(value).strip())
+        except (InvalidOperation, ValueError):
+            raise _filter_type_error(
+                requested_name,
+                datatype,
+                value,
+                "Use a JSON numeric value without quotes.",
+            ) from None
+        if not number.is_finite():
+            raise _filter_type_error(requested_name, datatype, value)
+        return number
+    if base in {"BOOLEAN", "BOOL"}:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value.strip().casefold() in {
+            "true",
+            "false",
+        }:
+            return value.strip().casefold() == "true"
+        raise _filter_type_error(
+            requested_name,
+            datatype,
+            value,
+            "Use the JSON boolean true or false.",
+        )
+    if base == "DATE":
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            try:
+                return date.fromisoformat(value.strip())
+            except ValueError:
+                pass
+        raise _filter_type_error(
+            requested_name,
+            datatype,
+            value,
+            "Use an ISO date in YYYY-MM-DD format.",
+        )
+    if base in {"TIMESTAMP", "DATETIME"}:
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(
+                    value.strip().replace("Z", "+00:00")
+                )
+            except ValueError:
+                pass
+        raise _filter_type_error(
+            requested_name,
+            datatype,
+            value,
+            "Use an ISO timestamp such as 2002-01-01T00:00:00.",
+        )
+    if base in {"STRING", "VARCHAR", "CHAR", "TEXT"}:
+        if isinstance(value, str):
+            return value
+        raise _filter_type_error(
+            requested_name,
+            datatype,
+            value,
+            "Use a JSON string and preserve any leading zeroes.",
+        )
+    return value
+
+
+def _filter_type_error(
+    field_name: str,
+    datatype: str,
+    value: object,
+    guidance: str = "",
+) -> FilterValueTypeError:
+    detail = (
+        f"filter {field_name} expects {datatype}, but received "
+        f"{type(value).__name__} value {value!r}"
+    )
+    if guidance:
+        detail += f". {guidance}"
+    return FilterValueTypeError(detail)
 
 
 def _impala_fixups(sql: str) -> str:

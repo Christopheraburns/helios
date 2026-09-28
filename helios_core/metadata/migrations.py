@@ -325,4 +325,33 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             );
         """,
     ),
+    (
+        7,
+        """
+        CREATE TABLE semantic_artifact_revisions (
+            id TEXT PRIMARY KEY,
+            model_id TEXT NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+            sha256 TEXT NOT NULL,
+            artifact_path TEXT NOT NULL,
+            ossie_version TEXT,
+            discovery_run_id TEXT,
+            published_at TEXT NOT NULL,
+            published_by TEXT,
+            size_bytes INTEGER NOT NULL,
+            UNIQUE (model_id, sha256)
+        );
+
+        CREATE INDEX semantic_artifact_revisions_model_time_idx
+            ON semantic_artifact_revisions (
+                model_id, published_at DESC, id DESC
+            );
+
+        ALTER TABLE agent_trace_runs
+            ADD COLUMN semantic_revision_id TEXT
+                REFERENCES semantic_artifact_revisions(id);
+
+        CREATE INDEX agent_trace_runs_semantic_revision_idx
+            ON agent_trace_runs (semantic_revision_id);
+        """,
+    ),
 )

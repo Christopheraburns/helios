@@ -106,8 +106,9 @@ for diagnostics and compatibility.
 Every new turn also owns an OpenTelemetry-style trace run. Agent spans capture
 each LLM round and client-side MCP call; MCP middleware writes a separate
 server-side span for the call that actually reached the server. A signed
-`trace_run_id` and client span ID correlate the two boundaries without granting
-access. Stored payloads are recursively redacted, size bounded, and available
+`trace_run_id`, pinned semantic revision ID, and client span ID correlate the
+two boundaries without granting access. Stored payloads are recursively
+redacted, size bounded, and available
 only to the trace owner or an administrator of the owning organization.
 Conversation messages expose `trace_run_id` so “How Helios produced this
 answer” can deep-link to the trace canvas.
@@ -163,6 +164,15 @@ Govern > MCP Management includes an execution canvas for conversation and
 evaluation traces. It renders the question, LLM rounds, MCP calls, independently
 observed server calls, and terminal answer or failure. Selecting a node reveals
 its sanitized input, output, attributes, latency, status, and token usage.
+
+The workspace also provides an **Answer path** view for people who do not work
+with LLMs or data infrastructure. It connects the user's question to the AI
+model, controlled MCP tools, exact Ossie business definitions, physical
+`database.table` assets, generated query, and answer. Each step has a
+plain-language explanation and optional technical evidence. The API derives
+these normalized links from immutable spans and the trace's content-addressed
+Ossie revision rather than inferring them from answer prose. Incomplete and
+failed paths identify missing evidence.
 
 Organization administrators can run the versioned `tpcds-v1` starter suite
 against the project-default model and their current session override. The
@@ -222,7 +232,8 @@ Authorization/configuration failures are returned as:
 
 Other stable codes include `authentication_required`, `model_not_found`,
 `semantic_not_found`, `invalid_semantic_reference`,
-`invalid_semantic_query`, `data_authorization_denied`, `query_denied`,
+`invalid_semantic_query`, `invalid_filter_value_type`,
+`data_authorization_denied`, `query_denied`,
 `query_unavailable`, `atlas_unavailable`, and `impala_unavailable`. Transport
 authentication errors use HTTP 401; missing server authentication
 configuration uses HTTP 503.
@@ -230,6 +241,11 @@ configuration uses HTTP 503.
 `invalid_semantic_query` is emitted during compilation before any Impala
 request. `query_denied` is reserved for authorization failures, while
 `query_unavailable` is reserved for failures after Impala execution begins.
+Filter values are validated against the resolved Ossie field datatype before
+SQL generation. Safely coercible numeric strings become numeric literals;
+unsafe values return `invalid_filter_value_type` with corrective guidance.
+Residual Impala analysis errors caused by incompatible filter operand types use
+the same semantic error rather than being mislabeled as service unavailability.
 The conversation response includes a structured `failure` with the stable code
 and renders semantic, access, authentication, and service failures with
 distinct user-facing labels.
@@ -244,6 +260,7 @@ For each turn the API signs an HMAC-SHA256 assertion containing:
 - a nonce;
 - Principal issuer, subject, kind, and display name;
 - organization ID;
+- the content-addressed semantic revision selected for the turn;
 - locked model ID.
 
 The assertion is sent as `X-Helios-Principal-Assertion` over HTTPS, in addition

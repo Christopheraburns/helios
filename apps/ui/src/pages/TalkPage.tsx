@@ -4,7 +4,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import {
   ApiUnavailableError,
@@ -146,7 +146,15 @@ function QueryResult({ turn }: { turn: ConversationTurn }) {
   );
 }
 
-function ToolActivity({ turn }: { turn: ConversationTurn }) {
+function ToolActivity({
+  turn,
+  modelId,
+  organizationId,
+}: {
+  turn: ConversationTurn;
+  modelId: string;
+  organizationId?: string;
+}) {
   const provenance = turn.provenance;
   const hasProvenance = Boolean(
     provenance?.llm?.provider
@@ -159,6 +167,54 @@ function ToolActivity({ turn }: { turn: ConversationTurn }) {
   return (
     <details className="talk-details">
       <summary>How Helios produced this answer</summary>
+      {turn.trace_run_id ? (
+        <section className="talk-answer-path" aria-label="Answer path">
+          <ol>
+            <li>
+              <strong>Question understood</strong>
+              <span>Helios identified what you wanted to know.</span>
+            </li>
+            <li>
+              <strong>Approved definitions checked</strong>
+              <span>
+                {turn.tool_trace.some((item) =>
+                  ["search_semantics", "describe", "describe_model"].includes(
+                    item.tool,
+                  )
+                )
+                  ? "Business terms were matched to the governed model."
+                  : "No definition lookup was recorded."}
+              </span>
+            </li>
+            <li>
+              <strong>Data source checked</strong>
+              <span>
+                {turn.tool_trace.some((item) =>
+                  ["compile_query", "run_query"].includes(item.tool)
+                )
+                  ? "An approved data request was prepared."
+                  : "This answer did not need a database query."}
+              </span>
+            </li>
+            <li>
+              <strong>Answer returned</strong>
+              <span>The response and its evidence were saved together.</span>
+            </li>
+          </ol>
+          <Link
+            className="text-link"
+            to={`/governance/mcp?${new URLSearchParams({
+              ...(organizationId ? { organization: organizationId } : {}),
+              model: modelId,
+              tab: "traces",
+              trace: turn.trace_run_id,
+              view: "semantic",
+            })}`}
+          >
+            Open the full answer path
+          </Link>
+        </section>
+      ) : null}
       {hasProvenance ? (
         <dl className="talk-provenance">
           <div>
@@ -574,7 +630,11 @@ export default function TalkPage({ context }: TalkPageProps) {
                       {item.role === "assistant" && turns[item.id] ? (
                         <>
                           <QueryResult turn={turns[item.id]} />
-                          <ToolActivity turn={turns[item.id]} />
+                          <ToolActivity
+                            turn={turns[item.id]}
+                            modelId={modelId}
+                            organizationId={context.selectedOrganizationId}
+                          />
                         </>
                       ) : null}
                     </article>

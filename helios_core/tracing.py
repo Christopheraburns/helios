@@ -77,6 +77,7 @@ class TraceRecorder:
         purpose: str = "conversation",
         question_id: str | None = None,
         run_id: str | None = None,
+        semantic_revision_id: str | None = None,
     ) -> "TraceRecorder":
         return cls(
             repository,
@@ -95,6 +96,7 @@ class TraceRecorder:
                 prompt_version=PROMPT_VERSION,
                 status="running",
                 started_at=utcnow(),
+                semantic_revision_id=semantic_revision_id,
             ),
         )
 

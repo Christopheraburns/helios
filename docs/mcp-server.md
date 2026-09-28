@@ -137,6 +137,10 @@ Dimensions and filters may use `dataset.field`, a physical
 `database.table.field`, or an unambiguous field name, label, or synonym. Metrics
 may use their canonical names or unambiguous synonyms. Filter objects accept
 `column` for backward compatibility or the equivalent `field` key.
+Search results include each field's Ossie datatype. The compiler validates
+filter values against that datatype, safely converts numeric strings to numeric
+SQL literals, and rejects unsafe combinations before contacting Impala with
+`invalid_filter_value_type`.
 
 Filters use objects such as:
 

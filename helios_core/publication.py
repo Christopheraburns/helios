@@ -88,6 +88,7 @@ def publish_reviewed_proposal(
     run_id: str,
     proposal: dict[str, Any],
     review: dict[str, Any],
+    published_by: str | None = None,
 ) -> PublicationResult:
     prepared = prepare_reviewed_publication(
         model_id=model_id,
@@ -104,6 +105,7 @@ def publish_reviewed_proposal(
         "model_id": model_id,
         "run_id": run_id,
         "published_at": datetime.now(timezone.utc).isoformat(),
+        "published_by": published_by,
         "datasets": len(document["datasets"]),
         "relationships": len(document["relationships"]),
         "metrics": len(document["metrics"]),

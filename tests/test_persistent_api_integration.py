@@ -9,7 +9,7 @@ from apps.console.main import app
 from helios_core import health as system_health
 from helios_core import runs as runstore
 from helios_core.graph import ArtifactGraphRepository
-from helios_core.metadata import TraceRun, TraceSpan
+from helios_core.metadata import SemanticRevision, TraceRun, TraceSpan
 
 
 def headers(subject):
@@ -71,9 +71,33 @@ def test_real_dependencies_return_authentication_and_lookup_statuses(
 def test_trace_api_enforces_owner_and_organization_admin_visibility(
     persistent_client,
     persistent_auth_stack,
+    monkeypatch,
 ):
     now = datetime.now(UTC)
     repository = persistent_auth_stack.repository
+    monkeypatch.setattr(
+        runstore,
+        "ROOT",
+        str(persistent_auth_stack.artifacts.root),
+    )
+    revision_data = (
+        persistent_auth_stack.artifacts.ensure_published_revision(
+            "customer360"
+        )
+    )
+    assert revision_data is not None
+    revision = SemanticRevision(
+        id=revision_data["revision_id"],
+        model_id="customer360",
+        sha256=revision_data["sha256"],
+        artifact_path=revision_data["path"],
+        ossie_version=revision_data["ossie_version"],
+        discovery_run_id=revision_data.get("run_id"),
+        published_at=now,
+        published_by="cloudera-workbench:owner",
+        size_bytes=revision_data["size_bytes"],
+    )
+    repository.save_semantic_revision(revision)
     repository.create_trace_run(
         TraceRun(
             id="trace-owner",
@@ -88,6 +112,8 @@ def test_trace_api_enforces_owner_and_organization_admin_visibility(
             status="completed",
             started_at=now,
             completed_at=now,
+            answer="There are 12 customers.",
+            semantic_revision_id=revision.id,
         )
     )
     repository.append_trace_span(
@@ -101,6 +127,32 @@ def test_trace_api_enforces_owner_and_organization_admin_visibility(
             status="success",
             started_at=now,
             input={"round": 1},
+        )
+    )
+    repository.append_trace_span(
+        TraceSpan(
+            id="span-tool",
+            run_id="trace-owner",
+            sequence=2,
+            component="agent",
+            kind="tool",
+            name="run_query",
+            status="success",
+            started_at=now,
+            input={
+                "parsed_arguments": {
+                    "metrics": ["customer_count"],
+                    "dimensions": [
+                        "warehouse.customers.customer_id"
+                    ],
+                }
+            },
+            output={
+                "dataset": "warehouse.customers",
+                "sql": "SELECT customer_id, COUNT(*) FROM warehouse.customers",
+                "columns": ["customer_id", "customer_count"],
+                "rows": [["west", 12]],
+            },
         )
     )
 
@@ -119,6 +171,21 @@ def test_trace_api_enforces_owner_and_organization_admin_visibility(
 
     assert own.status_code == 200
     assert own.json()["spans"][0]["id"] == "span-owner"
+    evidence = own.json()["semantic_evidence"]
+    assert evidence["revision"]["verified"] is True
+    assert evidence["datasets"][0]["physical_name"] == "warehouse.customers"
+    assert {item["name"] for item in evidence["semantic_objects"]} >= {
+        "customer_count",
+        "Customer Id",
+    }
+    assert {
+        edge["type"] for edge in evidence["edges"]
+    } >= {
+        "resolved_definition",
+        "mapped_to_physical_data",
+        "used_in_query",
+        "supported_answer",
+    }
     assert hidden.status_code == 404
     assert admin_collection.status_code == 200
     assert [item["id"] for item in admin_collection.json()["items"]] == [

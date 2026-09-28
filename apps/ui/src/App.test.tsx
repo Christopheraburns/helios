@@ -962,6 +962,11 @@ describe("Helios application shell", () => {
       expect.objectContaining({ includeAll: false }),
     );
     expect(document.querySelector("main")).toHaveClass("app__main--trace");
+    const answerPath = screen.getByRole("button", { name: "Answer path" });
+    expect(answerPath).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(answerPath);
+    expect(window.location.search).toContain("view=semantic");
+    expect(answerPath).toHaveAttribute("aria-pressed", "true");
 
     const collapse = screen.getByRole("button", {
       name: "Hide trace list",
@@ -2702,6 +2707,7 @@ describe("Helios application shell", () => {
               },
             },
             request_id: "request-saved-1",
+            trace_run_id: "trace-saved-1",
           },
         },
       ],
@@ -2729,6 +2735,13 @@ describe("Helios application shell", () => {
     expect(screen.getByText("mistral · mistral-small-latest"))
       .toBeInTheDocument();
     expect(screen.getByText("helios · 0.1.0")).toBeInTheDocument();
+    expect(screen.getByText("Question understood")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open the full answer path" }),
+    ).toHaveAttribute(
+      "href",
+      "/governance/mcp?organization=north&model=north-model&tab=traces&trace=trace-saved-1&view=semantic",
+    );
     expect(
       screen.getByRole("link", { name: "Talk to Your Data" }),
     ).toHaveAttribute(
