@@ -1,10 +1,21 @@
 """Impala adapter: connects to a Cloudera Data Warehouse Impala Virtual Warehouse over HTTPS with LDAP auth."""
 from __future__ import annotations
 
+import logging
 from urllib.parse import parse_qsl, urlencode
 
 from ..config import ImpalaConfig
 from .base import Engine, QueryResult
+
+LOGGER = logging.getLogger(__name__)
+
+
+class ImpalaAuthenticationError(PermissionError):
+    """The CDW HTTP endpoint rejected the configured workload credential."""
+
+
+class ImpalaProxyDelegationError(PermissionError):
+    """Impala did not accept or enforce the delegated effective user."""
 
 
 def _short_name(user: str) -> str:
@@ -56,17 +67,33 @@ class ImpalaEngine(Engine):
                 cur.execute("SELECT EFFECTIVE_USER()")
                 effective = cur.fetchone()
                 if not effective or not _same_user(str(effective[0]), delegated_user):
-                    raise PermissionError(
+                    raise ImpalaProxyDelegationError(
                         "Impala did not enforce the delegated SSO identity"
                     )
             cur.execute(sql)
             if cur.description is None:
-                return QueryResult([], [])
-            cols = [d[0] for d in cur.description]
-            rows = cur.fetchmany(limit) if limit else cur.fetchall()
-            return QueryResult(cols, [tuple(r) for r in rows])
-        finally:
+                result = QueryResult([], [])
+            else:
+                cols = [d[0] for d in cur.description]
+                rows = cur.fetchmany(limit) if limit else cur.fetchall()
+                result = QueryResult(cols, [tuple(r) for r in rows])
+        except BaseException as exc:
+            try:
+                conn.close()
+            except Exception as close_error:
+                LOGGER.warning(
+                    "Impala connection cleanup failed after %s: %s",
+                    type(exc).__name__,
+                    type(close_error).__name__,
+                )
+            if getattr(exc, "code", None) == 401:
+                raise ImpalaAuthenticationError(
+                    "CDW rejected the configured workload authentication"
+                ) from exc
+            raise
+        else:
             conn.close()
+            return result
 
     def ping(self) -> bool:
         return self.query("SELECT 1").rows == [(1,)]

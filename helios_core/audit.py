@@ -6,6 +6,8 @@ import json
 import logging
 import os
 import re
+import threading
+import time
 import traceback
 import uuid
 from contextvars import ContextVar, Token
@@ -55,6 +57,11 @@ CLIENT_EVENT_ACTIONS = frozenset(
     }
 )
 _CORRELATION_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+_FAILURE_LOG_INTERVAL_SECONDS = 60.0
+_failure_lock = threading.Lock()
+_failure_signature: tuple[str, str] | None = None
+_failure_last_logged = 0.0
+_failure_suppressed = 0
 
 
 @dataclass(frozen=True)
@@ -219,12 +226,8 @@ def emit(
     )
     try:
         return repository.append_audit_event(event)
-    except Exception:
-        LOGGER.exception(
-            "failed to persist audit event component=%s action=%s",
-            event.component,
-            event.action,
-        )
+    except Exception as exc:
+        _log_persistence_failure(event, exc)
         return None
 
 
@@ -246,6 +249,32 @@ def purge_expired(repository: MetadataRepository) -> int:
     except Exception:
         LOGGER.exception("failed to purge expired audit events")
         return 0
+
+
+def _log_persistence_failure(event: AuditEvent, exc: Exception) -> None:
+    global _failure_last_logged, _failure_signature, _failure_suppressed
+    now = time.monotonic()
+    signature = (type(exc).__name__, str(exc))
+    with _failure_lock:
+        should_log = (
+            signature != _failure_signature
+            or now - _failure_last_logged >= _FAILURE_LOG_INTERVAL_SECONDS
+        )
+        if not should_log:
+            _failure_suppressed += 1
+            return
+        suppressed = _failure_suppressed
+        _failure_signature = signature
+        _failure_last_logged = now
+        _failure_suppressed = 0
+    LOGGER.error(
+        "failed to persist audit event component=%s action=%s "
+        "suppressed_since_last=%d",
+        event.component,
+        event.action,
+        suppressed,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
 
 
 def _redact(value: Any, *, depth: int) -> Any:

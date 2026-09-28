@@ -110,7 +110,33 @@ def test_health_is_ready_without_application_identity(connectivity_client):
     response = connectivity_client.get("/api/v1/healthz")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {
+        "status": "ok",
+        "components": {
+            "metadata_repository": {"status": "healthy"}
+        },
+    }
+
+
+def test_health_fails_when_metadata_integrity_is_unavailable(
+    connectivity_client,
+    monkeypatch,
+):
+    repository = connectivity_client.app.state.metadata_repository
+    monkeypatch.setattr(
+        repository,
+        "integrity_check",
+        lambda **_kwargs: ("database disk image is malformed",),
+    )
+
+    response = connectivity_client.get("/api/v1/healthz")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "unavailable"
+    assert (
+        response.json()["components"]["metadata_repository"]["status"]
+        == "unavailable"
+    )
 
 
 def test_diagnostics_uses_cloudera_transparent_identity(connectivity_client):

@@ -10,8 +10,11 @@ separate from:
 - connection credentials in Workbench environment/secret configuration.
 
 SQLite is used through the standard library and is hidden behind
-`helios_core.metadata.MetadataRepository`. The initial implementation enables
-foreign keys, WAL mode, and a busy timeout. Resource ownership is checked in the
+`helios_core.metadata.MetadataRepository`. The implementation enables foreign
+keys and a busy timeout. The default journal mode is `DELETE`, because WAL
+shared-memory files are unsafe when Cloudera Applications on different hosts
+access the same project filesystem. Set `HELIOS_SQLITE_JOURNAL_MODE=WAL` only
+for a verified single-host deployment. Resource ownership is checked in the
 repository and constrained in the schema; a Model cannot reference a DataSource
 from another organization.
 
@@ -27,10 +30,56 @@ Migrations are append-only entries in `helios_core.metadata.migrations`.
 `schema_migrations` records applied versions. Add a new numbered migration rather
 than modifying one that has shipped.
 
-The SQLite implementation is appropriate for initial Workbench deployment and
-metadata volume. Components should depend on the repository interface, not
-SQLite queries, so a future shared database can replace it without changing API,
-MCP, job, or authorization call sites.
+The API Application is the schema migration and audit-retention owner. MCP and
+Jobs require an already initialized, healthy database and do not run migrations
+or retention cleanup. They still read authorization state and append activity,
+so SQLite remains an interim deployment choice: do not horizontally scale
+Helios or run it on a project filesystem without reliable cross-host POSIX
+locking. Move the repository implementation to a transactional shared database
+before multi-replica or high-concurrency production use. Components depend on
+the repository interface so that migration does not change API, MCP, job, or
+authorization call sites.
+
+## Integrity and recovery
+
+API and MCP readiness execute a read-only SQLite quick check. They return HTTP
+503 with `metadata_repository: unavailable` when corruption is detected. The
+Applications log the finding but never silently delete or recreate metadata.
+
+To repair metadata:
+
+1. Stop the Helios API and MCP Applications and all Helios Jobs.
+2. Run a read-only diagnosis from a Workbench Session:
+
+   ```bash
+   python - <<'PY'
+   from helios_core.metadata import SQLiteMetadataRepository
+   repository = SQLiteMetadataRepository()
+   print(repository.path)
+   print(repository.integrity_check())
+   print(repository.integrity_check(thorough=True))
+   PY
+   ```
+
+3. If diagnostics identify only a rebuildable non-constraint index, run:
+
+   ```bash
+   python -m helios_core.metadata.repair \
+     --rebuild-index audit_events_principal_session_time_idx
+   ```
+
+4. If index rebuilding fails because the b-tree cannot be traversed, logically
+   recover all readable tables into a clean database:
+
+   ```bash
+   python -m helios_core.metadata.repair --recover
+   ```
+
+Both repair modes refuse a non-empty WAL, create a timestamped raw backup under
+`state/backups/`, and require quick and full integrity checks to pass. Recovery
+atomically replaces the database only after validation. Never delete
+`helios.db` as a repair shortcut: it contains organizations, grants, models,
+conversations, and audit history.
 
 ## Persistent audit events
 
@@ -45,7 +94,9 @@ Audit details are deliberately bounded and redacted. Helios does not persist
 credentials, cookies, authorization headers, request/response bodies, prompts,
 answers, raw SQL, query rows, or stack traces in product-visible audit records.
 Audit persistence is fail-open: a write failure is reported to the API
-Application's operational log without failing the user's operation.
+Application's operational log without failing the user's operation. Repeated
+identical persistence failures are logged at most once per minute with a
+suppressed-event count, preventing a failing probe from flooding logs.
 
 Events are retained for 30 days by default. Set
 `HELIOS_AUDIT_RETENTION_DAYS` to an integer from 1 through 3650. Expired records

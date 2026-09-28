@@ -1,4 +1,5 @@
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -10,6 +11,7 @@ from helios_core.domain import (
     Organization,
 )
 from helios_core.metadata import PrincipalRecord, SQLiteMetadataRepository
+from helios_core.metadata.repair import rebuild_index, recover_database
 
 
 @pytest.fixture
@@ -55,6 +57,48 @@ def test_migrations_are_versioned_and_idempotent(repository):
         "model_data_sources",
         "model_memberships",
     } <= tables
+
+
+def test_sqlite_defaults_to_rollback_journal_and_reports_integrity(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.delenv("HELIOS_SQLITE_JOURNAL_MODE", raising=False)
+    repository = SQLiteMetadataRepository(tmp_path / "rollback.db")
+    repository.migrate()
+    with sqlite3.connect(repository.path) as connection:
+        journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
+
+    assert journal_mode == "delete"
+    assert repository.integrity_check() == ("ok",)
+    assert repository.integrity_check(thorough=True) == ("ok",)
+    assert repository.is_healthy()
+
+
+def test_sqlite_rejects_unknown_journal_mode(tmp_path, monkeypatch):
+    monkeypatch.setenv("HELIOS_SQLITE_JOURNAL_MODE", "unsafe-mode")
+    repository = SQLiteMetadataRepository(tmp_path / "invalid.db")
+
+    with pytest.raises(ValueError, match="HELIOS_SQLITE_JOURNAL_MODE"):
+        repository.migrate()
+
+
+def test_backup_first_index_rebuild_and_logical_recovery(repository):
+    seed_organizations_and_principals(repository)
+    backup = rebuild_index(
+        Path(repository.path),
+        "audit_events_principal_session_time_idx",
+    )
+
+    assert (backup / "helios.db").is_file()
+    assert repository.integrity_check(thorough=True) == ("ok",)
+
+    recovery_backup = recover_database(Path(repository.path))
+    recovered = SQLiteMetadataRepository(repository.path)
+    assert (recovery_backup / "helios.db").is_file()
+    assert recovered.organization("acme") is not None
+    assert recovered.principal(principal("alice").id) is not None
+    assert recovered.integrity_check(thorough=True) == ("ok",)
 
 
 def test_operational_metadata_persists_across_repository_instances(
