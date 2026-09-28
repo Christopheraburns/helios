@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -10,8 +11,16 @@ from helios_core.domain import (
     Model,
     Organization,
 )
-from helios_core.metadata import PrincipalRecord, SQLiteMetadataRepository
+from helios_core.metadata import (
+    EvaluationResult,
+    EvaluationRun,
+    PrincipalRecord,
+    SQLiteMetadataRepository,
+    TraceRun,
+    TraceSpan,
+)
 from helios_core.metadata.repair import rebuild_index, recover_database
+from helios_core.tracing import TraceRecorder
 
 
 @pytest.fixture
@@ -39,7 +48,7 @@ def seed_organizations_and_principals(repository):
 def test_migrations_are_versioned_and_idempotent(repository):
     repository.migrate()
 
-    assert repository.schema_version() == 5
+    assert repository.schema_version() == 6
     with sqlite3.connect(repository.path) as connection:
         tables = {
             row[0]
@@ -56,7 +65,169 @@ def test_migrations_are_versioned_and_idempotent(repository):
         "models",
         "model_data_sources",
         "model_memberships",
+        "agent_trace_runs",
+        "agent_trace_spans",
+        "evaluation_runs",
+        "evaluation_results",
     } <= tables
+
+
+def test_trace_and_evaluation_records_round_trip(repository):
+    repository.save_organization(Organization("acme", "Acme"), "acme")
+    repository.save_principal(principal("alice"))
+    repository.save_data_source(
+        DataSource("warehouse", "acme", "Warehouse", "impala", "connection")
+    )
+    repository.save_model(
+        Model(
+            "customer360",
+            "acme",
+            "Customer 360",
+            (DataSourceReference("warehouse"),),
+        ),
+        created_by=principal("alice").id,
+    )
+    now = datetime.now(UTC)
+    trace = TraceRun(
+        id="trace-1",
+        principal_id="cloudera-workbench:alice",
+        organization_id="acme",
+        model_id="customer360",
+        purpose="evaluation",
+        question="Revenue by channel?",
+        question_id="Q3",
+        llm_provider="mistral",
+        llm_model="mistral-small-latest",
+        prompt_version="talk-v1",
+        status="running",
+        started_at=now,
+    )
+    repository.create_trace_run(trace)
+    repository.append_trace_span(
+        TraceSpan(
+            id="span-1",
+            run_id=trace.id,
+            sequence=1,
+            component="agent",
+            kind="tool",
+            name="query",
+            status="ok",
+            started_at=now,
+            input={"metric": "revenue"},
+            output={"rows": 2},
+        )
+    )
+    finished = repository.update_trace_run(
+        trace.id,
+        status="completed",
+        termination_reason="final_answer",
+        answer="Two channels.",
+        completed_at=now,
+        duration_ms=25,
+        tokens_in=100,
+        tokens_out=12,
+    )
+
+    assert finished.answer == "Two channels."
+    assert repository.trace_run(trace.id) == finished
+    assert repository.trace_spans(trace.id)[0].input == {"metric": "revenue"}
+    trace_runs, total = repository.trace_runs(
+        model_id="customer360",
+        principal_id="cloudera-workbench:alice",
+    )
+    assert trace_runs == [finished]
+    assert total == 1
+
+    evaluation = EvaluationRun(
+        id="eval-1",
+        principal_id="cloudera-workbench:alice",
+        organization_id="acme",
+        model_id="customer360",
+        suite_id="tpcds",
+        suite_version="v1",
+        status="running",
+        repetitions=1,
+        baseline_provider="anthropic",
+        baseline_model="haiku",
+        candidate_provider="mistral",
+        candidate_model="small",
+        max_tool_rounds=6,
+        created_at=now,
+    )
+    repository.create_evaluation_run(evaluation)
+    result = EvaluationResult(
+        id="result-1",
+        evaluation_run_id=evaluation.id,
+        question_id="Q3",
+        variant="candidate",
+        repetition=1,
+        trace_run_id=trace.id,
+        accurate=True,
+        completed=True,
+        metrics={"tool_calls": 2},
+    )
+    repository.append_evaluation_result(result)
+
+    assert repository.evaluation_results(evaluation.id) == [result]
+    cancelling = repository.update_evaluation_run(
+        evaluation.id,
+        status="running",
+        cancel_requested=True,
+    )
+    assert cancelling.cancel_requested is True
+    assert repository.fail_interrupted_evaluations() == 1
+    interrupted = repository.evaluation_run(evaluation.id)
+    assert interrupted is not None
+    assert interrupted.status == "failed"
+    assert interrupted.error == (
+        "The API restarted before this evaluation completed."
+    )
+
+
+def test_trace_recorder_redacts_secrets_and_bounds_payloads(repository):
+    repository.save_organization(Organization("acme", "Acme"), "acme")
+    repository.save_principal(principal("alice"))
+    repository.save_data_source(
+        DataSource("warehouse", "acme", "Warehouse", "impala", "connection")
+    )
+    repository.save_model(
+        Model(
+            "customer360",
+            "acme",
+            "Customer 360",
+            (DataSourceReference("warehouse"),),
+        ),
+        created_by=principal("alice").id,
+    )
+    recorder = TraceRecorder.start(
+        repository,
+        principal_id=principal("alice").id,
+        organization_id="acme",
+        model_id="customer360",
+        question="Count customers",
+        provider="anthropic",
+        llm_model="haiku",
+        request_id="request-1",
+    )
+    now = datetime.now(UTC)
+    recorder.span(
+        component="agent",
+        kind="llm",
+        name="anthropic.chat",
+        status="success",
+        started_at=now,
+        completed_at=now,
+        input={
+            "authorization": "Bearer secret",
+            "nested": {"api_key": "secret"},
+            "prompt": "x" * 100_001,
+        },
+    )
+
+    stored = repository.trace_spans(recorder.run.id)[0]
+    assert stored.input["authorization"] == "[redacted]"
+    assert stored.input["nested"]["api_key"] == "[redacted]"
+    assert stored.input["prompt"].endswith("…")
 
 
 def test_sqlite_defaults_to_rollback_journal_and_reports_integrity(

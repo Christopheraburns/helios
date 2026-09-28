@@ -25,11 +25,15 @@ from .repository import (
     AuditSession,
     ConversationMessage,
     ConversationVersionConflict,
+    EvaluationResult,
+    EvaluationRun,
     PrincipalRecord,
     StoredConversation,
     StoredConversationTurn,
     StoredModel,
     StoredOrganization,
+    TraceRun,
+    TraceSpan,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -743,6 +747,343 @@ class SQLiteMetadataRepository:
             raise RuntimeError("conversation was not persisted")
         return conversation
 
+    def create_trace_run(self, run: TraceRun) -> TraceRun:
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO agent_trace_runs (
+                    id, request_id, conversation_id, principal_id,
+                    organization_id, model_id, purpose, question_id,
+                    question, llm_provider, llm_model, prompt_version,
+                    status, termination_reason, answer, started_at,
+                    completed_at, duration_ms, tokens_in, tokens_out
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
+                """,
+                (
+                    run.id,
+                    run.request_id,
+                    run.conversation_id,
+                    run.principal_id,
+                    run.organization_id,
+                    run.model_id,
+                    run.purpose,
+                    run.question_id,
+                    run.question,
+                    run.llm_provider,
+                    run.llm_model,
+                    run.prompt_version,
+                    run.status,
+                    run.termination_reason,
+                    run.answer,
+                    run.started_at.isoformat(),
+                    run.completed_at.isoformat() if run.completed_at else None,
+                    run.duration_ms,
+                    run.tokens_in,
+                    run.tokens_out,
+                ),
+            )
+        return run
+
+    def update_trace_run(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        termination_reason: str | None = None,
+        answer: str | None = None,
+        completed_at: datetime | None = None,
+        duration_ms: float | None = None,
+        tokens_in: int = 0,
+        tokens_out: int = 0,
+        conversation_id: str | None = None,
+    ) -> TraceRun:
+        with self._connection() as connection:
+            updated = connection.execute(
+                """
+                UPDATE agent_trace_runs
+                SET status = ?, termination_reason = ?, answer = ?,
+                    completed_at = ?, duration_ms = ?, tokens_in = ?,
+                    tokens_out = ?,
+                    conversation_id = COALESCE(?, conversation_id)
+                WHERE id = ?
+                """,
+                (
+                    status,
+                    termination_reason,
+                    answer,
+                    completed_at.isoformat() if completed_at else None,
+                    duration_ms,
+                    tokens_in,
+                    tokens_out,
+                    conversation_id,
+                    run_id,
+                ),
+            )
+            if updated.rowcount != 1:
+                raise LookupError("trace run not found")
+        result = self.trace_run(run_id)
+        if result is None:
+            raise RuntimeError("trace run update was not persisted")
+        return result
+
+    def append_trace_span(self, span: TraceSpan) -> TraceSpan:
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO agent_trace_spans (
+                    id, run_id, parent_span_id, sequence, component, kind,
+                    name, status, started_at, completed_at, latency_ms,
+                    input_json, output_json, attributes_json, error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    span.id,
+                    span.run_id,
+                    span.parent_span_id,
+                    span.sequence,
+                    span.component,
+                    span.kind,
+                    span.name,
+                    span.status,
+                    span.started_at.isoformat(),
+                    span.completed_at.isoformat() if span.completed_at else None,
+                    span.latency_ms,
+                    _bounded_json(span.input, 250_000),
+                    _bounded_json(span.output, 250_000),
+                    _bounded_json(span.attributes or {}, 100_000),
+                    span.error[:10_000] if span.error else None,
+                ),
+            )
+        return span
+
+    def trace_run(self, run_id: str) -> TraceRun | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM agent_trace_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()
+            return _trace_run(row) if row else None
+
+    def trace_spans(self, run_id: str) -> list[TraceSpan]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM agent_trace_spans
+                WHERE run_id = ?
+                ORDER BY sequence, component, id
+                """,
+                (run_id,),
+            ).fetchall()
+            return [_trace_span(row) for row in rows]
+
+    def trace_runs(
+        self,
+        *,
+        model_id: str,
+        principal_id: str | None = None,
+        purpose: str | None = None,
+        status: str | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[TraceRun], int]:
+        where = ["model_id = ?"]
+        values: list[object] = [model_id]
+        if principal_id is not None:
+            where.append("principal_id = ?")
+            values.append(principal_id)
+        if purpose is not None:
+            where.append("purpose = ?")
+            values.append(purpose)
+        if status is not None:
+            where.append("status = ?")
+            values.append(status)
+        clause = " AND ".join(where)
+        with self._connection() as connection:
+            total = int(connection.execute(
+                f"SELECT COUNT(*) AS count FROM agent_trace_runs WHERE {clause}",
+                values,
+            ).fetchone()["count"])
+            rows = connection.execute(
+                f"""
+                SELECT * FROM agent_trace_runs
+                WHERE {clause}
+                ORDER BY started_at DESC, id DESC
+                LIMIT ? OFFSET ?
+                """,
+                [*values, limit, offset],
+            ).fetchall()
+            return [_trace_run(row) for row in rows], total
+
+    def create_evaluation_run(self, run: EvaluationRun) -> EvaluationRun:
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO evaluation_runs (
+                    id, principal_id, organization_id, model_id, suite_id,
+                    suite_version, status, repetitions, baseline_provider,
+                    baseline_model, candidate_provider, candidate_model,
+                    max_tool_rounds, created_at, started_at, completed_at,
+                    error, metrics_json, cancel_requested
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run.id,
+                    run.principal_id,
+                    run.organization_id,
+                    run.model_id,
+                    run.suite_id,
+                    run.suite_version,
+                    run.status,
+                    run.repetitions,
+                    run.baseline_provider,
+                    run.baseline_model,
+                    run.candidate_provider,
+                    run.candidate_model,
+                    run.max_tool_rounds,
+                    run.created_at.isoformat(),
+                    run.started_at.isoformat() if run.started_at else None,
+                    run.completed_at.isoformat() if run.completed_at else None,
+                    run.error,
+                    _bounded_json(run.metrics or {}, 250_000),
+                    int(run.cancel_requested),
+                ),
+            )
+        return run
+
+    def update_evaluation_run(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        started_at: datetime | None = None,
+        completed_at: datetime | None = None,
+        error: str | None = None,
+        metrics: dict | None = None,
+        cancel_requested: bool | None = None,
+    ) -> EvaluationRun:
+        with self._connection() as connection:
+            current = connection.execute(
+                "SELECT * FROM evaluation_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()
+            if current is None:
+                raise LookupError("evaluation run not found")
+            connection.execute(
+                """
+                UPDATE evaluation_runs
+                SET status = ?, started_at = ?, completed_at = ?, error = ?,
+                    metrics_json = ?, cancel_requested = ?
+                WHERE id = ?
+                """,
+                (
+                    status,
+                    started_at.isoformat() if started_at else current["started_at"],
+                    (
+                        completed_at.isoformat()
+                        if completed_at
+                        else current["completed_at"]
+                    ),
+                    error,
+                    _bounded_json(
+                        metrics if metrics is not None
+                        else json.loads(current["metrics_json"]),
+                        250_000,
+                    ),
+                    (
+                        int(cancel_requested)
+                        if cancel_requested is not None
+                        else current["cancel_requested"]
+                    ),
+                    run_id,
+                ),
+            )
+        result = self.evaluation_run(run_id)
+        if result is None:
+            raise RuntimeError("evaluation run update was not persisted")
+        return result
+
+    def evaluation_run(self, run_id: str) -> EvaluationRun | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM evaluation_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()
+            return _evaluation_run(row) if row else None
+
+    def evaluation_runs(
+        self,
+        *,
+        model_id: str,
+        organization_id: str,
+        limit: int = 50,
+    ) -> list[EvaluationRun]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM evaluation_runs
+                WHERE model_id = ? AND organization_id = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                (model_id, organization_id, limit),
+            ).fetchall()
+            return [_evaluation_run(row) for row in rows]
+
+    def append_evaluation_result(
+        self, result: EvaluationResult
+    ) -> EvaluationResult:
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO evaluation_results (
+                    id, evaluation_run_id, question_id, variant, repetition,
+                    trace_run_id, accurate, completed, metrics_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    result.id,
+                    result.evaluation_run_id,
+                    result.question_id,
+                    result.variant,
+                    result.repetition,
+                    result.trace_run_id,
+                    int(result.accurate),
+                    int(result.completed),
+                    _bounded_json(result.metrics or {}, 100_000),
+                ),
+            )
+        return result
+
+    def evaluation_results(
+        self, evaluation_run_id: str
+    ) -> list[EvaluationResult]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM evaluation_results
+                WHERE evaluation_run_id = ?
+                ORDER BY question_id, variant, repetition
+                """,
+                (evaluation_run_id,),
+            ).fetchall()
+            return [_evaluation_result(row) for row in rows]
+
+    def fail_interrupted_evaluations(self) -> int:
+        with self._connection() as connection:
+            updated = connection.execute(
+                """
+                UPDATE evaluation_runs
+                SET status = 'failed',
+                    completed_at = ?,
+                    error = 'The API restarted before this evaluation completed.'
+                WHERE status IN ('queued', 'running')
+                """,
+                (_now(),),
+            )
+            return updated.rowcount
+
     def append_audit_event(self, event: AuditEvent) -> AuditEvent:
         details = event.details or {}
         with self._connection() as connection:
@@ -1006,6 +1347,7 @@ class SQLiteMetadataRepository:
                         else None
                     ),
                     provenance=json.loads(turn["provenance_json"]),
+                    trace_run_id=turn["trace_run_id"],
                     created_at=datetime.fromisoformat(turn["created_at"]),
                 )
                 for turn in connection.execute(
@@ -1090,6 +1432,105 @@ def _audit_event(row: sqlite3.Row) -> AuditEvent:
     )
 
 
+def _trace_run(row: sqlite3.Row) -> TraceRun:
+    return TraceRun(
+        id=row["id"],
+        request_id=row["request_id"],
+        conversation_id=row["conversation_id"],
+        principal_id=row["principal_id"],
+        organization_id=row["organization_id"],
+        model_id=row["model_id"],
+        purpose=row["purpose"],
+        question_id=row["question_id"],
+        question=row["question"],
+        llm_provider=row["llm_provider"],
+        llm_model=row["llm_model"],
+        prompt_version=row["prompt_version"],
+        status=row["status"],
+        termination_reason=row["termination_reason"],
+        answer=row["answer"],
+        started_at=datetime.fromisoformat(row["started_at"]),
+        completed_at=(
+            datetime.fromisoformat(row["completed_at"])
+            if row["completed_at"]
+            else None
+        ),
+        duration_ms=row["duration_ms"],
+        tokens_in=row["tokens_in"],
+        tokens_out=row["tokens_out"],
+    )
+
+
+def _trace_span(row: sqlite3.Row) -> TraceSpan:
+    return TraceSpan(
+        id=row["id"],
+        run_id=row["run_id"],
+        parent_span_id=row["parent_span_id"],
+        sequence=row["sequence"],
+        component=row["component"],
+        kind=row["kind"],
+        name=row["name"],
+        status=row["status"],
+        started_at=datetime.fromisoformat(row["started_at"]),
+        completed_at=(
+            datetime.fromisoformat(row["completed_at"])
+            if row["completed_at"]
+            else None
+        ),
+        latency_ms=row["latency_ms"],
+        input=json.loads(row["input_json"]),
+        output=json.loads(row["output_json"]),
+        attributes=json.loads(row["attributes_json"]),
+        error=row["error"],
+    )
+
+
+def _evaluation_run(row: sqlite3.Row) -> EvaluationRun:
+    return EvaluationRun(
+        id=row["id"],
+        principal_id=row["principal_id"],
+        organization_id=row["organization_id"],
+        model_id=row["model_id"],
+        suite_id=row["suite_id"],
+        suite_version=row["suite_version"],
+        status=row["status"],
+        repetitions=row["repetitions"],
+        baseline_provider=row["baseline_provider"],
+        baseline_model=row["baseline_model"],
+        candidate_provider=row["candidate_provider"],
+        candidate_model=row["candidate_model"],
+        max_tool_rounds=row["max_tool_rounds"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        started_at=(
+            datetime.fromisoformat(row["started_at"])
+            if row["started_at"]
+            else None
+        ),
+        completed_at=(
+            datetime.fromisoformat(row["completed_at"])
+            if row["completed_at"]
+            else None
+        ),
+        error=row["error"],
+        metrics=json.loads(row["metrics_json"]),
+        cancel_requested=bool(row["cancel_requested"]),
+    )
+
+
+def _evaluation_result(row: sqlite3.Row) -> EvaluationResult:
+    return EvaluationResult(
+        id=row["id"],
+        evaluation_run_id=row["evaluation_run_id"],
+        question_id=row["question_id"],
+        variant=row["variant"],
+        repetition=row["repetition"],
+        trace_run_id=row["trace_run_id"],
+        accurate=bool(row["accurate"]),
+        completed=bool(row["completed"]),
+        metrics=json.loads(row["metrics_json"]),
+    )
+
+
 def _insert_conversation_turn(
     connection: sqlite3.Connection,
     conversation_id: str,
@@ -1110,13 +1551,16 @@ def _insert_conversation_turn(
     request_id = turn.get("request_id")
     if request_id is not None and not isinstance(request_id, str):
         raise ValueError("conversation request ID must be a string")
+    trace_run_id = turn.get("trace_run_id")
+    if trace_run_id is not None and not isinstance(trace_run_id, str):
+        raise ValueError("conversation trace run ID must be a string")
     connection.execute(
         """
         INSERT INTO conversation_turns (
             id, conversation_id, user_message_id, assistant_message_id,
             request_id, tool_trace_json, query_result_json,
-            provenance_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            provenance_json, trace_run_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             str(uuid.uuid4()),
@@ -1131,9 +1575,19 @@ def _insert_conversation_turn(
                 else None
             ),
             _conversation_json(provenance, "provenance", 100_000),
+            trace_run_id,
             created_at,
         ),
     )
+    if trace_run_id:
+        connection.execute(
+            """
+            UPDATE agent_trace_runs
+            SET conversation_id = ?
+            WHERE id = ?
+            """,
+            (conversation_id, trace_run_id),
+        )
 
 
 def _conversation_json(value: object, label: str, maximum: int) -> str:
@@ -1141,6 +1595,22 @@ def _conversation_json(value: object, label: str, maximum: int) -> str:
     if len(encoded.encode()) > maximum:
         raise ValueError(f"conversation {label} exceeds the persistence limit")
     return encoded
+
+
+def _bounded_json(value: object, maximum: int) -> str:
+    encoded = json.dumps(
+        value if value is not None else {},
+        separators=(",", ":"),
+        sort_keys=True,
+        default=str,
+    )
+    if len(encoded.encode()) <= maximum:
+        return encoded
+    return json.dumps({
+        "truncated": True,
+        "original_bytes": len(encoded.encode()),
+        "preview": encoded[: max(maximum - 200, 0)],
+    }, separators=(",", ":"))
 
 
 def _now() -> str:

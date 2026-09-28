@@ -1,8 +1,11 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { MCPSettings, MCPStatus } from "../api/client";
 import { ErrorState, LoadingState } from "../components/AsyncState";
 import { ApplicationContextState } from "../hooks/useApplicationContext";
+import EvaluationWorkspace from "../features/trace/EvaluationWorkspace";
+import TraceWorkspace from "../features/trace/TraceWorkspace";
 
 interface MCPManagementPageProps {
   context: ApplicationContextState;
@@ -11,6 +14,7 @@ interface MCPManagementPageProps {
 export default function MCPManagementPage({
   context,
 }: MCPManagementPageProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [settings, setSettings] = useState<MCPSettings>();
   const [status, setStatus] = useState<MCPStatus>();
   const [maxToolRounds, setMaxToolRounds] = useState(6);
@@ -22,6 +26,22 @@ export default function MCPManagementPage({
     "idle" | "saving" | "success" | "error"
   >("idle");
   const [message, setMessage] = useState("");
+  const requestedTab = searchParams.get("tab");
+  const tab = requestedTab === "traces" || requestedTab === "evaluations"
+    ? requestedTab
+    : "connection";
+  const selectedModel = context.models.find(
+    (model) => model.id === context.selectedModelId,
+  );
+  const evaluationAvailable = selectedModel?.available_actions.includes(
+    "organization.manage",
+  ) ?? false;
+
+  function selectTab(nextTab: "connection" | "traces" | "evaluations") {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", nextTab);
+    setSearchParams(next, { replace: true });
+  }
 
   const refreshStatus = useCallback(async () => {
     if (!context.selectedModelId) return;
@@ -140,6 +160,34 @@ export default function MCPManagementPage({
         </span>
       </header>
 
+      <nav className="mcp-management__tabs" aria-label="MCP management sections">
+        <button
+          type="button"
+          aria-pressed={tab === "connection"}
+          onClick={() => selectTab("connection")}
+        >
+          Connection
+        </button>
+        <button
+          type="button"
+          aria-pressed={tab === "traces"}
+          onClick={() => selectTab("traces")}
+        >
+          Traces
+        </button>
+        {evaluationAvailable ? (
+          <button
+            type="button"
+            aria-pressed={tab === "evaluations"}
+            onClick={() => selectTab("evaluations")}
+          >
+            Evaluations
+          </button>
+        ) : null}
+      </nav>
+
+      {tab === "connection" ? (
+        <>
       <section className="mcp-management__status" aria-labelledby="mcp-status-title">
         <div>
           <p className="page-header__eyebrow">Connection</p>
@@ -289,6 +337,16 @@ export default function MCPManagementPage({
           </p>
         )}
       </section>
+        </>
+      ) : tab === "traces" ? (
+        <TraceWorkspace context={context} />
+      ) : evaluationAvailable ? (
+        <EvaluationWorkspace context={context} />
+      ) : (
+        <p className="action-message action-message--error">
+          Organization administration permission is required.
+        </p>
+      )}
     </div>
   );
 }

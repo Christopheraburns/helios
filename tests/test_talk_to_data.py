@@ -39,8 +39,20 @@ from helios_core.engines.impala import (
 )
 from helios_core.llm import LLMClient, ToolCall, ToolTurn, llm_from_env
 from helios_core.llm import client as llm_module
-from helios_core.metadata import ConversationVersionConflict
+from helios_core.domain import (
+    DataSource,
+    DataSourceReference,
+    Model,
+    Organization,
+)
+from helios_core.metadata import (
+    ConversationVersionConflict,
+    PrincipalRecord,
+    SQLiteMetadataRepository,
+    TraceRun,
+)
 from helios_core.ossie import SemanticModel, build as build_ossie
+from helios_core.tracing import TraceRecorder
 
 
 SECRET = "test-delegation-secret-that-is-at-least-32-bytes"
@@ -125,6 +137,7 @@ def test_signed_delegation_round_trip_and_tamper_rejection():
         now=100,
         request_id="request-123",
         session_id="session-456",
+        trace_run_id="trace-789",
     )
     context = verify_assertion(SECRET, token, now=110)
 
@@ -133,10 +146,79 @@ def test_signed_delegation_round_trip_and_tamper_rejection():
     assert context.model_id == "customer360"
     assert context.request_id == "request-123"
     assert context.session_id == "session-456"
+    assert context.trace_run_id == "trace-789"
     with pytest.raises(DelegationError):
         verify_assertion(SECRET, token[:-1] + "x", now=110)
     with pytest.raises(DelegationError, match="expired"):
         verify_assertion(SECRET, token, now=200)
+
+
+@pytest.mark.anyio
+async def test_mcp_middleware_records_server_ground_truth(tmp_path, monkeypatch):
+    repository = SQLiteMetadataRepository(tmp_path / "trace.db")
+    repository.migrate()
+    repository.save_organization(Organization("acme", "Acme"), "acme")
+    repository.save_principal(
+        PrincipalRecord(
+            id=principal().id,
+            external_identity=principal().subject,
+            display_name=principal().display_name,
+        )
+    )
+    repository.save_data_source(
+        DataSource("warehouse", "acme", "Warehouse", "impala", "connection")
+    )
+    repository.save_model(
+        Model(
+            "customer360",
+            "acme",
+            "Customer 360",
+            (DataSourceReference("warehouse"),),
+        ),
+        created_by=principal().id,
+    )
+    now = mcp_server.utcnow()
+    repository.create_trace_run(
+        TraceRun(
+            id="trace-1",
+            principal_id=principal().id,
+            organization_id="acme",
+            model_id="customer360",
+            purpose="conversation",
+            question="Count customers",
+            llm_provider="anthropic",
+            llm_model="haiku",
+            prompt_version="talk-v1",
+            status="running",
+            started_at=now,
+        )
+    )
+    monkeypatch.setattr(mcp_server, "metadata_repository", repository)
+    context = SimpleNamespace(
+        method="tools/call",
+        request_id="request-1",
+        params={
+            "name": "describe",
+            "arguments": {"name": "customers"},
+            "_meta": {
+                "helios_trace_run_id": "trace-1",
+                "helios_parent_span_id": "client-span-1",
+                "helios_sequence": 2,
+            },
+        },
+    )
+
+    async def call_next(_context):
+        return {"ok": True}
+
+    result = await mcp_server.MCPTraceMiddleware()(context, call_next)
+
+    spans = repository.trace_spans("trace-1")
+    assert result == {"ok": True}
+    assert len(spans) == 1
+    assert spans[0].component == "mcp-server"
+    assert spans[0].parent_span_id == "client-span-1"
+    assert spans[0].input["arguments"] == {"name": "customers"}
 
 
 def test_nested_conversation_failure_is_not_mislabeled_as_mcp_outage():
@@ -187,7 +269,8 @@ def test_mistral_tool_turn_uses_openai_compatible_endpoint(monkeypatch):
                             ],
                         },
                     }
-                ]
+                ],
+                "usage": {"prompt_tokens": 21, "completion_tokens": 7},
             }
 
     def post(url, **kwargs):
@@ -221,6 +304,10 @@ def test_mistral_tool_turn_uses_openai_compatible_endpoint(monkeypatch):
     assert captured["headers"]["Authorization"] == "Bearer server-side-secret"
     assert captured["json"]["model"] == "mistral-small-latest"
     assert turn.tool_calls[0].name == "search_semantics"
+    assert turn.stop_reason == "tool_calls"
+    assert (turn.tokens_in, turn.tokens_out) == (21, 7)
+    assert turn.latency_ms is not None
+    assert turn.raw_tool_calls[0]["function"]["name"] == "search_semantics"
 
 
 def test_bedrock_tool_turn_uses_bearer_key_and_converse_contract(monkeypatch):
@@ -247,6 +334,7 @@ def test_bedrock_tool_turn_uses_bearer_key_and_converse_contract(monkeypatch):
                     }
                 },
                 "stopReason": "tool_use",
+                "usage": {"inputTokens": 34, "outputTokens": 9},
             }
 
     def post(url, **kwargs):
@@ -281,6 +369,10 @@ def test_bedrock_tool_turn_uses_bearer_key_and_converse_contract(monkeypatch):
     assert turn.tool_calls == (
         ToolCall("call-1", "describe_model", {"model": "customer360"}),
     )
+    assert turn.stop_reason == "tool_use"
+    assert (turn.tokens_in, turn.tokens_out) == (34, 9)
+    assert turn.latency_ms is not None
+    assert turn.raw_tool_calls[0]["name"] == "describe_model"
 
 
 def test_conversation_repository_persists_owned_model_history(
@@ -295,7 +387,7 @@ def test_conversation_repository_persists_owned_model_history(
         "There are 12 customers in the result.",
     )
 
-    assert repository.schema_version() == 5
+    assert repository.schema_version() == 6
     assert created.version == 1
     assert [message.role for message in created.messages] == [
         "user",
@@ -854,7 +946,8 @@ class FakeSession:
     def __init__(self):
         self.calls = []
 
-    async def call_tool(self, name, arguments):
+    async def call_tool(self, name, arguments, meta=None):
+        del meta
         self.calls.append((name, arguments))
         result = (
             {"matches": [{"kind": "metric", "name": "Customer count"}]}
@@ -951,6 +1044,53 @@ async def test_conversation_loop_uses_discovered_mcp_tools_and_locks_model():
     assert result["query_result"]["rows"] == [[12]]
     assert session.calls[0][1]["model"] == "customer360"
     assert session.calls[1][1]["model"] == "customer360"
+
+
+@pytest.mark.anyio
+async def test_trace_records_tool_round_limit_termination(persistent_auth_stack):
+    repository = persistent_auth_stack.repository
+    recorder = TraceRecorder.start(
+        repository,
+        principal_id=principal().id,
+        organization_id="acme",
+        model_id="customer360",
+        question="How many customers?",
+        provider="fake",
+        llm_model="fake",
+        request_id="request-1",
+    )
+    service = ConversationService(
+        FakeLLM(),
+        MCPClientConfig("https://mcp.example", "token", SECRET),
+        max_tool_rounds=1,
+    )
+
+    with pytest.raises(
+        ConversationUnavailable,
+        match="exceeded the MCP tool-call limit",
+    ):
+        await service._tool_loop(
+            FakeSession(),
+            [{
+                "name": "search_semantics",
+                "description": "Search",
+                "inputSchema": {
+                    "properties": {"question": {}, "model": {}},
+                },
+            }],
+            "customer360",
+            "How many customers?",
+            recorder=recorder,
+        )
+
+    run = repository.trace_run(recorder.run.id)
+    assert run is not None
+    assert run.status == "failed"
+    assert run.termination_reason == "tool_round_limit"
+    assert [span.kind for span in repository.trace_spans(run.id)] == [
+        "llm",
+        "tool",
+    ]
 
 
 @pytest.mark.anyio

@@ -5,12 +5,16 @@ from .repository import (
     AuditSession,
     ConversationMessage,
     ConversationVersionConflict,
+    EvaluationResult,
+    EvaluationRun,
     MetadataRepository,
     PrincipalRecord,
     StoredConversation,
     StoredConversationTurn,
     StoredModel,
     StoredOrganization,
+    TraceRun,
+    TraceSpan,
 )
 from .sqlite import SQLiteMetadataRepository, default_database_path
 
@@ -19,6 +23,8 @@ __all__ = [
     "AuditSession",
     "ConversationMessage",
     "ConversationVersionConflict",
+    "EvaluationResult",
+    "EvaluationRun",
     "MetadataRepository",
     "PrincipalRecord",
     "SQLiteMetadataRepository",
@@ -26,5 +32,7 @@ __all__ = [
     "StoredConversationTurn",
     "StoredModel",
     "StoredOrganization",
+    "TraceRun",
+    "TraceSpan",
     "default_database_path",
 ]

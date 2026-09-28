@@ -45,6 +45,11 @@ import {
   ModelOverview,
   MCPSettings,
   MCPStatus,
+  TraceCollection,
+  TraceDetail,
+  TraceRun,
+  EvaluationCollection,
+  EvaluationRun,
   ModelProviderSettings,
   ModelProviderSettingsWrite,
   ModelSystemStatus,
@@ -82,6 +87,34 @@ export interface ApplicationContextState {
   updateMcpSettings: (maxToolRounds: number) => Promise<MCPSettings>;
   deleteMcpSettings: () => Promise<MCPSettings>;
   loadMcpStatus: (modelId: string) => Promise<MCPStatus>;
+  loadModelTraces: (
+    modelId: string,
+    options?: {
+      purpose?: "conversation" | "evaluation";
+      status?: TraceRun["status"];
+      includeAll?: boolean;
+    },
+  ) => Promise<TraceCollection>;
+  loadModelTrace: (
+    modelId: string,
+    runId: string,
+  ) => Promise<TraceDetail>;
+  loadModelEvaluations: (
+    modelId: string,
+  ) => Promise<EvaluationCollection>;
+  loadModelEvaluation: (
+    modelId: string,
+    runId: string,
+  ) => Promise<EvaluationRun>;
+  createModelEvaluation: (
+    modelId: string,
+    suiteId?: string,
+    repetitions?: number,
+  ) => Promise<EvaluationRun>;
+  cancelModelEvaluation: (
+    modelId: string,
+    runId: string,
+  ) => Promise<EvaluationRun>;
   applicationUrl?: (path: string) => string;
   loadModelGraph: (
     modelId: string,
@@ -592,6 +625,67 @@ export function useApplicationContext(
     },
     [client],
   );
+  const loadModelTraces = useCallback(
+    (
+      modelId: string,
+      options: {
+        purpose?: "conversation" | "evaluation";
+        status?: TraceRun["status"];
+        includeAll?: boolean;
+      } = {},
+    ) => {
+      const api = client();
+      if (!api.modelTraces) {
+        throw new ApiUnavailableError("MCP traces are unavailable.");
+      }
+      return api.modelTraces(modelId, options);
+    },
+    [client],
+  );
+  const loadModelTrace = useCallback((modelId: string, runId: string) => {
+    const api = client();
+    if (!api.modelTrace) {
+      throw new ApiUnavailableError("MCP trace detail is unavailable.");
+    }
+    return api.modelTrace(modelId, runId);
+  }, [client]);
+  const loadModelEvaluations = useCallback((modelId: string) => {
+    const api = client();
+    if (!api.modelEvaluations) {
+      throw new ApiUnavailableError("MCP evaluations are unavailable.");
+    }
+    return api.modelEvaluations(modelId);
+  }, [client]);
+  const loadModelEvaluation = useCallback(
+    (modelId: string, runId: string) => {
+      const api = client();
+      if (!api.modelEvaluation) {
+        throw new ApiUnavailableError("MCP evaluation detail is unavailable.");
+      }
+      return api.modelEvaluation(modelId, runId);
+    },
+    [client],
+  );
+  const createModelEvaluation = useCallback(
+    (modelId: string, suiteId = "tpcds", repetitions = 3) => {
+      const api = client();
+      if (!api.createModelEvaluation) {
+        throw new ApiUnavailableError("MCP evaluations are unavailable.");
+      }
+      return api.createModelEvaluation(modelId, suiteId, repetitions);
+    },
+    [client],
+  );
+  const cancelModelEvaluation = useCallback(
+    (modelId: string, runId: string) => {
+      const api = client();
+      if (!api.cancelModelEvaluation) {
+        throw new ApiUnavailableError("MCP evaluations are unavailable.");
+      }
+      return api.cancelModelEvaluation(modelId, runId);
+    },
+    [client],
+  );
 
   const loadModelGraph = useCallback(
     (modelId: string, options?: GraphNavigationOptions) =>
@@ -931,6 +1025,12 @@ export function useApplicationContext(
     updateMcpSettings,
     deleteMcpSettings,
     loadMcpStatus,
+    loadModelTraces,
+    loadModelTrace,
+    loadModelEvaluations,
+    loadModelEvaluation,
+    createModelEvaluation,
+    cancelModelEvaluation,
     applicationUrl: applicationUrl
       ? (path: string) => applicationUrl.call(client(), path)
       : undefined,

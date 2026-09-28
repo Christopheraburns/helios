@@ -103,6 +103,15 @@ and provenance but are not replayed into later LLM prompts. The older stateless
 `POST /api/v1/models/{model_id}/conversation/turns` endpoint remains available
 for diagnostics and compatibility.
 
+Every new turn also owns an OpenTelemetry-style trace run. Agent spans capture
+each LLM round and client-side MCP call; MCP middleware writes a separate
+server-side span for the call that actually reached the server. A signed
+`trace_run_id` and client span ID correlate the two boundaries without granting
+access. Stored payloads are recursively redacted, size bounded, and available
+only to the trace owner or an administrator of the owning organization.
+Conversation messages expose `trace_run_id` so “How Helios produced this
+answer” can deep-link to the trace canvas.
+
 Conversations have an `archived_at` state. Archiving increments the
 conversation version, prevents further turns, and removes it from the default
 list without deleting its messages, results, provenance, or audit history. The
@@ -140,6 +149,29 @@ The API Application:
 The LLM is not an authorization boundary. Prompt text cannot select another
 model, and MCP independently reloads grants and authorizes every tool call.
 The BFF does not accept arbitrary SQL.
+
+## Trace and evaluation workflow
+
+Govern > MCP Management includes an execution canvas for conversation and
+evaluation traces. It renders the question, LLM rounds, MCP calls, independently
+observed server calls, and terminal answer or failure. Selecting a node reveals
+its sanitized input, output, attributes, latency, status, and token usage.
+
+Organization administrators can run the versioned `tpcds-v1` starter suite
+against the project-default model and their current session override. The
+background runner uses the same prompt, tool definitions, and tool limit for
+both variants, and repeats each question one to five times. Reference SQL is
+executed through the configured Impala engine; result equivalence determines
+answer accuracy. Aggregate metrics cover completion, excess, invalid and
+redundant calls, recovery after errors, semantic grounding, tokens per correct
+answer, and elapsed time per correct answer. Runs may be cancelled, survive in
+metadata for later comparison, and link every result to its full trace.
+
+Evaluation execution is local to the API process. A queued or running
+evaluation is marked failed after an API restart because in-process tasks
+cannot resume. This is an interim design while SQLite remains the operational
+store; horizontally scaled or resumable workers require a shared transactional
+database and durable job queue.
 
 ## MCP interface
 

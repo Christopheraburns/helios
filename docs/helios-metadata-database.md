@@ -16,6 +16,8 @@ The database contains application state such as:
 - Model and DataSource registrations;
 - model-to-DataSource associations;
 - persisted conversations and messages;
+- conversation trace runs and structured agent/MCP spans;
+- model evaluation runs, per-question results, and aggregate metrics;
 - audit and activity events;
 - schema migration history.
 
@@ -23,6 +25,19 @@ Discovery outputs, profiles, semantic artifacts, and ontology artifacts remain
 in their respective `runs/` and `models/` locations. Atlas remains authoritative
 for Atlas-managed glossary content. Credentials and tokens belong in Cloudera
 environment or secret configuration and must not be stored in `helios.db`.
+
+Trace records include sanitized LLM/tool payloads, latency, token counts,
+termination reasons, model and prompt versions, and client/server correlation.
+Secret-like fields are redacted and large values are truncated before they
+reach SQLite. Evaluation rows reference their trace runs instead of duplicating
+full step payloads.
+
+SQLite is appropriate for the current single-API-process evaluation runner,
+but increasing CPU and memory does not change SQLite's one-writer concurrency
+model. Do not run multiple API replicas or concurrent evaluation workers
+against this file. Before introducing resumable workers or horizontal scaling,
+move operational metadata to a shared transactional service and use a durable
+job queue.
 
 ## SQLite journal files
 

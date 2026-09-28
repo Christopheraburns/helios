@@ -557,6 +557,44 @@ is supplied as bounded history to later LLM calls; prior rows and tool results
 are not replayed into prompts. The browser never receives Mistral, MCP, Impala,
 or delegation secrets.
 
+## MCP traces and model evaluation
+
+The model-scoped trace contract is:
+
+```text
+GET /api/v1/models/{model_id}/traces
+GET /api/v1/models/{model_id}/traces/{run_id}
+GET /api/v1/models/{model_id}/traces/{run_id}/spans/{span_id}
+```
+
+The collection supports `purpose=conversation|evaluation` and bounded paging.
+Users see their own traces. `include_all=true` requires
+`organization.manage` and returns traces from the model's organization. Trace
+detail includes sanitized, bounded run and span data; ownership failures return
+404 rather than disclosing another user's run. Conversation turns include a
+`trace_run_id` for direct navigation to Govern > MCP Management > Traces.
+
+The administrator-only evaluation contract is:
+
+```text
+GET    /api/v1/models/{model_id}/evaluation-suites
+POST   /api/v1/models/{model_id}/evaluation-suites/import
+GET    /api/v1/models/{model_id}/evaluations
+POST   /api/v1/models/{model_id}/evaluations
+GET    /api/v1/models/{model_id}/evaluations/{evaluation_id}
+POST   /api/v1/models/{model_id}/evaluations/{evaluation_id}/cancel
+```
+
+All evaluation endpoints require `organization.manage`. Creation compares the
+project-default LLM with the caller's current session override using the same
+versioned suite, prompt and tool-call limit. The API launches a background task
+and the UI polls only while status is `queued` or `running`. Detail returns
+per-question results, linked trace IDs, and aggregate accuracy, completion,
+efficiency, invalid/redundant-call, recovery, and grounding metrics.
+
+The built-in `tpcds-v1` suite is loaded from `eval/tpcds-v1.json`. Imports are
+validated before storage and cannot replace a built-in suite version.
+
 ## Current UI coverage and remaining limits
 
 Existing APIs need not be redesigned for the covered capabilities.

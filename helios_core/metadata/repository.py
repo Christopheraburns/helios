@@ -53,6 +53,7 @@ class StoredConversationTurn:
     tool_trace: tuple[dict[str, Any], ...] = ()
     query_result: dict[str, Any] | None = None
     provenance: dict[str, Any] | None = None
+    trace_run_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -103,6 +104,85 @@ class AuditSession:
     last_seen_at: datetime
     event_count: int
     organization_id: str | None = None
+
+
+@dataclass(frozen=True)
+class TraceRun:
+    id: str
+    principal_id: str
+    organization_id: str
+    model_id: str
+    purpose: str
+    question: str
+    llm_provider: str
+    llm_model: str
+    prompt_version: str
+    status: str
+    started_at: datetime
+    request_id: str | None = None
+    conversation_id: str | None = None
+    question_id: str | None = None
+    termination_reason: str | None = None
+    answer: str | None = None
+    completed_at: datetime | None = None
+    duration_ms: float | None = None
+    tokens_in: int = 0
+    tokens_out: int = 0
+
+
+@dataclass(frozen=True)
+class TraceSpan:
+    id: str
+    run_id: str
+    sequence: int
+    component: str
+    kind: str
+    name: str
+    status: str
+    started_at: datetime
+    parent_span_id: str | None = None
+    completed_at: datetime | None = None
+    latency_ms: float | None = None
+    input: dict[str, Any] | list[Any] | str | None = None
+    output: dict[str, Any] | list[Any] | str | None = None
+    attributes: dict[str, Any] | None = None
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class EvaluationRun:
+    id: str
+    principal_id: str
+    organization_id: str
+    model_id: str
+    suite_id: str
+    suite_version: str
+    status: str
+    repetitions: int
+    baseline_provider: str
+    baseline_model: str
+    candidate_provider: str
+    candidate_model: str
+    max_tool_rounds: int
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    error: str | None = None
+    metrics: dict[str, Any] | None = None
+    cancel_requested: bool = False
+
+
+@dataclass(frozen=True)
+class EvaluationResult:
+    id: str
+    evaluation_run_id: str
+    question_id: str
+    variant: str
+    repetition: int
+    trace_run_id: str
+    accurate: bool
+    completed: bool
+    metrics: dict[str, Any] | None = None
 
 
 class MetadataRepository(Protocol):
@@ -211,6 +291,73 @@ class MetadataRepository(Protocol):
         *,
         archived: bool,
     ) -> StoredConversation: ...
+
+    def create_trace_run(self, run: TraceRun) -> TraceRun: ...
+
+    def update_trace_run(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        termination_reason: str | None = None,
+        answer: str | None = None,
+        completed_at: datetime | None = None,
+        duration_ms: float | None = None,
+        tokens_in: int = 0,
+        tokens_out: int = 0,
+        conversation_id: str | None = None,
+    ) -> TraceRun: ...
+
+    def append_trace_span(self, span: TraceSpan) -> TraceSpan: ...
+
+    def trace_run(self, run_id: str) -> TraceRun | None: ...
+
+    def trace_spans(self, run_id: str) -> list[TraceSpan]: ...
+
+    def trace_runs(
+        self,
+        *,
+        model_id: str,
+        principal_id: str | None = None,
+        purpose: str | None = None,
+        status: str | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[TraceRun], int]: ...
+
+    def create_evaluation_run(self, run: EvaluationRun) -> EvaluationRun: ...
+
+    def update_evaluation_run(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        started_at: datetime | None = None,
+        completed_at: datetime | None = None,
+        error: str | None = None,
+        metrics: dict[str, Any] | None = None,
+        cancel_requested: bool | None = None,
+    ) -> EvaluationRun: ...
+
+    def evaluation_run(self, run_id: str) -> EvaluationRun | None: ...
+
+    def evaluation_runs(
+        self,
+        *,
+        model_id: str,
+        organization_id: str,
+        limit: int = 50,
+    ) -> list[EvaluationRun]: ...
+
+    def append_evaluation_result(
+        self, result: EvaluationResult
+    ) -> EvaluationResult: ...
+
+    def evaluation_results(
+        self, evaluation_run_id: str
+    ) -> list[EvaluationResult]: ...
+
+    def fail_interrupted_evaluations(self) -> int: ...
 
     def append_audit_event(self, event: AuditEvent) -> AuditEvent: ...
 

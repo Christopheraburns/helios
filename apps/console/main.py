@@ -85,6 +85,7 @@ if _metadata_findings == ("ok",) or not Path(
     app.state.metadata_repository.path
 ).exists():
     app.state.metadata_repository.migrate()
+    app.state.metadata_repository.fail_interrupted_evaluations()
     audit.purge_expired(app.state.metadata_repository)
 else:
     LOGGER.error(

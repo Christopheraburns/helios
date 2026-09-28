@@ -201,4 +201,128 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON conversation_turns (conversation_id, created_at, id);
         """,
     ),
+    (
+        6,
+        """
+        ALTER TABLE conversation_turns
+            ADD COLUMN trace_run_id TEXT;
+
+        CREATE TABLE agent_trace_runs (
+            id TEXT PRIMARY KEY,
+            request_id TEXT,
+            conversation_id TEXT
+                REFERENCES conversations(id) ON DELETE SET NULL,
+            principal_id TEXT NOT NULL REFERENCES principals(id),
+            organization_id TEXT NOT NULL
+                REFERENCES organizations(id) ON DELETE CASCADE,
+            model_id TEXT NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+            purpose TEXT NOT NULL CHECK (
+                purpose IN ('conversation', 'evaluation')
+            ),
+            question_id TEXT,
+            question TEXT NOT NULL,
+            llm_provider TEXT NOT NULL,
+            llm_model TEXT NOT NULL,
+            prompt_version TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN ('running', 'completed', 'failed', 'cancelled')
+            ),
+            termination_reason TEXT,
+            answer TEXT,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            duration_ms REAL,
+            tokens_in INTEGER NOT NULL DEFAULT 0,
+            tokens_out INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX agent_trace_runs_owner_model_time_idx
+            ON agent_trace_runs (
+                principal_id, model_id, started_at DESC, id DESC
+            );
+        CREATE INDEX agent_trace_runs_org_time_idx
+            ON agent_trace_runs (
+                organization_id, started_at DESC, id DESC
+            );
+
+        CREATE TABLE agent_trace_spans (
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL
+                REFERENCES agent_trace_runs(id) ON DELETE CASCADE,
+            parent_span_id TEXT,
+            sequence INTEGER NOT NULL,
+            component TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            name TEXT NOT NULL,
+            status TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            latency_ms REAL,
+            input_json TEXT NOT NULL DEFAULT '{}',
+            output_json TEXT NOT NULL DEFAULT '{}',
+            attributes_json TEXT NOT NULL DEFAULT '{}',
+            error TEXT,
+            UNIQUE (run_id, sequence, component)
+        );
+
+        CREATE INDEX agent_trace_spans_run_sequence_idx
+            ON agent_trace_spans (run_id, sequence, component, id);
+
+        CREATE TABLE evaluation_runs (
+            id TEXT PRIMARY KEY,
+            principal_id TEXT NOT NULL REFERENCES principals(id),
+            organization_id TEXT NOT NULL
+                REFERENCES organizations(id) ON DELETE CASCADE,
+            model_id TEXT NOT NULL REFERENCES models(id) ON DELETE CASCADE,
+            suite_id TEXT NOT NULL,
+            suite_version TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (
+                status IN (
+                    'queued', 'running', 'completed', 'failed', 'cancelled'
+                )
+            ),
+            repetitions INTEGER NOT NULL,
+            baseline_provider TEXT NOT NULL,
+            baseline_model TEXT NOT NULL,
+            candidate_provider TEXT NOT NULL,
+            candidate_model TEXT NOT NULL,
+            max_tool_rounds INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            error TEXT,
+            metrics_json TEXT NOT NULL DEFAULT '{}',
+            cancel_requested INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX evaluation_runs_org_model_time_idx
+            ON evaluation_runs (
+                organization_id, model_id, created_at DESC, id DESC
+            );
+
+        CREATE TABLE evaluation_results (
+            id TEXT PRIMARY KEY,
+            evaluation_run_id TEXT NOT NULL
+                REFERENCES evaluation_runs(id) ON DELETE CASCADE,
+            question_id TEXT NOT NULL,
+            variant TEXT NOT NULL CHECK (
+                variant IN ('baseline', 'candidate')
+            ),
+            repetition INTEGER NOT NULL,
+            trace_run_id TEXT NOT NULL
+                REFERENCES agent_trace_runs(id) ON DELETE CASCADE,
+            accurate INTEGER NOT NULL DEFAULT 0,
+            completed INTEGER NOT NULL DEFAULT 0,
+            metrics_json TEXT NOT NULL DEFAULT '{}',
+            UNIQUE (
+                evaluation_run_id, question_id, variant, repetition
+            )
+        );
+
+        CREATE INDEX evaluation_results_run_question_idx
+            ON evaluation_results (
+                evaluation_run_id, question_id, variant, repetition
+            );
+        """,
+    ),
 )

@@ -24,6 +24,7 @@ class DelegatedContext:
     expires_at: int
     request_id: str | None = None
     session_id: str | None = None
+    trace_run_id: str | None = None
 
 
 def _encode(value: bytes) -> str:
@@ -51,6 +52,7 @@ def issue_assertion(
     lifetime_seconds: int = 60,
     request_id: str | None = None,
     session_id: str | None = None,
+    trace_run_id: str | None = None,
 ) -> str:
     if not organization_id or not model_id:
         raise DelegationError("organization and model context are required")
@@ -72,6 +74,7 @@ def issue_assertion(
         "model_id": model_id,
         "request_id": request_id,
         "session_id": session_id,
+        "trace_run_id": trace_run_id,
     }
     body = _encode(
         json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
@@ -137,6 +140,9 @@ def verify_assertion(
         raise DelegationError("delegated model is required")
     request_id = _optional_correlation(payload.get("request_id"), "request")
     session_id = _optional_correlation(payload.get("session_id"), "session")
+    trace_run_id = _optional_correlation(
+        payload.get("trace_run_id"), "trace run"
+    )
     return DelegatedContext(
         principal,
         organization_id,
@@ -144,6 +150,7 @@ def verify_assertion(
         expires_at,
         request_id,
         session_id,
+        trace_run_id,
     )
 
 
