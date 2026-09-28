@@ -24,6 +24,8 @@ from fastapi import HTTPException
 
 from helios_core.metadata import SQLiteMetadataRepository
 from .api import api_router, principal_from_request
+from .mcp_settings import DEFAULT_SESSION_MCP_SETTINGS_STORE
+from .model_provider import DEFAULT_SESSION_MODEL_PROVIDER_STORE
 from .review import review_router
 
 HERE = Path(__file__).parent
@@ -63,7 +65,7 @@ def configure_cors(application: FastAPI, value: str | None = None) -> list[str]:
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=[
             "Accept",
             "Content-Type",
@@ -76,6 +78,8 @@ def configure_cors(application: FastAPI, value: str | None = None) -> list[str]:
 
 configure_cors(app)
 app.state.metadata_repository = SQLiteMetadataRepository()
+app.state.model_provider_settings = DEFAULT_SESSION_MODEL_PROVIDER_STORE
+app.state.mcp_settings = DEFAULT_SESSION_MCP_SETTINGS_STORE
 _metadata_findings = app.state.metadata_repository.integrity_check()
 if _metadata_findings == ("ok",) or not Path(
     app.state.metadata_repository.path

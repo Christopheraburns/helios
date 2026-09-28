@@ -255,16 +255,39 @@ latency. The UI displays cycling progress messages while the request remains
 active, but long-running production queries should eventually move to an
 asynchronous execution and polling contract.
 
-When `MISTRAL_API_KEY` is present and `LLM_PROVIDER` is unset, Helios uses
-Mistral's OpenAI-compatible `https://api.mistral.ai/v1` endpoint with
-`mistral-small-latest`. `MISTRAL_MODEL` and `MISTRAL_BASE_URL` may override
-those defaults. The key remains only in the API Application environment.
+When `MISTRAL_API_KEY` is present, `ANTHROPIC_API_KEY` is absent, and
+`LLM_PROVIDER` is unset, Helios uses Mistral's OpenAI-compatible
+`https://api.mistral.ai/v1` endpoint with `mistral-small-latest`.
+`MISTRAL_MODEL` and `MISTRAL_BASE_URL` may override those defaults. Set
+`LLM_PROVIDER` explicitly when more than one provider credential exists.
 
 Anthropic remains available through `LLM_PROVIDER=anthropic`,
 `ANTHROPIC_API_KEY`, and `ANTHROPIC_MODEL`. For an OpenAI-compatible Cloudera
 AI Inference endpoint, use
 `LLM_PROVIDER=openai`, `INFERENCE_BASE_URL`, `INFERENCE_MODEL`, and optionally
 `INFERENCE_API_KEY` instead.
+
+### End-user session override
+
+The Govern > AI Model Provider page lets an authenticated user override the
+environment default for their current browser session. It supports Anthropic,
+Mistral, Amazon Bedrock, and the administrator-configured OpenAI-compatible
+endpoint. The user selects a provider and exact model ID and supplies their own
+API key.
+
+The browser sends the key once over the existing credentialed HTTPS API
+connection. The API stores it only in process memory, keyed by authenticated
+Principal and `X-Helios-Session-ID`. It is never returned by the settings API,
+written to `helios.db`, included in audit details, or sent to MCP. The user can
+clear it with **Use project default**; API restart also clears every override.
+Overrides expire after 12 hours. The environment configuration remains the
+fallback for sessions without an override.
+
+OpenAI-compatible endpoints cannot be supplied by end users. They must be set
+by an administrator through `INFERENCE_BASE_URL`, preventing arbitrary
+server-side URL requests. Bedrock uses the deployment's `AWS_REGION` or
+`AWS_DEFAULT_REGION` (default `us-east-1`) and the Bedrock Converse API with
+the user-supplied Bedrock bearer key.
 
 Helios MCP Application:
 

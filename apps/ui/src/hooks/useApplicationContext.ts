@@ -43,6 +43,10 @@ import {
   ReviewSection,
   ReviewSummary,
   ModelOverview,
+  MCPSettings,
+  MCPStatus,
+  ModelProviderSettings,
+  ModelProviderSettingsWrite,
   ModelSystemStatus,
   ModelSummary,
   OrganizationSummary,
@@ -69,6 +73,15 @@ export interface ApplicationContextState {
   selectOrganization: (organizationId: string) => void;
   selectModel: (modelId: string) => void;
   retry: () => void;
+  loadModelProviderSettings: () => Promise<ModelProviderSettings>;
+  updateModelProviderSettings: (
+    settings: ModelProviderSettingsWrite,
+  ) => Promise<ModelProviderSettings>;
+  deleteModelProviderSettings: () => Promise<ModelProviderSettings>;
+  loadMcpSettings: () => Promise<MCPSettings>;
+  updateMcpSettings: (maxToolRounds: number) => Promise<MCPSettings>;
+  deleteMcpSettings: () => Promise<MCPSettings>;
+  loadMcpStatus: (modelId: string) => Promise<MCPStatus>;
   applicationUrl?: (path: string) => string;
   loadModelGraph: (
     modelId: string,
@@ -518,6 +531,68 @@ export function useApplicationContext(
     [client, models, selectedOrganizationId, writeContext],
   );
 
+  const loadModelProviderSettings = useCallback(() => {
+    const api = client();
+    if (!api.modelProviderSettings) {
+      throw new ApiUnavailableError("Model provider settings are unavailable.");
+    }
+    return api.modelProviderSettings();
+  }, [client]);
+  const updateModelProviderSettings = useCallback(
+    (settings: ModelProviderSettingsWrite) => {
+      const api = client();
+      if (!api.updateModelProviderSettings) {
+        throw new ApiUnavailableError(
+          "Model provider settings are unavailable.",
+        );
+      }
+      return api.updateModelProviderSettings(settings);
+    },
+    [client],
+  );
+  const deleteModelProviderSettings = useCallback(() => {
+    const api = client();
+    if (!api.deleteModelProviderSettings) {
+      throw new ApiUnavailableError("Model provider settings are unavailable.");
+    }
+    return api.deleteModelProviderSettings();
+  }, [client]);
+
+  const loadMcpSettings = useCallback(() => {
+    const api = client();
+    if (!api.mcpSettings) {
+      throw new ApiUnavailableError("MCP settings are unavailable.");
+    }
+    return api.mcpSettings();
+  }, [client]);
+  const updateMcpSettings = useCallback(
+    (maxToolRounds: number) => {
+      const api = client();
+      if (!api.updateMcpSettings) {
+        throw new ApiUnavailableError("MCP settings are unavailable.");
+      }
+      return api.updateMcpSettings(maxToolRounds);
+    },
+    [client],
+  );
+  const deleteMcpSettings = useCallback(() => {
+    const api = client();
+    if (!api.deleteMcpSettings) {
+      throw new ApiUnavailableError("MCP settings are unavailable.");
+    }
+    return api.deleteMcpSettings();
+  }, [client]);
+  const loadMcpStatus = useCallback(
+    (modelId: string) => {
+      const api = client();
+      if (!api.mcpStatus) {
+        throw new ApiUnavailableError("MCP status is unavailable.");
+      }
+      return api.mcpStatus(modelId);
+    },
+    [client],
+  );
+
   const loadModelGraph = useCallback(
     (modelId: string, options?: GraphNavigationOptions) =>
       client().modelGraph(modelId, options),
@@ -849,6 +924,13 @@ export function useApplicationContext(
     selectOrganization,
     selectModel,
     retry: () => setLoadVersion((version) => version + 1),
+    loadModelProviderSettings,
+    updateModelProviderSettings,
+    deleteModelProviderSettings,
+    loadMcpSettings,
+    updateMcpSettings,
+    deleteMcpSettings,
+    loadMcpStatus,
     applicationUrl: applicationUrl
       ? (path: string) => applicationUrl.call(client(), path)
       : undefined,
