@@ -160,6 +160,8 @@ class ConversationTurnResponse(BaseModel):
     answer: str
     tool_trace: list[ConversationToolTraceResponse]
     query_result: ConversationQueryResultResponse | None = None
+    provenance: dict[str, Any] = Field(default_factory=dict)
+    request_id: str | None = None
 
 
 class ConversationMessageResponse(BaseModel):
@@ -167,6 +169,7 @@ class ConversationMessageResponse(BaseModel):
     role: Literal["user", "assistant"]
     content: str
     created_at: datetime
+    turn: ConversationTurnResponse | None = None
 
 
 class ConversationSummaryResponse(BaseModel):
@@ -176,6 +179,7 @@ class ConversationSummaryResponse(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+    archived_at: datetime | None = None
 
 
 class ConversationDetailResponse(ConversationSummaryResponse):
@@ -190,6 +194,10 @@ class ConversationCollectionResponse(BaseModel):
 class PersistedConversationTurnResponse(BaseModel):
     conversation: ConversationDetailResponse
     turn: ConversationTurnResponse
+
+
+class ConversationArchiveRequest(BaseModel):
+    archived: bool = True
 
 
 class AuditClientEventRequest(BaseModel):
@@ -993,6 +1001,10 @@ def _conversation_response(
     *,
     include_messages: bool,
 ) -> dict:
+    turns = {
+        turn.assistant_message_id: turn
+        for turn in conversation.turns
+    }
     response = {
         "id": conversation.id,
         "model_id": conversation.model_id,
@@ -1000,6 +1012,7 @@ def _conversation_response(
         "version": conversation.version,
         "created_at": conversation.created_at,
         "updated_at": conversation.updated_at,
+        "archived_at": conversation.archived_at,
     }
     if include_messages:
         response["messages"] = [
@@ -1008,6 +1021,20 @@ def _conversation_response(
                 "role": message.role,
                 "content": message.content,
                 "created_at": message.created_at,
+                "turn": (
+                    {
+                        "model_id": conversation.model_id,
+                        "answer": message.content,
+                        "tool_trace": list(
+                            turns[message.id].tool_trace
+                        ),
+                        "query_result": turns[message.id].query_result,
+                        "provenance": turns[message.id].provenance or {},
+                        "request_id": turns[message.id].request_id,
+                    }
+                    if message.id in turns
+                    else None
+                ),
             }
             for message in conversation.messages
         ]
@@ -1472,10 +1499,13 @@ def list_model_conversations(
         AuthorizedModel,
         Depends(authorize_model(authz.Action.MODEL_READ)),
     ],
+    include_archived: bool = False,
 ) -> dict:
     repository: MetadataRepository = request.app.state.metadata_repository
     conversations = repository.conversations_for_principal(
-        context.model.id, context.principal.id
+        context.model.id,
+        context.principal.id,
+        include_archived=include_archived,
     )
     return {
         "model_id": context.model.id,
@@ -1520,6 +1550,7 @@ async def create_model_conversation(
         _conversation_title(message),
         message,
         turn["answer"],
+        turn,
     )
     return {
         "conversation": _conversation_response(
@@ -1552,6 +1583,32 @@ def get_model_conversation(
     return _conversation_response(conversation, include_messages=True)
 
 
+@api_router.patch(
+    "/models/{model_id}/conversations/{conversation_id}",
+    response_model=ConversationDetailResponse,
+)
+def archive_model_conversation(
+    conversation_id: str,
+    body: ConversationArchiveRequest,
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+) -> dict:
+    repository: MetadataRepository = request.app.state.metadata_repository
+    try:
+        conversation = repository.archive_conversation(
+            conversation_id,
+            context.model.id,
+            context.principal.id,
+            archived=body.archived,
+        )
+    except LookupError as exc:
+        raise HTTPException(404, "conversation not found") from exc
+    return _conversation_response(conversation, include_messages=True)
+
+
 @api_router.post(
     "/models/{model_id}/conversations/{conversation_id}/turns",
     response_model=PersistedConversationTurnResponse,
@@ -1578,6 +1635,11 @@ async def append_model_conversation_turn(
     )
     if conversation is None:
         raise HTTPException(404, "conversation not found")
+    if conversation.archived_at is not None:
+        raise HTTPException(
+            409,
+            "archived conversations cannot accept new messages",
+        )
     if conversation.version != body.expected_version:
         raise HTTPException(
             409,
@@ -1602,6 +1664,7 @@ async def append_model_conversation_turn(
             body.expected_version,
             message,
             turn["answer"],
+            turn,
         )
     except ConversationVersionConflict as exc:
         raise HTTPException(409, str(exc)) from exc

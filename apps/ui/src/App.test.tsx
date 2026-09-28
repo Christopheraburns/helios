@@ -597,6 +597,7 @@ function successfulClient(): HeliosApi {
     createModelConversation: vi.fn(),
     modelConversation: vi.fn(),
     appendModelConversationTurn: vi.fn(),
+    archiveModelConversation: vi.fn(),
     auditEvents: vi.fn().mockResolvedValue({
       items: [
         {
@@ -702,8 +703,40 @@ describe("Helios application shell", () => {
     expect(screen.getByLabelText("Model")).toBeDisabled();
   });
 
+  it("opens Talk to Your Data as the conversation-first home", async () => {
+    const client = successfulClient();
+    window.history.replaceState(
+      {},
+      "",
+      "/?organization=north&model=north-model",
+    );
+
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "North Model" }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(window.location.pathname).toBe("/talk"));
+    const navigation = screen.getByRole("navigation", {
+      name: "Primary navigation",
+    });
+    expect(within(navigation).getByRole("heading", { name: "Ask" }))
+      .toBeInTheDocument();
+    expect(within(navigation).getByRole("heading", { name: "Build" }))
+      .toBeInTheDocument();
+    expect(within(navigation).getByRole("heading", { name: "Govern" }))
+      .toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Helios Talk to Your Data" }),
+    ).toHaveAttribute(
+      "href",
+      "/talk?organization=north&model=north-model",
+    );
+  });
+
   it("loads API-backed selectors, account identity, and model overview", async () => {
     const client = successfulClient();
+    window.history.replaceState({}, "", "/model-overview");
     render(<App client={client} />);
 
     expect(
@@ -726,7 +759,7 @@ describe("Helios application shell", () => {
     expect(screen.queryByRole("link", { name: "Publish" }))
       .not.toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Primary navigation" }))
-      .toHaveTextContent("Governance");
+      .toHaveTextContent("GovernGlossary");
     expect(
       await screen.findByRole("heading", { name: "Helios health" }),
     ).toBeInTheDocument();
@@ -741,6 +774,7 @@ describe("Helios application shell", () => {
 
   it("loads infrastructure checks only when an administrator expands them", async () => {
     const client = successfulClient();
+    window.history.replaceState({}, "", "/model-overview");
     vi.mocked(client.modelStatus).mockImplementation(
       (_modelId, includeDetails) =>
         Promise.resolve(
@@ -786,6 +820,7 @@ describe("Helios application shell", () => {
 
   it("shows a model status loading state independently", async () => {
     const client = successfulClient();
+    window.history.replaceState({}, "", "/model-overview");
     vi.mocked(client.modelStatus).mockImplementation(
       () => new Promise<ModelSystemStatus>(() => undefined),
     );
@@ -800,6 +835,7 @@ describe("Helios application shell", () => {
 
   it("shows status errors and retries without hiding the model overview", async () => {
     const client = successfulClient();
+    window.history.replaceState({}, "", "/model-overview");
     vi.mocked(client.modelStatus)
       .mockRejectedValueOnce(new Error("Status request failed."))
       .mockResolvedValueOnce(systemStatus());
@@ -847,7 +883,9 @@ describe("Helios application shell", () => {
     expect(navigation.parentElement).toHaveClass(
       "app__body--workspace-collapsed",
     );
-    expect(screen.getByRole("link", { name: "Canvas" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Semantic Model" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Expand workspace" }),
     ).toHaveAttribute("aria-expanded", "false");
@@ -855,6 +893,25 @@ describe("Helios application shell", () => {
       expect(window.localStorage.getItem("helios.workspace.collapsed"))
         .toBe("true"),
     );
+  });
+
+  it("opens and dismisses the responsive navigation drawer with the keyboard", async () => {
+    window.history.replaceState({}, "", "/talk");
+    render(<App client={successfulClient()} />);
+    await screen.findByRole("heading", { name: "North Model" });
+
+    const navigation = screen.getByRole("navigation", {
+      name: "Primary navigation",
+    });
+    const menu = screen.getByRole("button", { name: "Menu" });
+    fireEvent.click(menu);
+
+    expect(navigation).toHaveClass("primary-nav--mobile-open");
+    expect(document.activeElement).toHaveClass("primary-nav__mobile-close");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(navigation).not.toHaveClass("primary-nav--mobile-open");
+    expect(menu).toHaveFocus();
   });
 
   it("renders authentication errors without fabricating workspace data", async () => {
@@ -948,7 +1005,7 @@ describe("Helios application shell", () => {
     render(<App client={client} />);
     await screen.findByRole("heading", { name: "North Model" });
 
-    fireEvent.click(screen.getByRole("link", { name: "Canvas" }));
+    fireEvent.click(screen.getByRole("link", { name: "Semantic Model" }));
 
     expect(
       await screen.findByRole("heading", { name: "North Model" }),
@@ -1010,6 +1067,7 @@ describe("Helios application shell", () => {
 
   it("reviews a proposal and reconciles it with the API response", async () => {
     const client = successfulClient();
+    window.history.replaceState({}, "", "/model-overview");
     let approved = false;
     const reviewGraph = () => ({
       ...graph,
@@ -1142,6 +1200,7 @@ describe("Helios application shell", () => {
 
   it("runs authorized bulk, reset, and publish review actions", async () => {
     const client = successfulClient();
+    window.history.replaceState({}, "", "/model-overview");
     const summary = reviewSummary({
       available_actions: [
         "decide",
@@ -1229,6 +1288,7 @@ describe("Helios application shell", () => {
 
   it("keeps review state visible when publishing fails", async () => {
     const client = successfulClient();
+    window.history.replaceState({}, "", "/model-overview");
     vi.mocked(client.modelReview).mockResolvedValue(
       reviewSummary({
         available_actions: ["publish"],
@@ -1272,8 +1332,8 @@ describe("Helios application shell", () => {
     expect(await screen.findByLabelText("Model")).toHaveValue("south-model");
     expect(client.models).toHaveBeenCalledWith("south");
 
-    fireEvent.click(screen.getByRole("link", { name: "Overview" }));
-    expect(window.location.pathname).toBe("/");
+    fireEvent.click(screen.getByRole("link", { name: "Model Overview" }));
+    expect(window.location.pathname).toBe("/model-overview");
     expect(window.location.search).toContain("organization=south");
     expect(window.location.search).toContain("model=south-model");
   });
@@ -1295,7 +1355,7 @@ describe("Helios application shell", () => {
       expect(window.location.search).toContain("organization=north");
     });
     expect(screen.getByLabelText("Model")).toHaveValue("north-model");
-    expect(screen.getByRole("link", { name: "Canvas" }))
+    expect(screen.getByRole("link", { name: "Semantic Model" }))
       .toHaveAttribute(
         "href",
         "/canvas?organization=north&model=north-model",
@@ -1316,11 +1376,18 @@ describe("Helios application shell", () => {
     render(<App client={client} />);
 
     expect(
-      await screen.findByRole("heading", { name: "No models available" }),
+      await screen.findByRole("heading", {
+        name: "No semantic models available",
+      }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Organization")).toHaveValue("north");
     expect(screen.getByLabelText("Model")).toBeDisabled();
     expect(window.location.search).not.toContain("model=");
+    expect(
+      screen.queryByRole("heading", { name: "Build" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Activity Logs" }))
+      .toBeInTheDocument();
   });
 
   it("renders model-scoped runs with evidence-backed and unavailable lifecycle values", async () => {
@@ -2215,8 +2282,42 @@ describe("Helios application shell", () => {
           role: "assistant",
           content: "Six governed metrics are available.",
           created_at: "2026-09-24T16:00:01+00:00",
+          turn: {
+            model_id: "north-model",
+            answer: "Six governed metrics are available.",
+            tool_trace: [
+              {
+                tool: "run_query",
+                arguments: { model: "north-model" },
+                result: { columns: ["metric_count"], rows: [[6]] },
+              },
+            ],
+            query_result: {
+              columns: ["metric_count"],
+              rows: [[6]],
+              sql: "SELECT 6",
+            },
+            provenance: {
+              helios: { api_version: "0.1.0" },
+              llm: {
+                provider: "mistral",
+                model: "mistral-small-latest",
+              },
+              mcp: {
+                server_name: "helios",
+                server_version: "0.1.0",
+                protocol_version: "2025-11-25",
+              },
+            },
+            request_id: "request-saved-1",
+          },
         },
       ],
+    });
+    vi.mocked(client.archiveModelConversation!).mockResolvedValue({
+      ...(await client.modelConversation!("north-model", "saved-1")),
+      version: 2,
+      archived_at: "2026-09-24T16:02:00+00:00",
     });
     window.history.replaceState(
       {},
@@ -2232,12 +2333,29 @@ describe("Helios application shell", () => {
       "north-model",
       "saved-1",
     );
+    expect(screen.getByText("metric_count")).toBeInTheDocument();
+    expect(screen.getByText("mistral · mistral-small-latest"))
+      .toBeInTheDocument();
+    expect(screen.getByText("helios · 0.1.0")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Talk to Your Data" }),
     ).toHaveAttribute(
       "href",
       "/talk?organization=north&model=north-model",
     );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Archive Saved question" }),
+    );
+    await waitFor(() =>
+      expect(client.archiveModelConversation).toHaveBeenCalledWith(
+        "north-model",
+        "saved-1",
+        true,
+      ),
+    );
+    expect(
+      screen.queryByText("Six governed metrics are available."),
+    ).not.toBeInTheDocument();
   });
 
   it("shows conversation authorization failures without crashing the workspace", async () => {

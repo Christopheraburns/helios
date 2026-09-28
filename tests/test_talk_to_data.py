@@ -221,7 +221,7 @@ def test_conversation_repository_persists_owned_model_history(
         "There are 12 customers in the result.",
     )
 
-    assert repository.schema_version() == 4
+    assert repository.schema_version() == 5
     assert created.version == 1
     assert [message.role for message in created.messages] == [
         "user",
@@ -741,6 +741,8 @@ def test_impala_proxy_delegation_stops_on_identity_mismatch(monkeypatch):
 class FakeLLM:
     def __init__(self):
         self.turn = 0
+        self.provider = "fake"
+        self.model = "fake"
 
     def tool_turn(self, _system, _messages, _tools):
         self.turn += 1
@@ -1013,6 +1015,12 @@ async def test_conversation_turn_uses_real_mcp_transport(
     assert result["query_result"]["rows"] == [[12]]
     assert result["tool_trace"][0]["arguments"]["model"] == "customer360"
     assert result["tool_trace"][1]["arguments"]["model"] == "customer360"
+    assert result["provenance"]["llm"] == {
+        "provider": "fake",
+        "model": "fake",
+    }
+    assert result["provenance"]["mcp"]["server_name"] == "helios"
+    assert result["provenance"]["mcp"]["server_version"] == "0.1.0"
 
 
 class FakeConversationService:
@@ -1045,6 +1053,19 @@ class FakeConversationService:
                 "rows": [["sensitive transient value"]],
                 "sql": "SELECT sensitive_value",
             },
+            "provenance": {
+                "helios": {"api_version": "0.1.0"},
+                "llm": {
+                    "provider": "mistral",
+                    "model": "mistral-small-latest",
+                },
+                "mcp": {
+                    "server_name": "helios",
+                    "server_version": "0.1.0",
+                    "protocol_version": "2025-11-25",
+                },
+            },
+            "request_id": "request-talk-test",
         }
 
 
@@ -1126,6 +1147,34 @@ def test_persistent_conversation_api_restores_history_and_isolates_owner(
                 headers={"x-forwarded-user": "owner"},
                 json={"message": "Stale", "expected_version": 1},
             )
+            detail = client.get(
+                f"/api/v1/models/customer360/conversations/{conversation_id}",
+                headers={"x-forwarded-user": "owner"},
+            )
+            archived = client.patch(
+                f"/api/v1/models/customer360/conversations/{conversation_id}",
+                headers={"x-forwarded-user": "owner"},
+                json={"archived": True},
+            )
+            listed_after_archive = client.get(
+                "/api/v1/models/customer360/conversations",
+                headers={"x-forwarded-user": "owner"},
+            )
+            archived_list = client.get(
+                "/api/v1/models/customer360/conversations"
+                "?include_archived=true",
+                headers={"x-forwarded-user": "owner"},
+            )
+            append_archived = client.post(
+                f"/api/v1/models/customer360/conversations/{conversation_id}/turns",
+                headers={"x-forwarded-user": "owner"},
+                json={"message": "Archived", "expected_version": 3},
+            )
+            denied_archive = client.patch(
+                f"/api/v1/models/customer360/conversations/{conversation_id}",
+                headers={"x-forwarded-user": "viewer"},
+                json={"archived": True},
+            )
     finally:
         app.state._state.clear()
         app.state._state.update(previous)
@@ -1137,6 +1186,24 @@ def test_persistent_conversation_api_restores_history_and_isolates_owner(
     assert listed.json()["conversations"][0]["id"] == conversation_id
     assert denied.status_code == 404
     assert stale.status_code == 409
+    assert detail.status_code == 200
+    persisted_turn = detail.json()["messages"][-1]["turn"]
+    assert persisted_turn["query_result"]["rows"] == [
+        ["sensitive transient value"]
+    ]
+    assert persisted_turn["tool_trace"][0]["tool"] == "run_query"
+    assert persisted_turn["provenance"]["llm"] == {
+        "provider": "mistral",
+        "model": "mistral-small-latest",
+    }
+    assert persisted_turn["provenance"]["mcp"]["server_version"] == "0.1.0"
+    assert persisted_turn["request_id"] == "request-talk-test"
+    assert archived.status_code == 200
+    assert archived.json()["archived_at"] is not None
+    assert listed_after_archive.json()["conversations"] == []
+    assert archived_list.json()["conversations"][0]["id"] == conversation_id
+    assert append_archived.status_code == 409
+    assert denied_archive.status_code == 404
     assert service.calls[1][4] == [
         {"role": "user", "content": "How many customers?"},
         {"role": "assistant", "content": "MCP-backed answer"},
@@ -1150,6 +1217,11 @@ def test_persistent_conversation_api_restores_history_and_isolates_owner(
     persisted_text = " ".join(message.content for message in stored.messages)
     assert "sensitive transient value" not in persisted_text
     assert "SELECT sensitive_value" not in persisted_text
+    assert len(stored.turns) == 2
+    assert stored.turns[-1].query_result["rows"] == (
+        [["sensitive transient value"]]
+    )
+    assert stored.turns[-1].provenance["llm"]["provider"] == "mistral"
 
 
 def test_conversation_endpoint_reports_missing_server_configuration(

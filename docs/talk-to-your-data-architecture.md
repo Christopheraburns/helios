@@ -74,18 +74,40 @@ the persisted conversation and the current transient turn:
       "columns": ["region", "customer_count"],
       "rows": [["west", 12]],
       "sql": "SELECT ..."
-    }
+    },
+    "provenance": {
+      "helios": {"api_version": "0.1.0"},
+      "llm": {"provider": "mistral", "model": "mistral-small-latest"},
+      "mcp": {
+        "server_name": "helios",
+        "server_version": "0.1.0",
+        "protocol_version": "2025-11-25"
+      }
+    },
+    "request_id": "…"
   }
 }
 ```
 
-Only user and assistant text, ownership, title, version, and timestamps are
-persisted in SQLite. Query rows, generated SQL, and raw tool results are
-transient and are not stored in conversation history. Up to 20 recent
-user/assistant messages and 40,000 characters are supplied as bounded LLM
-context. The older stateless
+Each successful turn is persisted in SQLite and links the owning Principal,
+conversation, user message, and assistant message. It records the bounded tool
+trace, query result, generated SQL, request ID, LLM provider/model, Helios API
+version, and MCP server/protocol version. This makes a reopened answer
+reproducible and explains how it was obtained. Stored result rows remain
+governed data: conversation APIs enforce the original Principal and Model
+scope, and another Principal receives 404 rather than existence disclosure.
+
+Up to 20 recent user/assistant messages and 40,000 characters are supplied as
+bounded LLM context. Tool results and prior query rows are retained for display
+and provenance but are not replayed into later LLM prompts. The older stateless
 `POST /api/v1/models/{model_id}/conversation/turns` endpoint remains available
 for diagnostics and compatibility.
+
+Conversations have an `archived_at` state. Archiving increments the
+conversation version, prevents further turns, and removes it from the default
+list without deleting its messages, results, provenance, or audit history. The
+backend supports authorized archived retrieval for future restore/history
+experiences.
 
 `query_result` is null unless `run_query` returned rows. Tool traces omit
 secret-like arguments and tool results are size-limited. The endpoint returns
@@ -93,9 +115,10 @@ secret-like arguments and tool results are size-limited. The endpoint returns
 than exposing another Principal's conversation, 409 for a stale version, and
 503 with a safe description when the LLM or MCP service is unavailable.
 
-The React `/talk` page provides conversation history, deep links through the
-`conversation` query parameter, a transcript/composer, tabular results, and
-collapsed SQL/tool details.
+The React `/talk` page provides active conversation history, archive controls,
+deep links through the `conversation` query parameter, a transcript/composer,
+tabular persisted results, collapsed SQL/tool/provenance details, and a
+prominent cycling work indicator above the composer while a request is active.
 
 ## LLM reasoning loop
 

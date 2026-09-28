@@ -13,6 +13,12 @@ separate from:
 - glossary content in Atlas;
 - connection credentials in Workbench environment/secret configuration.
 
+Persisted Talk to Your Data records include Principal-owned conversations,
+messages, bounded tool traces, query results, generated SQL, request
+correlation, and LLM/MCP/API provenance. Archived conversations remain in the
+database for history and audit but are omitted from the default active list.
+Conversation APIs always reapply Model authorization and owner isolation.
+
 SQLite is used through the standard library and is hidden behind
 `helios_core.metadata.MetadataRepository`. The implementation enables foreign
 keys and a busy timeout. The default journal mode is `DELETE`, because WAL
