@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import {
   ApiDiagnostics,
+  ApiUnavailableError,
   AuthenticationError,
   AuthorizationError,
   DiscoveryRun,
@@ -358,7 +359,7 @@ function successfulClient(): HeliosApi {
         { id: "anthropic", available: true },
         { id: "bedrock", available: true },
         { id: "mistral", available: true },
-        { id: "openai", available: false },
+        { id: "openai", available: true },
       ],
     }),
     updateModelProviderSettings: vi.fn(),
@@ -807,7 +808,7 @@ describe("Helios application shell", () => {
         { id: "anthropic", available: true },
         { id: "bedrock", available: true },
         { id: "mistral", available: true },
-        { id: "openai", available: false },
+        { id: "openai", available: true },
       ],
     });
     vi.mocked(client.deleteModelProviderSettings!).mockResolvedValue({
@@ -819,7 +820,7 @@ describe("Helios application shell", () => {
         { id: "anthropic", available: true },
         { id: "bedrock", available: true },
         { id: "mistral", available: true },
-        { id: "openai", available: false },
+        { id: "openai", available: true },
       ],
     });
     window.history.replaceState({}, "", "/governance/model-provider");
@@ -829,11 +830,15 @@ describe("Helios application shell", () => {
     expect(
       await screen.findByRole("heading", { name: "AI Model Provider" }),
     ).toBeInTheDocument();
+    const openAi = screen.getByRole("option", { name: "OpenAI-compatible" });
+    expect(openAi).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("Provider"), {
+      target: { value: "openai" },
+    });
     expect(
-      screen.getByRole("option", {
-        name: "OpenAI-compatible — administrator setup required",
-      }),
-    ).toBeDisabled();
+      screen.getByPlaceholderText("Enter the provider model ID"),
+    ).toHaveValue("claude-haiku-4-5");
+    expect(screen.getByText(/Cloudera LiteLLM gateway/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Provider"), {
       target: { value: "mistral" },
@@ -941,6 +946,7 @@ describe("Helios application shell", () => {
       "north-model",
       expect.objectContaining({ includeAll: false }),
     );
+    expect(document.querySelector("main")).toHaveClass("app__main--trace");
   });
 
   it("shows model comparison metrics to organization administrators", async () => {
@@ -2513,6 +2519,98 @@ describe("Helios application shell", () => {
     });
     expect(screen.getByText("Reviewing the semantic model…"))
       .toBeInTheDocument();
+  });
+
+  it("notifies the user when the model provider times out", async () => {
+    const client = successfulClient();
+    const message =
+      "The model provider took too long to respond, so this request was ended.";
+    vi.mocked(client.createModelConversation!).mockRejectedValue(
+      new ApiUnavailableError(message),
+    );
+    window.history.replaceState(
+      {},
+      "",
+      "/talk?organization=north&model=north-model",
+    );
+    render(<App client={client} />);
+
+    await screen.findByText("No saved conversations yet.");
+    const composer = await screen.findByLabelText("Ask about this model");
+    expect(screen.queryByText("Model-aware assistant")).not.toBeInTheDocument();
+    fireEvent.change(composer, {
+      target: { value: "How many orders?" },
+    });
+    const submit = await screen.findByRole("button", { name: "Ask Helios" });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(
+      screen.queryByRole("status", {
+        name: "Helios is working on your answer",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("labels unresolved semantic tool failures", async () => {
+    const client = successfulClient();
+    const answer =
+      "Semantic model issue: unknown metric 'total_store_sales'.";
+    vi.mocked(client.createModelConversation!).mockResolvedValue({
+      conversation: {
+        id: "conversation-semantic-error",
+        model_id: "north-model",
+        title: "Show total store sales",
+        version: 1,
+        created_at: "2026-09-28T19:00:00+00:00",
+        updated_at: "2026-09-28T19:00:01+00:00",
+        messages: [
+          {
+            id: "semantic-user",
+            role: "user",
+            content: "Show total store sales",
+            created_at: "2026-09-28T19:00:00+00:00",
+          },
+          {
+            id: "semantic-assistant",
+            role: "assistant",
+            content: answer,
+            created_at: "2026-09-28T19:00:01+00:00",
+          },
+        ],
+      },
+      turn: {
+        model_id: "north-model",
+        answer,
+        failure: {
+          code: "invalid_semantic_query",
+          message: answer,
+          retryable: false,
+        },
+        tool_trace: [],
+        query_result: null,
+      },
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/talk?organization=north&model=north-model",
+    );
+    render(<App client={client} />);
+
+    await screen.findByText("No saved conversations yet.");
+    const composer = await screen.findByLabelText("Ask about this model");
+    fireEvent.change(composer, {
+      target: { value: "Show total store sales" },
+    });
+    const submit = await screen.findByRole("button", { name: "Ask Helios" });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(answer);
+    expect(alert).toHaveClass("talk-message--failure");
   });
 
   it("loads a deep-linked conversation owned by the selected model", async () => {

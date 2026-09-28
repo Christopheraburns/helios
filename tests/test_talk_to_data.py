@@ -1,4 +1,5 @@
 import json
+import time
 from types import SimpleNamespace
 
 import httpx2
@@ -20,7 +21,13 @@ from apps.console.mcp_settings import (
     SessionMCPSettingsStore,
     environment_max_tool_rounds,
 )
-from apps.console.model_provider import SessionModelProviderStore
+from apps.console.model_provider import (
+    LITELLM_GATEWAY_URL,
+    SessionModelProvider,
+    SessionModelProviderStore,
+    llm_for_settings,
+    provider_availability,
+)
 from apps.mcp import server as mcp_server
 from helios_core import audit, authz
 from helios_core.config import ImpalaConfig
@@ -37,7 +44,13 @@ from helios_core.engines.impala import (
     ImpalaAuthenticationError,
     ImpalaEngine,
 )
-from helios_core.llm import LLMClient, ToolCall, ToolTurn, llm_from_env
+from helios_core.llm import (
+    LLMClient,
+    LLMTimeoutError,
+    ToolCall,
+    ToolTurn,
+    llm_from_env,
+)
 from helios_core.llm import client as llm_module
 from helios_core.domain import (
     DataSource,
@@ -308,6 +321,26 @@ def test_mistral_tool_turn_uses_openai_compatible_endpoint(monkeypatch):
     assert (turn.tokens_in, turn.tokens_out) == (21, 7)
     assert turn.latency_ms is not None
     assert turn.raw_tool_calls[0]["function"]["name"] == "search_semantics"
+
+
+def test_llm_client_reports_provider_timeout(monkeypatch):
+    def post(*_args, **_kwargs):
+        raise llm_module.httpx.ConnectTimeout("connection timed out")
+
+    monkeypatch.setattr("helios_core.llm.client.httpx.post", post)
+    client = LLMClient(
+        "openai",
+        "slow-model",
+        "secret",
+        "https://provider.example/v1",
+        timeout=0.25,
+    )
+
+    with pytest.raises(
+        LLMTimeoutError,
+        match=r"provider timed out \(response limit: 0.25 seconds\)",
+    ):
+        client.tool_turn("Use MCP.", [], [])
 
 
 def test_bedrock_tool_turn_uses_bearer_key_and_converse_contract(monkeypatch):
@@ -678,12 +711,27 @@ def test_mcp_run_query_uses_delegated_identity(
         mcp_server.MCPCaller(principal(), "customer360", "acme")
     )
     try:
+        invalid = mcp_server.run_query(
+            ["total_store_sales"],
+            ["item.item_category"],
+            model="customer360",
+        )
+        invalid_field = mcp_server.run_query(
+            ["Customer count"],
+            ["item.item_category"],
+            model="customer360",
+        )
         result = mcp_server.run_query(
             ["Customer count"], limit=5000, model="customer360"
         )
     finally:
         mcp_server._caller_context.reset(context_token)
 
+    assert invalid["error"] == "invalid_semantic_query"
+    assert "unknown metric" in invalid["message"]
+    assert "search_semantics" in invalid["message"]
+    assert invalid_field["error"] == "invalid_semantic_query"
+    assert "unknown field item.item_category" in invalid_field["message"]
     assert result["rows"] == [[12]]
     assert captured["delegated_user"] == "owner"
     assert captured["limit"] == 1000
@@ -1047,6 +1095,51 @@ async def test_conversation_loop_uses_discovered_mcp_tools_and_locks_model():
 
 
 @pytest.mark.anyio
+async def test_conversation_ends_slow_provider_request(
+    persistent_auth_stack,
+):
+    class SlowLLM:
+        provider = "fake"
+        model = "slow-model"
+        timeout = 0.01
+
+        def tool_turn(self, _system, _messages, _tools):
+            time.sleep(0.1)
+            return ToolTurn("Too late", (), "stop")
+
+    service = ConversationService(
+        SlowLLM(),
+        MCPClientConfig("https://mcp.example", "token", SECRET),
+    )
+    recorder = TraceRecorder.start(
+        persistent_auth_stack.repository,
+        principal_id=principal().id,
+        organization_id="acme",
+        model_id="customer360",
+        question="How many customers?",
+        provider="fake",
+        llm_model="slow-model",
+        request_id="request-timeout",
+    )
+
+    with pytest.raises(
+        ConversationUnavailable,
+        match="model provider took too long to respond",
+    ):
+        await service._tool_loop(
+            FakeSession(),
+            [],
+            "customer360",
+            "How many customers?",
+            recorder=recorder,
+        )
+    run = persistent_auth_stack.repository.trace_run(recorder.run.id)
+    assert run is not None
+    assert run.status == "failed"
+    assert run.termination_reason == "timeout"
+
+
+@pytest.mark.anyio
 async def test_trace_records_tool_round_limit_termination(persistent_auth_stack):
     repository = persistent_auth_stack.repository
     recorder = TraceRecorder.start(
@@ -1119,9 +1212,89 @@ async def test_conversation_stops_repeated_non_retryable_tool_failure():
     assert llm.turns == 2
     assert (
         result["answer"]
-        == "The requested semantic object was not found."
+        == "Semantic model issue: "
+        "The requested semantic object was not found."
     )
+    assert result["failure"]["code"] == "semantic_not_found"
     assert len(result["tool_trace"]) == 2
+
+
+@pytest.mark.anyio
+async def test_conversation_does_not_mask_semantic_error_as_impala_failure():
+    class MaskingLLM:
+        provider = "mistral"
+        model = "mistral-small-latest"
+
+        def __init__(self):
+            self.turns = 0
+            self.system = ""
+            self.messages = []
+
+        def tool_turn(self, system, messages, _tools):
+            self.turns += 1
+            self.system = system
+            self.messages = messages
+            if self.turns == 1:
+                return ToolTurn(
+                    "",
+                    (
+                        ToolCall(
+                            "call-1",
+                            "run_query",
+                            {
+                                "metrics": ["total_store_sales"],
+                                "dimensions": ["item.item_category"],
+                            },
+                        ),
+                    ),
+                    "tool_use",
+                )
+            return ToolTurn(
+                "There is a temporary issue with the Impala query service.",
+                (),
+                "stop",
+            )
+
+    class InvalidSemanticSession:
+        async def call_tool(self, _name, arguments):
+            del arguments
+            return SimpleNamespace(
+                structuredContent={
+                    "error": "invalid_semantic_query",
+                    "message": (
+                        "unknown metric 'total_store_sales'. Use an exact "
+                        "metric name from search_semantics and use "
+                        "database.table.column identifiers for dimensions "
+                        "and filters."
+                    ),
+                    "retryable": False,
+                },
+                content=[],
+            )
+
+    llm = MaskingLLM()
+    service = ConversationService(
+        llm,
+        MCPClientConfig("https://mcp.example", "token", SECRET),
+    )
+    result = await service._tool_loop(
+        InvalidSemanticSession(),
+        [{
+            "name": "run_query",
+            "description": "Run",
+            "inputSchema": {"properties": {"metrics": {}, "dimensions": {}}},
+        }],
+        "customer360",
+        "Show store sales by category",
+    )
+
+    assert result["failure"]["code"] == "invalid_semantic_query"
+    assert result["answer"].startswith("Semantic model issue:")
+    assert "temporary issue with the Impala" not in result["answer"]
+    assert "call search_semantics" in llm.system
+    tool_result = json.loads(llm.messages[-1]["content"])
+    assert "recovery" in tool_result
+    assert "database.table.column" in tool_result["recovery"]
 
 
 @pytest.mark.anyio
@@ -1471,6 +1644,25 @@ def test_conversation_endpoint_reports_missing_server_configuration(
         "MCP conversation connectivity is not configured"
         in response.json()["detail"]
     )
+
+
+def test_openai_session_provider_uses_litellm_gateway(monkeypatch):
+    monkeypatch.delenv("INFERENCE_BASE_URL", raising=False)
+    client = llm_for_settings(
+        SessionModelProvider("openai", "claude-haiku-4-5", "user-session-secret")
+    )
+
+    assert provider_availability()["openai"] is True
+    assert client.provider == "openai"
+    assert client.model == "claude-haiku-4-5"
+    assert client.api_key == "user-session-secret"
+    assert client.base_url == LITELLM_GATEWAY_URL
+
+    monkeypatch.setenv("INFERENCE_BASE_URL", "https://inference.example/v1")
+    overridden = llm_for_settings(
+        SessionModelProvider("openai", "claude-haiku-4-5", "user-session-secret")
+    )
+    assert overridden.base_url == "https://inference.example/v1"
 
 
 def test_session_model_provider_override_is_private_and_drives_conversation(

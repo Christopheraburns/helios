@@ -155,7 +155,12 @@ function ApplicationShell({ client }: AppProps) {
           }}
         />
         <main
-          className={`app__main${canvasActive ? " app__main--canvas" : ""}`}
+          className={`app__main${canvasActive ? " app__main--canvas" : ""}${
+            location.pathname === "/governance/mcp"
+            && new URLSearchParams(location.search).get("tab") === "traces"
+              ? " app__main--trace"
+              : ""
+          }`}
           id="main-content"
           tabIndex={-1}
         >

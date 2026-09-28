@@ -13,6 +13,7 @@ Uses httpx directly so no provider SDK is needed in the runtime.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import time
@@ -24,6 +25,10 @@ import httpx
 
 
 class LLMError(RuntimeError):
+    pass
+
+
+class LLMTimeoutError(LLMError):
     pass
 
 
@@ -49,11 +54,29 @@ class ToolTurn:
 
 class LLMClient:
     def __init__(self, provider: str, model: str, api_key: str | None, base_url: str | None = None,
-                 max_tokens: int = 4000, temperature: float = 0.0, timeout: float = 120.0):
+                 max_tokens: int = 4000, temperature: float = 0.0, timeout: float | None = None):
+        if timeout is None:
+            raw_timeout = os.environ.get("HELIOS_LLM_TIMEOUT_SECONDS", "30")
+            try:
+                timeout = float(raw_timeout)
+            except ValueError as exc:
+                raise ValueError(
+                    "HELIOS_LLM_TIMEOUT_SECONDS must be a positive number"
+                ) from exc
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError(
+                "HELIOS_LLM_TIMEOUT_SECONDS must be a positive number"
+            )
         self.provider, self.model, self.api_key, self.base_url = provider, model, api_key, base_url
         self.max_tokens, self.temperature, self.timeout = max_tokens, temperature, timeout
         self.calls = 0
         self.input_chars = 0
+
+    def _http_timeout(self) -> httpx.Timeout:
+        return httpx.Timeout(
+            self.timeout,
+            connect=min(self.timeout, 10.0),
+        )
 
     # ------------------------------------------------------------ raw completion
     def complete(self, system: str, user: str) -> str:
@@ -67,12 +90,17 @@ class LLMClient:
                     time.sleep(3 * (attempt + 1))
                     continue
                 raise LLMError(f"{self.provider} {e.response.status_code}: {e.response.text[:300]}") from e
+            except httpx.TimeoutException as e:
+                raise LLMTimeoutError(
+                    f"{self.provider} provider timed out "
+                    f"(response limit: {self.timeout:g} seconds)"
+                ) from e
             except httpx.HTTPError as e:
                 raise LLMError(f"{self.provider} request failed: {e}") from e
         raise LLMError("unreachable")
 
     def _anthropic(self, system: str, user: str) -> str:
-        r = httpx.post("https://api.anthropic.com/v1/messages", timeout=self.timeout,
+        r = httpx.post("https://api.anthropic.com/v1/messages", timeout=self._http_timeout(),
                        headers={"x-api-key": self.api_key or "", "anthropic-version": "2023-06-01",
                                 "content-type": "application/json"},
                        json={"model": self.model, "max_tokens": self.max_tokens, "temperature": self.temperature,
@@ -84,7 +112,7 @@ class LLMClient:
         headers = {"content-type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        r = httpx.post(f"{(self.base_url or '').rstrip('/')}/chat/completions", timeout=self.timeout, headers=headers,
+        r = httpx.post(f"{(self.base_url or '').rstrip('/')}/chat/completions", timeout=self._http_timeout(), headers=headers,
                        json={"model": self.model, "max_tokens": self.max_tokens, "temperature": self.temperature,
                              "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]})
         r.raise_for_status()
@@ -126,6 +154,11 @@ class LLMClient:
                 raise LLMError(
                     f"{self.provider} {exc.response.status_code}: "
                     f"{exc.response.text[:300]}"
+                ) from exc
+            except httpx.TimeoutException as exc:
+                raise LLMTimeoutError(
+                    f"{self.provider} provider timed out "
+                    f"(response limit: {self.timeout:g} seconds)"
                 ) from exc
             except httpx.HTTPError as exc:
                 raise LLMError(
@@ -179,7 +212,7 @@ class LLMClient:
                 )
         response = httpx.post(
             "https://api.anthropic.com/v1/messages",
-            timeout=self.timeout,
+            timeout=self._http_timeout(),
             headers={
                 "x-api-key": self.api_key or "",
                 "anthropic-version": "2023-06-01",
@@ -267,7 +300,7 @@ class LLMClient:
                 openai_messages.append(message)
         response = httpx.post(
             f"{(self.base_url or '').rstrip('/')}/chat/completions",
-            timeout=self.timeout,
+            timeout=self._http_timeout(),
             headers=headers,
             json={
                 "model": self.model,
@@ -384,7 +417,7 @@ class LLMClient:
         response = httpx.post(
             f"{(self.base_url or '').rstrip('/')}/model/"
             f"{quote(self.model, safe='')}/converse",
-            timeout=self.timeout,
+            timeout=self._http_timeout(),
             headers={
                 "Authorization": f"Bearer {self.api_key or ''}",
                 "content-type": "application/json",

@@ -184,9 +184,16 @@ class ConversationQueryResultResponse(BaseModel):
     sql: str | None = None
 
 
+class ConversationFailureResponse(BaseModel):
+    code: str
+    message: str
+    retryable: bool = False
+
+
 class ConversationTurnResponse(BaseModel):
     model_id: str
     answer: str
+    failure: ConversationFailureResponse | None = None
     tool_trace: list[ConversationToolTraceResponse]
     query_result: ConversationQueryResultResponse | None = None
     provenance: dict[str, Any] = Field(default_factory=dict)
@@ -1425,7 +1432,7 @@ def update_model_provider_settings(
     if not availability.get(body.provider, False):
         raise HTTPException(
             422,
-            "OpenAI-compatible inference is not configured by the administrator",
+            "the selected model provider is unavailable",
         )
     settings = SessionModelProvider(body.provider, model, api_key)
     _model_provider_store(request).set(

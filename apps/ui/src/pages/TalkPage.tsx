@@ -541,7 +541,6 @@ export default function TalkPage({ context }: TalkPageProps) {
               >
                 {!active ? (
                   <div className="talk-welcome">
-                    <p className="section-eyebrow">Model-aware assistant</p>
                     <h2>What would you like to understand?</h2>
                     <p>
                       Ask about available metrics, business concepts, or
@@ -552,8 +551,21 @@ export default function TalkPage({ context }: TalkPageProps) {
                 ) : (
                   active.messages.map((item) => (
                     <article
-                      className={`talk-message talk-message--${item.role}`}
+                      className={
+                        `talk-message talk-message--${item.role}`
+                        + (
+                          item.role === "assistant"
+                          && turns[item.id]?.failure
+                            ? " talk-message--failure"
+                            : ""
+                        )
+                      }
                       key={item.id}
+                      role={
+                        item.role === "assistant" && turns[item.id]?.failure
+                          ? "alert"
+                          : undefined
+                      }
                     >
                       <p className="talk-message__role">
                         {item.role === "user" ? "You" : "Helios"}

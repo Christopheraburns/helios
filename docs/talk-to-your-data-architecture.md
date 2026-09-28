@@ -146,6 +146,13 @@ The API Application:
    Repeated identical non-retryable tool failures stop early with the safe
    tool explanation instead of becoming a generic MCP availability error.
 
+The prompt and tool descriptions require `search_semantics` before query
+compilation, exact metric names from its results, and full
+`database.table.column` identifiers for dimensions and filters. An invalid
+semantic request receives one informed correction opportunity. If it remains
+unresolved, the API returns a deterministic classified message instead of
+allowing the LLM to relabel it as an Impala failure.
+
 The LLM is not an authorization boundary. Prompt text cannot select another
 model, and MCP independently reloads grants and authorizes every tool call.
 The BFF does not accept arbitrary SQL.
@@ -220,6 +227,13 @@ Other stable codes include `authentication_required`, `model_not_found`,
 authentication errors use HTTP 401; missing server authentication
 configuration uses HTTP 503.
 
+`invalid_semantic_query` is emitted during compilation before any Impala
+request. `query_denied` is reserved for authorization failures, while
+`query_unavailable` is reserved for failures after Impala execution begins.
+The conversation response includes a structured `failure` with the stable code
+and renders semantic, access, authentication, and service failures with
+distinct user-facing labels.
+
 ## Identity and authorization propagation
 
 The API and MCP Applications share a random secret of at least 32 bytes.
@@ -277,6 +291,7 @@ HELIOS_MCP_URL=https://<helios-mcp-application>/mcp
 HELIOS_MCP_TOKEN=<random server credential>
 HELIOS_MCP_DELEGATION_SECRET=<random value of at least 32 bytes>
 HELIOS_MCP_TIMEOUT_SECONDS=180
+HELIOS_LLM_TIMEOUT_SECONDS=30
 MISTRAL_API_KEY=<secret>
 ```
 
@@ -286,6 +301,11 @@ Set it high enough for the target Virtual Warehouse's cold-start and query
 latency. The UI displays cycling progress messages while the request remains
 active, but long-running production queries should eventually move to an
 asynchronous execution and polling contract.
+
+`HELIOS_LLM_TIMEOUT_SECONDS` bounds each model-provider response. It defaults
+to 30 seconds and must be a positive number. When exceeded, the API ends the
+active request with HTTP 503 and the Talk UI displays a provider-timeout
+message.
 
 When `MISTRAL_API_KEY` is present, `ANTHROPIC_API_KEY` is absent, and
 `LLM_PROVIDER` is unset, Helios uses Mistral's OpenAI-compatible
@@ -303,9 +323,8 @@ AI Inference endpoint, use
 
 The Govern > AI Model Provider page lets an authenticated user override the
 environment default for their current browser session. It supports Anthropic,
-Mistral, Amazon Bedrock, and the administrator-configured OpenAI-compatible
-endpoint. The user selects a provider and exact model ID and supplies their own
-API key.
+Mistral, Amazon Bedrock, and the Cloudera LiteLLM gateway. The user selects a
+provider and exact model ID and supplies their own API key.
 
 The browser sends the key once over the existing credentialed HTTPS API
 connection. The API stores it only in process memory, keyed by authenticated
@@ -315,9 +334,11 @@ clear it with **Use project default**; API restart also clears every override.
 Overrides expire after 12 hours. The environment configuration remains the
 fallback for sessions without an override.
 
-OpenAI-compatible endpoints cannot be supplied by end users. They must be set
-by an administrator through `INFERENCE_BASE_URL`, preventing arbitrary
-server-side URL requests. Bedrock uses the deployment's `AWS_REGION` or
+The OpenAI-compatible choice calls the Cloudera LiteLLM gateway at
+`https://ai-gateway.cloudops.cloudera.com` with the user-supplied API key.
+`claude-haiku-4-5` is the suggested model. Users cannot enter an arbitrary
+base URL. `INFERENCE_BASE_URL` may override that gateway for a deployment.
+Bedrock uses the deployment's `AWS_REGION` or
 `AWS_DEFAULT_REGION` (default `us-east-1`) and the Bedrock Converse API with
 the user-supplied Bedrock bearer key.
 

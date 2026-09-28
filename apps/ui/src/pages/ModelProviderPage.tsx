@@ -53,8 +53,9 @@ const PROVIDERS: Array<{
   {
     id: "openai",
     label: "OpenAI-compatible",
-    description: "Use the administrator-configured inference endpoint.",
-    models: [],
+    description:
+      "Use the Cloudera LiteLLM gateway. Your API key stays in this browser session.",
+    models: ["claude-haiku-4-5"],
   },
 ];
 
