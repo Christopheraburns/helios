@@ -392,6 +392,25 @@ function successfulClient(): HeliosApi {
         },
       ],
     }),
+    modelTraces: vi.fn().mockResolvedValue({
+      items: [],
+      page: {
+        offset: 0,
+        limit: 50,
+        returned: 0,
+        total: 0,
+        has_more: false,
+      },
+      available_actions: [],
+    }),
+    modelTrace: vi.fn(),
+    modelEvaluations: vi.fn().mockResolvedValue({
+      items: [],
+      available_actions: ["evaluation.run", "evaluation.cancel"],
+    }),
+    modelEvaluation: vi.fn(),
+    createModelEvaluation: vi.fn(),
+    cancelModelEvaluation: vi.fn(),
     organizations: vi.fn().mockResolvedValue(organizations),
     models: vi.fn((organizationId: string) =>
       Promise.resolve(modelsFor(organizationId)),
@@ -900,6 +919,86 @@ describe("Helios application shell", () => {
     expect(await screen.findByText("The project MCP limit is active."))
       .toBeInTheDocument();
     expect(client.deleteMcpSettings).toHaveBeenCalledOnce();
+  });
+
+  it("opens the MCP trace workspace and renders its empty state", async () => {
+    const client = successfulClient();
+    window.history.replaceState(
+      {},
+      "",
+      "/governance/mcp?organization=north&model=north-model&tab=traces",
+    );
+
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "MCP traces" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("No traces have been recorded for this model yet."),
+    ).toBeInTheDocument();
+    expect(client.modelTraces).toHaveBeenCalledWith(
+      "north-model",
+      expect.objectContaining({ includeAll: false }),
+    );
+  });
+
+  it("shows model comparison metrics to organization administrators", async () => {
+    const client = successfulClient();
+    vi.mocked(client.models).mockImplementation((organizationId: string) => {
+      const response = modelsFor(organizationId);
+      return Promise.resolve({
+        ...response,
+        models: response.models.map((model) => ({
+          ...model,
+          available_actions: ["model.read", "organization.manage"],
+        })),
+      });
+    });
+    vi.mocked(client.modelEvaluations!).mockResolvedValue({
+      items: [{
+        id: "evaluation-1",
+        principal_id: "cloudera-workbench:admin",
+        organization_id: "north",
+        model_id: "north-model",
+        suite_id: "tpcds",
+        suite_version: "1.0.0",
+        status: "completed",
+        repetitions: 3,
+        baseline: { provider: "anthropic", model: "haiku" },
+        candidate: { provider: "mistral", model: "small" },
+        max_tool_rounds: 6,
+        created_at: "2026-09-28T00:00:00Z",
+        started_at: "2026-09-28T00:00:00Z",
+        completed_at: "2026-09-28T00:01:00Z",
+        error: null,
+        cancel_requested: false,
+        results: [],
+        metrics: {
+          baseline: { answer_accuracy: 1, completion_rate: 1 },
+          candidate: { answer_accuracy: 0.5, completion_rate: 0.75 },
+        },
+      }],
+      available_actions: ["evaluation.run", "evaluation.cancel"],
+    });
+    vi.mocked(client.modelEvaluation!).mockImplementation(
+      async () => (await client.modelEvaluations!("north-model")).items[0],
+    );
+    window.history.replaceState(
+      {},
+      "",
+      "/governance/mcp?organization=north&model=north-model&tab=evaluations",
+    );
+
+    render(<App client={client} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Model comparison" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Answer accuracy")).toBeInTheDocument();
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run comparison" }))
+      .toBeEnabled();
   });
 
   it("loads API-backed selectors, account identity, and model overview", async () => {

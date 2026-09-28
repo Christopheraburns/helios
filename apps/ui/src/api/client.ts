@@ -67,6 +67,101 @@ export interface MCPStatus {
   tools: MCPToolSummary[];
 }
 
+export interface TraceRun {
+  id: string;
+  request_id: string | null;
+  conversation_id: string | null;
+  principal_id: string;
+  organization_id: string;
+  model_id: string;
+  purpose: "conversation" | "evaluation";
+  question_id: string | null;
+  question: string;
+  llm_provider: string;
+  llm_model: string;
+  prompt_version: string;
+  status: "running" | "completed" | "failed" | "cancelled";
+  termination_reason: string | null;
+  answer: string | null;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+  tokens_in: number;
+  tokens_out: number;
+}
+
+export interface TraceSpan {
+  id: string;
+  run_id: string;
+  parent_span_id: string | null;
+  sequence: number;
+  component: string;
+  kind: string;
+  name: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  latency_ms: number | null;
+  input: unknown;
+  output: unknown;
+  attributes: Record<string, unknown>;
+  error: string | null;
+}
+
+export interface TraceCollection {
+  items: TraceRun[];
+  page: {
+    offset: number;
+    limit: number;
+    returned: number;
+    total: number;
+    has_more: boolean;
+  };
+  available_actions: string[];
+}
+
+export interface TraceDetail {
+  run: TraceRun;
+  spans: TraceSpan[];
+}
+
+export interface EvaluationResult {
+  id: string;
+  question_id: string;
+  variant: "baseline" | "candidate";
+  repetition: number;
+  trace_run_id: string;
+  accurate: boolean;
+  completed: boolean;
+  metrics: Record<string, unknown>;
+}
+
+export interface EvaluationRun {
+  id: string;
+  principal_id: string;
+  organization_id: string;
+  model_id: string;
+  suite_id: string;
+  suite_version: string;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  repetitions: number;
+  baseline: { provider: string; model: string };
+  candidate: { provider: string; model: string };
+  max_tool_rounds: number;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+  metrics: Record<string, Record<string, number>>;
+  cancel_requested: boolean;
+  results: EvaluationResult[];
+}
+
+export interface EvaluationCollection {
+  items: EvaluationRun[];
+  available_actions: string[];
+}
+
 export interface OrganizationSummary {
   id: string;
   name: string;
@@ -665,6 +760,7 @@ export interface ConversationTurn {
     };
   };
   request_id?: string | null;
+  trace_run_id?: string | null;
 }
 
 export interface ConversationMessage {
@@ -827,6 +923,26 @@ export interface HeliosApi {
   updateMcpSettings?(maxToolRounds: number): Promise<MCPSettings>;
   deleteMcpSettings?(): Promise<MCPSettings>;
   mcpStatus?(modelId: string): Promise<MCPStatus>;
+  modelTraces?(
+    modelId: string,
+    options?: {
+      purpose?: "conversation" | "evaluation";
+      status?: TraceRun["status"];
+      includeAll?: boolean;
+    },
+  ): Promise<TraceCollection>;
+  modelTrace?(modelId: string, runId: string): Promise<TraceDetail>;
+  modelEvaluations?(modelId: string): Promise<EvaluationCollection>;
+  modelEvaluation?(modelId: string, runId: string): Promise<EvaluationRun>;
+  createModelEvaluation?(
+    modelId: string,
+    suiteId?: string,
+    repetitions?: number,
+  ): Promise<EvaluationRun>;
+  cancelModelEvaluation?(
+    modelId: string,
+    runId: string,
+  ): Promise<EvaluationRun>;
   organizations(): Promise<OrganizationsResponse>;
   models(organizationId: string): Promise<ModelsResponse>;
   modelOverview(modelId: string): Promise<ModelOverview>;
@@ -1069,6 +1185,63 @@ export class HeliosApiClient implements HeliosApi {
   mcpStatus(modelId: string): Promise<MCPStatus> {
     return this.get<MCPStatus>(
       `/api/v1/models/${encodeURIComponent(modelId)}/mcp-status`,
+    );
+  }
+
+  modelTraces(
+    modelId: string,
+    options: {
+      purpose?: "conversation" | "evaluation";
+      status?: TraceRun["status"];
+      includeAll?: boolean;
+    } = {},
+  ): Promise<TraceCollection> {
+    const query = new URLSearchParams();
+    if (options.purpose) query.set("purpose", options.purpose);
+    if (options.status) query.set("status", options.status);
+    if (options.includeAll) query.set("include_all", "true");
+    const suffix = query.size ? `?${query}` : "";
+    return this.get<TraceCollection>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/traces${suffix}`,
+    );
+  }
+
+  modelTrace(modelId: string, runId: string): Promise<TraceDetail> {
+    return this.get<TraceDetail>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/traces/${encodeURIComponent(runId)}`,
+    );
+  }
+
+  modelEvaluations(modelId: string): Promise<EvaluationCollection> {
+    return this.get<EvaluationCollection>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/evaluations`,
+    );
+  }
+
+  modelEvaluation(modelId: string, runId: string): Promise<EvaluationRun> {
+    return this.get<EvaluationRun>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/evaluations/${encodeURIComponent(runId)}`,
+    );
+  }
+
+  createModelEvaluation(
+    modelId: string,
+    suiteId = "tpcds",
+    repetitions = 3,
+  ): Promise<EvaluationRun> {
+    return this.post<EvaluationRun>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/evaluations`,
+      { suite_id: suiteId, repetitions },
+    );
+  }
+
+  cancelModelEvaluation(
+    modelId: string,
+    runId: string,
+  ): Promise<EvaluationRun> {
+    return this.post<EvaluationRun>(
+      `/api/v1/models/${encodeURIComponent(modelId)}/evaluations/${encodeURIComponent(runId)}/cancel`,
+      undefined,
     );
   }
 

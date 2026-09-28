@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 import os
 import csv
+import asyncio
+import uuid
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from io import StringIO
@@ -42,7 +44,9 @@ from helios_core.metadata import (
     ConversationVersionConflict,
     MetadataRepository,
     StoredConversation,
+    EvaluationRun,
 )
+from helios_core.llm import llm_from_env
 from apps.console.conversation import (
     MCPClientConfig,
     ConversationService,
@@ -65,6 +69,12 @@ from apps.console.model_provider import (
     environment_provider_summary,
     llm_for_settings,
     provider_availability,
+)
+from apps.console.evaluation import (
+    execute_evaluation,
+    list_suites,
+    load_suite,
+    save_suite,
 )
 
 api_router = APIRouter(prefix="/api/v1", tags=["api-v1"])
@@ -181,6 +191,7 @@ class ConversationTurnResponse(BaseModel):
     query_result: ConversationQueryResultResponse | None = None
     provenance: dict[str, Any] = Field(default_factory=dict)
     request_id: str | None = None
+    trace_run_id: str | None = None
 
 
 class ConversationMessageResponse(BaseModel):
@@ -234,6 +245,63 @@ class MCPSettingsRequest(BaseModel):
         ge=MIN_TOOL_ROUNDS,
         le=MAX_TOOL_ROUNDS,
     )
+
+
+class TraceSpanResponse(BaseModel):
+    id: str
+    run_id: str
+    parent_span_id: str | None
+    sequence: int
+    component: str
+    kind: str
+    name: str
+    status: str
+    started_at: datetime
+    completed_at: datetime | None
+    latency_ms: float | None
+    input: Any
+    output: Any
+    attributes: dict[str, Any]
+    error: str | None
+
+
+class TraceRunResponse(BaseModel):
+    id: str
+    request_id: str | None
+    conversation_id: str | None
+    principal_id: str
+    organization_id: str
+    model_id: str
+    purpose: str
+    question_id: str | None
+    question: str
+    llm_provider: str
+    llm_model: str
+    prompt_version: str
+    status: str
+    termination_reason: str | None
+    answer: str | None
+    started_at: datetime
+    completed_at: datetime | None
+    duration_ms: float | None
+    tokens_in: int
+    tokens_out: int
+
+
+class EvaluationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    suite_id: str = Field(default="tpcds", min_length=1, max_length=100)
+    repetitions: int = Field(default=3, ge=1, le=5)
+
+
+class EvaluationSuiteImportRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    id: str = Field(min_length=1, max_length=100)
+    version: str = Field(min_length=1, max_length=100)
+    model_id: str | None = Field(default=None, max_length=200)
+    questions: list[dict[str, Any]] = Field(min_length=1, max_length=100)
 
 
 class AuditClientEventRequest(BaseModel):
@@ -476,9 +544,11 @@ def conversation_service(
                 llm_for_settings(settings),
                 MCPClientConfig.from_env(),
                 max_tool_rounds=max_tool_rounds,
+                trace_repository=request.app.state.metadata_repository,
             )
         return ConversationService.from_env(
             max_tool_rounds=max_tool_rounds,
+            trace_repository=request.app.state.metadata_repository,
         )
     except (ConversationUnavailable, ValueError) as exc:
         raise HTTPException(503, str(exc)) from exc
@@ -1121,6 +1191,7 @@ def _conversation_response(
                         "query_result": turns[message.id].query_result,
                         "provenance": turns[message.id].provenance or {},
                         "request_id": turns[message.id].request_id,
+                        "trace_run_id": turns[message.id].trace_run_id,
                     }
                     if message.id in turns
                     else None
@@ -1129,6 +1200,51 @@ def _conversation_response(
             for message in conversation.messages
         ]
     return response
+
+
+def _trace_run_response(run) -> dict:
+    return {
+        "id": run.id,
+        "request_id": run.request_id,
+        "conversation_id": run.conversation_id,
+        "principal_id": run.principal_id,
+        "organization_id": run.organization_id,
+        "model_id": run.model_id,
+        "purpose": run.purpose,
+        "question_id": run.question_id,
+        "question": run.question,
+        "llm_provider": run.llm_provider,
+        "llm_model": run.llm_model,
+        "prompt_version": run.prompt_version,
+        "status": run.status,
+        "termination_reason": run.termination_reason,
+        "answer": run.answer,
+        "started_at": run.started_at,
+        "completed_at": run.completed_at,
+        "duration_ms": run.duration_ms,
+        "tokens_in": run.tokens_in,
+        "tokens_out": run.tokens_out,
+    }
+
+
+def _trace_span_response(span) -> dict:
+    return {
+        "id": span.id,
+        "run_id": span.run_id,
+        "parent_span_id": span.parent_span_id,
+        "sequence": span.sequence,
+        "component": span.component,
+        "kind": span.kind,
+        "name": span.name,
+        "status": span.status,
+        "started_at": span.started_at,
+        "completed_at": span.completed_at,
+        "latency_ms": span.latency_ms,
+        "input": span.input,
+        "output": span.output,
+        "attributes": span.attributes or {},
+        "error": span.error,
+    }
 
 
 def _audit_event_response(
@@ -1419,6 +1535,381 @@ async def get_mcp_status(
             key=lambda item: str(item.get("name", "")).casefold(),
         ),
     }
+
+
+def _require_trace_access(run, context: AuthorizedModel) -> None:
+    if run.model_id != context.model.id:
+        raise HTTPException(404, "trace run not found")
+    if run.principal_id == context.principal.id:
+        return
+    if _can_manage_organization(
+        context.principal,
+        context.policy,
+        context.model.organization_id,
+    ):
+        return
+    raise HTTPException(404, "trace run not found")
+
+
+@api_router.get("/models/{model_id}/traces")
+def list_model_traces(
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+    purpose: Literal["conversation", "evaluation"] | None = None,
+    status: Literal["running", "completed", "failed", "cancelled"] | None = None,
+    include_all: bool = False,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict:
+    organization_admin = _can_manage_organization(
+        context.principal,
+        context.policy,
+        context.model.organization_id,
+    )
+    if include_all and not organization_admin:
+        raise HTTPException(
+            403,
+            "organization administration permission is required",
+        )
+    repository: MetadataRepository = request.app.state.metadata_repository
+    runs, total = repository.trace_runs(
+        model_id=context.model.id,
+        principal_id=None if include_all else context.principal.id,
+        purpose=purpose,
+        status=status,
+        offset=offset,
+        limit=limit,
+    )
+    return {
+        "items": [_trace_run_response(run) for run in runs],
+        "page": {
+            "offset": offset,
+            "limit": limit,
+            "returned": len(runs),
+            "total": total,
+            "has_more": offset + len(runs) < total,
+        },
+        "available_actions": [
+            "trace.read",
+            *(["trace.read_organization"] if organization_admin else []),
+        ],
+    }
+
+
+@api_router.get("/models/{model_id}/traces/{run_id}")
+def get_model_trace(
+    run_id: str,
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+) -> dict:
+    repository: MetadataRepository = request.app.state.metadata_repository
+    run = repository.trace_run(run_id)
+    if run is None:
+        raise HTTPException(404, "trace run not found")
+    _require_trace_access(run, context)
+    return {
+        "run": _trace_run_response(run),
+        "spans": [
+            _trace_span_response(span)
+            for span in repository.trace_spans(run.id)
+        ],
+    }
+
+
+@api_router.get(
+    "/models/{model_id}/traces/{run_id}/spans/{span_id}",
+    response_model=TraceSpanResponse,
+)
+def get_model_trace_span(
+    run_id: str,
+    span_id: str,
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+) -> dict:
+    repository: MetadataRepository = request.app.state.metadata_repository
+    run = repository.trace_run(run_id)
+    if run is None:
+        raise HTTPException(404, "trace run not found")
+    _require_trace_access(run, context)
+    span = next(
+        (
+            item
+            for item in repository.trace_spans(run.id)
+            if item.id == span_id
+        ),
+        None,
+    )
+    if span is None:
+        raise HTTPException(404, "trace span not found")
+    return _trace_span_response(span)
+
+
+def _require_evaluation_admin(context: AuthorizedModel) -> None:
+    if not _can_manage_organization(
+        context.principal,
+        context.policy,
+        context.model.organization_id,
+    ):
+        raise HTTPException(
+            403,
+            "organization administration permission is required",
+        )
+
+
+def _evaluation_run_response(run, results=()) -> dict:
+    return {
+        "id": run.id,
+        "principal_id": run.principal_id,
+        "organization_id": run.organization_id,
+        "model_id": run.model_id,
+        "suite_id": run.suite_id,
+        "suite_version": run.suite_version,
+        "status": run.status,
+        "repetitions": run.repetitions,
+        "baseline": {
+            "provider": run.baseline_provider,
+            "model": run.baseline_model,
+        },
+        "candidate": {
+            "provider": run.candidate_provider,
+            "model": run.candidate_model,
+        },
+        "max_tool_rounds": run.max_tool_rounds,
+        "created_at": run.created_at,
+        "started_at": run.started_at,
+        "completed_at": run.completed_at,
+        "error": run.error,
+        "metrics": run.metrics or {},
+        "cancel_requested": run.cancel_requested,
+        "results": [
+            {
+                "id": result.id,
+                "question_id": result.question_id,
+                "variant": result.variant,
+                "repetition": result.repetition,
+                "trace_run_id": result.trace_run_id,
+                "accurate": result.accurate,
+                "completed": result.completed,
+                "metrics": result.metrics or {},
+            }
+            for result in results
+        ],
+    }
+
+
+@api_router.get("/models/{model_id}/evaluation-suites")
+def list_evaluation_suites(
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+) -> dict:
+    _require_evaluation_admin(context)
+    return {
+        "items": [
+            {
+                "id": suite["id"],
+                "version": suite["version"],
+                "model_id": suite.get("model_id"),
+                "question_count": len(suite["questions"]),
+            }
+            for suite in list_suites()
+            if suite.get("model_id") in {None, context.model.id}
+        ]
+    }
+
+
+@api_router.post("/models/{model_id}/evaluation-suites", status_code=201)
+@api_router.post(
+    "/models/{model_id}/evaluation-suites/import",
+    status_code=201,
+)
+def import_evaluation_suite(
+    body: EvaluationSuiteImportRequest,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+) -> dict:
+    _require_evaluation_admin(context)
+    try:
+        document = save_suite(body.model_dump())
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {
+        "id": document["id"],
+        "version": document["version"],
+        "question_count": len(document["questions"]),
+    }
+
+
+@api_router.get("/models/{model_id}/evaluations")
+def list_model_evaluations(
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+) -> dict:
+    _require_evaluation_admin(context)
+    repository: MetadataRepository = request.app.state.metadata_repository
+    return {
+        "items": [
+            _evaluation_run_response(run)
+            for run in repository.evaluation_runs(
+                model_id=context.model.id,
+                organization_id=context.model.organization_id,
+            )
+        ],
+        "available_actions": ["evaluation.run", "evaluation.cancel"],
+    }
+
+
+@api_router.post("/models/{model_id}/evaluations", status_code=202)
+async def create_model_evaluation(
+    body: EvaluationCreateRequest,
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+) -> dict:
+    _require_evaluation_admin(context)
+    try:
+        suite = load_suite(body.suite_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    if suite.get("model_id") not in {None, context.model.id}:
+        raise HTTPException(
+            422,
+            "the selected evaluation suite targets another semantic model",
+        )
+    session_id = _browser_session_id(request)
+    candidate_settings = _model_provider_store(request).get(
+        context.principal.id,
+        session_id,
+    )
+    if candidate_settings is None:
+        raise HTTPException(
+            422,
+            "configure a session model provider before starting an evaluation",
+        )
+    baseline_llm = llm_from_env()
+    if baseline_llm is None:
+        raise HTTPException(503, "the project-default LLM is not configured")
+    candidate_llm = llm_for_settings(candidate_settings)
+    if (
+        baseline_llm.provider,
+        baseline_llm.model,
+    ) == (
+        candidate_llm.provider,
+        candidate_llm.model,
+    ):
+        raise HTTPException(
+            422,
+            "the session model must differ from the project-default model",
+        )
+    mcp_settings = _mcp_settings_store(request).get(
+        context.principal.id,
+        session_id,
+    )
+    max_tool_rounds = (
+        mcp_settings.max_tool_rounds
+        if mcp_settings is not None
+        else environment_max_tool_rounds()
+    )
+    now = datetime.now(timezone.utc)
+    run = EvaluationRun(
+        id=str(uuid.uuid4()),
+        principal_id=context.principal.id,
+        organization_id=context.model.organization_id,
+        model_id=context.model.id,
+        suite_id=suite["id"],
+        suite_version=suite["version"],
+        status="queued",
+        repetitions=body.repetitions,
+        baseline_provider=baseline_llm.provider,
+        baseline_model=baseline_llm.model,
+        candidate_provider=candidate_llm.provider,
+        candidate_model=candidate_llm.model,
+        max_tool_rounds=max_tool_rounds,
+        created_at=now,
+    )
+    repository: MetadataRepository = request.app.state.metadata_repository
+    repository.create_evaluation_run(run)
+    task = asyncio.create_task(
+        execute_evaluation(
+            repository,
+            run,
+            context.principal,
+            baseline_llm,
+            candidate_llm,
+        )
+    )
+    tasks = getattr(request.app.state, "evaluation_tasks", None)
+    if tasks is None:
+        tasks = set()
+        request.app.state.evaluation_tasks = tasks
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+    return _evaluation_run_response(run)
+
+
+@api_router.get("/models/{model_id}/evaluations/{evaluation_id}")
+def get_model_evaluation(
+    evaluation_id: str,
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+) -> dict:
+    _require_evaluation_admin(context)
+    repository: MetadataRepository = request.app.state.metadata_repository
+    run = repository.evaluation_run(evaluation_id)
+    if (
+        run is None
+        or run.model_id != context.model.id
+        or run.organization_id != context.model.organization_id
+    ):
+        raise HTTPException(404, "evaluation run not found")
+    return _evaluation_run_response(
+        run,
+        repository.evaluation_results(run.id),
+    )
+
+
+@api_router.post("/models/{model_id}/evaluations/{evaluation_id}/cancel")
+def cancel_model_evaluation(
+    evaluation_id: str,
+    request: Request,
+    context: Annotated[
+        AuthorizedModel,
+        Depends(authorize_model(authz.Action.MODEL_READ)),
+    ],
+) -> dict:
+    _require_evaluation_admin(context)
+    repository: MetadataRepository = request.app.state.metadata_repository
+    run = repository.evaluation_run(evaluation_id)
+    if run is None or run.model_id != context.model.id:
+        raise HTTPException(404, "evaluation run not found")
+    if run.status not in {"queued", "running"}:
+        raise HTTPException(409, "the evaluation is already terminal")
+    updated = repository.update_evaluation_run(
+        run.id,
+        status=run.status,
+        cancel_requested=True,
+    )
+    return _evaluation_run_response(updated)
 
 
 @api_router.get(

@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import os
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,6 +18,8 @@ from helios_core import __version__, audit
 from helios_core.authz import Principal
 from helios_core.delegation import issue_assertion
 from helios_core.llm import LLMClient, LLMError, llm_from_env
+from helios_core.metadata import MetadataRepository
+from helios_core.tracing import TraceRecorder, utcnow
 
 LOGGER = logging.getLogger(__name__)
 
@@ -112,17 +115,20 @@ class ConversationService:
         *,
         max_tool_rounds: int = 6,
         max_result_chars: int = 50_000,
+        trace_repository: MetadataRepository | None = None,
     ):
         self.llm = llm
         self.mcp = mcp
         self.max_tool_rounds = max_tool_rounds
         self.max_result_chars = max_result_chars
+        self.trace_repository = trace_repository
 
     @classmethod
     def from_env(
         cls,
         *,
         max_tool_rounds: int = 6,
+        trace_repository: MetadataRepository | None = None,
     ) -> "ConversationService":
         llm = llm_from_env()
         if llm is None:
@@ -133,6 +139,7 @@ class ConversationService:
             llm,
             MCPClientConfig.from_env(),
             max_tool_rounds=max_tool_rounds,
+            trace_repository=trace_repository,
         )
 
     async def turn(
@@ -142,9 +149,30 @@ class ConversationService:
         model_id: str,
         message: str,
         history: list[dict[str, str]] | None = None,
+        *,
+        purpose: str = "conversation",
+        question_id: str | None = None,
+        trace_run_id: str | None = None,
     ) -> dict[str, Any]:
+        context = audit.current_context()
+        recorder = (
+            TraceRecorder.start(
+                self.trace_repository,
+                principal_id=principal.id,
+                organization_id=organization_id,
+                model_id=model_id,
+                question=message,
+                provider=self.llm.provider,
+                llm_model=self.llm.model,
+                request_id=context.request_id if context else None,
+                purpose=purpose,
+                question_id=question_id,
+                run_id=trace_run_id,
+            )
+            if self.trace_repository is not None
+            else None
+        )
         try:
-            context = audit.current_context()
             assertion = issue_assertion(
                 self.mcp.delegation_secret,
                 principal,
@@ -152,6 +180,7 @@ class ConversationService:
                 model_id,
                 request_id=context.request_id if context else None,
                 session_id=context.session_id if context else None,
+                trace_run_id=recorder.run.id if recorder else None,
             )
             headers = {
                 "Authorization": f"Bearer {self.mcp.token}",
@@ -196,10 +225,27 @@ class ConversationService:
                             request_id=(
                                 context.request_id if context else None
                             ),
+                            recorder=recorder,
                         )
-        except ConversationUnavailable:
+        except ConversationUnavailable as exc:
+            if recorder and not recorder.finished:
+                recorder.finish(
+                    status="failed",
+                    termination_reason="unavailable",
+                    answer=str(exc),
+                    tokens_in=0,
+                    tokens_out=0,
+                )
             raise
         except Exception as exc:
+            if recorder and not recorder.finished:
+                recorder.finish(
+                    status="failed",
+                    termination_reason="crashed",
+                    answer=None,
+                    tokens_in=0,
+                    tokens_out=0,
+                )
             unavailable = _nested_exception(exc, ConversationUnavailable)
             if unavailable is not None:
                 raise ConversationUnavailable(str(unavailable)) from exc
@@ -218,6 +264,7 @@ class ConversationService:
         history: list[dict[str, str]] | None = None,
         provenance: dict[str, Any] | None = None,
         request_id: str | None = None,
+        recorder: TraceRecorder | None = None,
     ) -> dict[str, Any]:
         tool_by_name = {tool["name"]: tool for tool in tools}
         messages: list[dict[str, Any]] = [
@@ -226,25 +273,104 @@ class ConversationService:
         ]
         trace: list[dict[str, Any]] = []
         non_retryable_failures: set[str] = set()
+        tokens_in = 0
+        tokens_out = 0
         system = (
             "You are the Helios data assistant. Use only the supplied Helios "
             "MCP tools for semantic metadata, compilation, lineage, and data. "
             f"The authorized model is {model_id!r}; never request another "
             "model. Explain results accurately and do not invent data."
         )
-        for _ in range(self.max_tool_rounds):
+        for round_index in range(self.max_tool_rounds):
+            llm_started = utcnow()
             try:
                 turn = await anyio.to_thread.run_sync(
                     lambda: self.llm.tool_turn(system, messages, tools)
                 )
             except LLMError as exc:
+                if recorder:
+                    recorder.span(
+                        component="agent",
+                        kind="llm",
+                        name=f"LLM round {round_index + 1}",
+                        status="error",
+                        started_at=llm_started,
+                        completed_at=utcnow(),
+                        input={
+                            "system": system,
+                            "messages": messages,
+                            "tools": tools,
+                        },
+                        error=str(exc),
+                        attributes={"round": round_index + 1},
+                    )
+                    recorder.finish(
+                        status="failed",
+                        termination_reason="llm_error",
+                        answer=None,
+                        tokens_in=tokens_in,
+                        tokens_out=tokens_out,
+                    )
                 raise ConversationUnavailable(
                     "The conversation LLM is unavailable"
                 ) from exc
+            tokens_in += turn.tokens_in
+            tokens_out += turn.tokens_out
+            if recorder:
+                recorder.span(
+                    component="agent",
+                    kind="llm",
+                    name=f"LLM round {round_index + 1}",
+                    status="success",
+                    started_at=llm_started,
+                    completed_at=utcnow(),
+                    input={
+                        "system": system,
+                        "messages": messages,
+                        "tools": tools,
+                    },
+                    output={
+                        "text": turn.text,
+                        "raw_tool_calls": list(turn.raw_tool_calls),
+                        "parsed_tool_calls": [
+                            {
+                                "id": call.id,
+                                "name": call.name,
+                                "arguments": call.arguments,
+                                "raw_arguments": call.raw_arguments,
+                                "parse_error": call.parse_error,
+                            }
+                            for call in turn.tool_calls
+                        ],
+                    },
+                    attributes={
+                        "round": round_index + 1,
+                        "stop_reason": turn.stop_reason,
+                        "tokens_in": turn.tokens_in,
+                        "tokens_out": turn.tokens_out,
+                        "provider_latency_ms": turn.latency_ms,
+                    },
+                )
             if not turn.tool_calls:
                 if not turn.text.strip():
+                    if recorder:
+                        recorder.finish(
+                            status="failed",
+                            termination_reason="empty_answer",
+                            answer=None,
+                            tokens_in=tokens_in,
+                            tokens_out=tokens_out,
+                        )
                     raise ConversationUnavailable(
                         "The conversation LLM returned no answer"
+                    )
+                if recorder:
+                    recorder.finish(
+                        status="completed",
+                        termination_reason="final_answer",
+                        answer=turn.text,
+                        tokens_in=tokens_in,
+                        tokens_out=tokens_out,
                     )
                 return {
                     "model_id": model_id,
@@ -253,6 +379,7 @@ class ConversationService:
                     "query_result": _last_query_result(trace),
                     "provenance": provenance or {},
                     "request_id": request_id,
+                    "trace_run_id": recorder.run.id if recorder else None,
                 }
             calls = [
                 {
@@ -270,25 +397,55 @@ class ConversationService:
                 }
             )
             for call in turn.tool_calls:
+                tool_started = utcnow()
+                tool_span_id = str(uuid.uuid4())
+                tool_sequence = recorder.next_sequence() if recorder else None
                 tool = tool_by_name.get(call.name)
                 trace_arguments = call.arguments
-                if tool is None:
-                    result: Any = {
-                        "error": "unknown_tool",
-                        "message": "The LLM requested an unavailable tool",
+                tool_error: Exception | None = None
+                try:
+                    if call.parse_error:
+                        result = {
+                            "error": "invalid_tool_arguments",
+                            "message": call.parse_error,
+                            "retryable": False,
+                        }
+                    elif tool is None:
+                        result = {
+                            "error": "unknown_tool",
+                            "message": "The LLM requested an unavailable tool",
+                        }
+                    else:
+                        arguments = dict(call.arguments)
+                        properties = tool.get("inputSchema", {}).get(
+                            "properties", {}
+                        )
+                        if "model" in properties:
+                            arguments["model"] = model_id
+                        trace_arguments = arguments
+                        if recorder:
+                            response = await session.call_tool(
+                                call.name,
+                                arguments=arguments,
+                                meta={
+                                    "helios_trace_run_id": recorder.run.id,
+                                    "helios_parent_span_id": tool_span_id,
+                                    "helios_sequence": tool_sequence or 0,
+                                },
+                            )
+                        else:
+                            response = await session.call_tool(
+                                call.name,
+                                arguments=arguments,
+                            )
+                        result = _tool_result(response)
+                except Exception as exc:
+                    tool_error = exc
+                    result = {
+                        "error": "mcp_tool_call_failed",
+                        "message": "The MCP tool call failed",
+                        "retryable": True,
                     }
-                else:
-                    arguments = dict(call.arguments)
-                    properties = tool.get("inputSchema", {}).get(
-                        "properties", {}
-                    )
-                    if "model" in properties:
-                        arguments["model"] = model_id
-                    trace_arguments = arguments
-                    response = await session.call_tool(
-                        call.name, arguments=arguments
-                    )
-                    result = _tool_result(response)
                 encoded = json.dumps(result, default=str)
                 if len(encoded) > self.max_result_chars:
                     result = {
@@ -321,6 +478,50 @@ class ConversationService:
                         "result": result,
                     }
                 )
+                if recorder:
+                    recorder.span(
+                        component="agent",
+                        kind="tool",
+                        name=call.name,
+                        status="error" if tool_error or (
+                            isinstance(result, dict) and result.get("error")
+                        ) else "success",
+                        started_at=tool_started,
+                        completed_at=utcnow(),
+                        input={
+                            "raw_arguments": call.raw_arguments,
+                            "parsed_arguments": trace_arguments,
+                        },
+                        output=result,
+                        attributes={
+                            "round": round_index + 1,
+                            "tool_call_id": call.id,
+                            "result_size_bytes": len(encoded.encode()),
+                            "args_valid": not bool(call.parse_error),
+                            "repeated_failure": repeated_failure,
+                        },
+                        error=(
+                            str(tool_error)
+                            if tool_error
+                            else (
+                                str(result.get("message") or result.get("error"))
+                                if isinstance(result, dict) and result.get("error")
+                                else None
+                            )
+                        ),
+                        sequence=tool_sequence,
+                        span_id=tool_span_id,
+                    )
+                if tool_error:
+                    if recorder:
+                        recorder.finish(
+                            status="failed",
+                            termination_reason="mcp_tool_error",
+                            answer=None,
+                            tokens_in=tokens_in,
+                            tokens_out=tokens_out,
+                        )
+                    raise tool_error
                 messages.append(
                     {
                         "role": "tool",
@@ -336,6 +537,14 @@ class ConversationService:
                         else "Helios could not resolve that request "
                         "against the authorized semantic model."
                     )
+                    if recorder:
+                        recorder.finish(
+                            status="completed",
+                            termination_reason="repeated_non_retryable_error",
+                            answer=answer,
+                            tokens_in=tokens_in,
+                            tokens_out=tokens_out,
+                        )
                     return {
                         "model_id": model_id,
                         "answer": answer,
@@ -343,7 +552,16 @@ class ConversationService:
                         "query_result": _last_query_result(trace),
                         "provenance": provenance or {},
                         "request_id": request_id,
+                        "trace_run_id": recorder.run.id if recorder else None,
                     }
+        if recorder:
+            recorder.finish(
+                status="failed",
+                termination_reason="tool_round_limit",
+                answer=None,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+            )
         raise ConversationUnavailable(
             "The conversation exceeded the MCP tool-call limit"
         )

@@ -1,5 +1,7 @@
 import json
 
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -7,6 +9,7 @@ from apps.console.main import app
 from helios_core import health as system_health
 from helios_core import runs as runstore
 from helios_core.graph import ArtifactGraphRepository
+from helios_core.metadata import TraceRun, TraceSpan
 
 
 def headers(subject):
@@ -63,6 +66,64 @@ def test_real_dependencies_return_authentication_and_lookup_statuses(
     assert missing_resource.status_code == 404
     assert denied.status_code == 403
     assert allowed.status_code == 200
+
+
+def test_trace_api_enforces_owner_and_organization_admin_visibility(
+    persistent_client,
+    persistent_auth_stack,
+):
+    now = datetime.now(UTC)
+    repository = persistent_auth_stack.repository
+    repository.create_trace_run(
+        TraceRun(
+            id="trace-owner",
+            principal_id="cloudera-workbench:owner",
+            organization_id="acme",
+            model_id="customer360",
+            purpose="conversation",
+            question="Count customers",
+            llm_provider="anthropic",
+            llm_model="haiku",
+            prompt_version="talk-v1",
+            status="completed",
+            started_at=now,
+            completed_at=now,
+        )
+    )
+    repository.append_trace_span(
+        TraceSpan(
+            id="span-owner",
+            run_id="trace-owner",
+            sequence=1,
+            component="agent",
+            kind="llm",
+            name="anthropic.chat",
+            status="success",
+            started_at=now,
+            input={"round": 1},
+        )
+    )
+
+    own = persistent_client.get(
+        "/api/v1/models/customer360/traces/trace-owner",
+        headers=headers("owner"),
+    )
+    hidden = persistent_client.get(
+        "/api/v1/models/customer360/traces/trace-owner",
+        headers=headers("viewer"),
+    )
+    admin_collection = persistent_client.get(
+        "/api/v1/models/customer360/traces?include_all=true",
+        headers=headers("admin"),
+    )
+
+    assert own.status_code == 200
+    assert own.json()["spans"][0]["id"] == "span-owner"
+    assert hidden.status_code == 404
+    assert admin_collection.status_code == 200
+    assert [item["id"] for item in admin_collection.json()["items"]] == [
+        "trace-owner"
+    ]
 
 
 def test_persisted_roles_drive_available_actions(persistent_client):

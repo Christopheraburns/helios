@@ -16,7 +16,7 @@ import json
 import os
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 from urllib.parse import quote
 
@@ -32,6 +32,8 @@ class ToolCall:
     id: str
     name: str
     arguments: dict[str, Any]
+    raw_arguments: Any = None
+    parse_error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,10 @@ class ToolTurn:
     text: str
     tool_calls: tuple[ToolCall, ...]
     stop_reason: str
+    tokens_in: int = 0
+    tokens_out: int = 0
+    latency_ms: float | None = None
+    raw_tool_calls: tuple[dict[str, Any], ...] = ()
 
 
 class LLMClient:
@@ -93,13 +99,23 @@ class LLMClient:
     ) -> ToolTurn:
         self.calls += 1
         self.input_chars += len(system) + len(json.dumps(messages))
+        started = time.perf_counter()
         for attempt in range(3):
             try:
                 if self.provider == "anthropic":
-                    return self._anthropic_tool_turn(system, messages, tools)
+                    result = self._anthropic_tool_turn(system, messages, tools)
+                    return replace(
+                        result,
+                        latency_ms=(time.perf_counter() - started) * 1000,
+                    )
                 if self.provider == "bedrock":
-                    return self._bedrock_tool_turn(system, messages, tools)
-                return self._openai_tool_turn(system, messages, tools)
+                    result = self._bedrock_tool_turn(system, messages, tools)
+                else:
+                    result = self._openai_tool_turn(system, messages, tools)
+                return replace(
+                    result,
+                    latency_ms=(time.perf_counter() - started) * 1000,
+                )
             except httpx.HTTPStatusError as exc:
                 if (
                     exc.response.status_code in (429, 500, 502, 503, 529)
@@ -201,7 +217,20 @@ class LLMClient:
             for block in body.get("content", [])
             if block.get("type") == "tool_use"
         )
-        return ToolTurn(text, calls, body.get("stop_reason", ""))
+        usage = body.get("usage") or {}
+        raw_calls = tuple(
+            dict(block)
+            for block in body.get("content", [])
+            if block.get("type") == "tool_use"
+        )
+        return ToolTurn(
+            text,
+            calls,
+            body.get("stop_reason", ""),
+            int(usage.get("input_tokens") or 0),
+            int(usage.get("output_tokens") or 0),
+            raw_tool_calls=raw_calls,
+        )
 
     def _openai_tool_turn(
         self,
@@ -260,20 +289,37 @@ class LLMClient:
             },
         )
         response.raise_for_status()
-        choice = response.json()["choices"][0]
+        body = response.json()
+        choice = body["choices"][0]
         message = choice["message"]
-        calls = tuple(
-            ToolCall(
-                call["id"],
-                call["function"]["name"],
-                json.loads(call["function"].get("arguments") or "{}"),
+        calls = []
+        for call in message.get("tool_calls") or []:
+            raw_arguments = call["function"].get("arguments") or "{}"
+            try:
+                arguments = json.loads(raw_arguments)
+                if not isinstance(arguments, dict):
+                    raise ValueError("tool arguments must be a JSON object")
+                parse_error = None
+            except (json.JSONDecodeError, ValueError) as exc:
+                arguments = {}
+                parse_error = str(exc)
+            calls.append(
+                ToolCall(
+                    call["id"],
+                    call["function"]["name"],
+                    arguments,
+                    raw_arguments if parse_error else None,
+                    parse_error,
+                )
             )
-            for call in message.get("tool_calls") or []
-        )
+        usage = body.get("usage") or {}
         return ToolTurn(
             message.get("content") or "",
-            calls,
+            tuple(calls),
             choice.get("finish_reason", ""),
+            int(usage.get("prompt_tokens") or 0),
+            int(usage.get("completion_tokens") or 0),
+            raw_tool_calls=tuple(message.get("tool_calls") or ()),
         )
 
     def _bedrock_tool_turn(
@@ -362,7 +408,19 @@ class LLMClient:
             for block in content
             if isinstance(block, dict) and "toolUse" in block
         )
-        return ToolTurn(text, calls, body.get("stopReason", ""))
+        usage = body.get("usage") or {}
+        return ToolTurn(
+            text,
+            calls,
+            body.get("stopReason", ""),
+            int(usage.get("inputTokens") or 0),
+            int(usage.get("outputTokens") or 0),
+            raw_tool_calls=tuple(
+                dict(block["toolUse"])
+                for block in content
+                if isinstance(block, dict) and "toolUse" in block
+            ),
+        )
 
     # ------------------------------------------------------------ JSON completion
     def complete_json(self, system: str, user: str) -> Any:

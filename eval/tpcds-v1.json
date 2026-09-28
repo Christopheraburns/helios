@@ -1,0 +1,27 @@
+{
+  "id": "tpcds",
+  "version": "1.0.0",
+  "model_id": "tpcds",
+  "questions": [
+    {"id":"Q01","question":"What is total store sales revenue?","reference_sql":"SELECT SUM(ss_net_paid) AS store_sales_revenue FROM tpcds.store_sales","minimum_tools":["search_semantics","run_query"],"grounding":["store_sales_revenue"]},
+    {"id":"Q02","question":"What is total store sales quantity?","reference_sql":"SELECT SUM(ss_quantity) AS store_sales_quantity FROM tpcds.store_sales","minimum_tools":["search_semantics","run_query"],"grounding":["store_sales_quantity"]},
+    {"id":"Q03","question":"What is total store sales profit?","reference_sql":"SELECT SUM(ss_net_profit) AS store_sales_profit FROM tpcds.store_sales","minimum_tools":["search_semantics","run_query"],"grounding":["store_sales_profit"]},
+    {"id":"Q04","question":"What is the store sales profit margin?","reference_sql":"SELECT SUM(ss_net_profit) / SUM(ss_net_paid) AS store_sales_profit_margin FROM tpcds.store_sales","minimum_tools":["search_semantics","run_query"],"grounding":["store_sales_profit_margin"]},
+    {"id":"Q05","question":"What is total catalog sales revenue?","reference_sql":"SELECT SUM(cs_net_paid) AS catalog_sales_revenue FROM tpcds.catalog_sales","minimum_tools":["search_semantics","run_query"],"grounding":["catalog_sales_revenue"]},
+    {"id":"Q06","question":"What is total catalog sales quantity?","reference_sql":"SELECT SUM(cs_quantity) AS catalog_sales_quantity FROM tpcds.catalog_sales","minimum_tools":["search_semantics","run_query"],"grounding":["catalog_sales_quantity"]},
+    {"id":"Q07","question":"What is total catalog sales profit?","reference_sql":"SELECT SUM(cs_net_profit) AS catalog_sales_profit FROM tpcds.catalog_sales","minimum_tools":["search_semantics","run_query"],"grounding":["catalog_sales_profit"]},
+    {"id":"Q08","question":"What is the catalog sales profit margin?","reference_sql":"SELECT SUM(cs_net_profit) / SUM(cs_net_paid) AS catalog_sales_profit_margin FROM tpcds.catalog_sales","minimum_tools":["search_semantics","run_query"],"grounding":["catalog_sales_profit_margin"]},
+    {"id":"Q09","question":"What is total web sales revenue?","reference_sql":"SELECT SUM(ws_net_paid) AS web_sales_revenue FROM tpcds.web_sales","minimum_tools":["search_semantics","run_query"],"grounding":["web_sales_revenue"]},
+    {"id":"Q10","question":"What is total web sales quantity?","reference_sql":"SELECT SUM(ws_quantity) AS web_sales_quantity FROM tpcds.web_sales","minimum_tools":["search_semantics","run_query"],"grounding":["web_sales_quantity"]},
+    {"id":"Q11","question":"What is total web sales profit?","reference_sql":"SELECT SUM(ws_net_profit) AS web_sales_profit FROM tpcds.web_sales","minimum_tools":["search_semantics","run_query"],"grounding":["web_sales_profit"]},
+    {"id":"Q12","question":"What is the web sales profit margin?","reference_sql":"SELECT SUM(ws_net_profit) / SUM(ws_net_paid) AS web_sales_profit_margin FROM tpcds.web_sales","minimum_tools":["search_semantics","run_query"],"grounding":["web_sales_profit_margin"]},
+    {"id":"Q13","question":"How many units were returned to stores?","reference_sql":"SELECT SUM(sr_return_quantity) AS store_returns_quantity FROM tpcds.store_returns","minimum_tools":["search_semantics","run_query"],"grounding":["store_returns_quantity"]},
+    {"id":"Q14","question":"What is the total store return amount?","reference_sql":"SELECT SUM(sr_return_amt) AS store_returns_amount FROM tpcds.store_returns","minimum_tools":["search_semantics","run_query"],"grounding":["store_returns_amount"]},
+    {"id":"Q15","question":"How many units were returned from catalog sales?","reference_sql":"SELECT SUM(cr_return_quantity) AS catalog_returns_quantity FROM tpcds.catalog_returns","minimum_tools":["search_semantics","run_query"],"grounding":["catalog_returns_quantity"]},
+    {"id":"Q16","question":"What is the total catalog return amount?","reference_sql":"SELECT SUM(cr_return_amount) AS catalog_returns_amount FROM tpcds.catalog_returns","minimum_tools":["search_semantics","run_query"],"grounding":["catalog_returns_amount"]},
+    {"id":"Q17","question":"How many units were returned from web sales?","reference_sql":"SELECT SUM(wr_return_quantity) AS web_returns_quantity FROM tpcds.web_returns","minimum_tools":["search_semantics","run_query"],"grounding":["web_returns_quantity"]},
+    {"id":"Q18","question":"What is the total web return amount?","reference_sql":"SELECT SUM(wr_return_amt) AS web_returns_amount FROM tpcds.web_returns","minimum_tools":["search_semantics","run_query"],"grounding":["web_returns_amount"]},
+    {"id":"Q19","question":"Show store sales revenue by state.","reference_sql":"SELECT s_state, SUM(ss_net_paid) AS store_sales_revenue FROM tpcds.store_sales JOIN tpcds.store ON ss_store_sk = s_store_sk GROUP BY s_state ORDER BY s_state","minimum_tools":["search_semantics","describe","run_query"],"grounding":["store_sales_revenue","tpcds.store.s_state"]},
+    {"id":"Q20","question":"Show web sales revenue by customer state.","reference_sql":"SELECT ca_state, SUM(ws_net_paid) AS web_sales_revenue FROM tpcds.web_sales JOIN tpcds.customer_address ON ws_bill_addr_sk = ca_address_sk GROUP BY ca_state ORDER BY ca_state","minimum_tools":["search_semantics","describe","run_query"],"grounding":["web_sales_revenue","tpcds.customer_address.ca_state"]}
+  ]
+}

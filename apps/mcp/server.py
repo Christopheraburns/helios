@@ -25,6 +25,7 @@ import logging
 import os
 import re
 import time
+import uuid
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
@@ -53,8 +54,9 @@ from helios_core.delegation import (
     verify_assertion,
 )
 from helios_core.identity import Principal, PrincipalKind
-from helios_core.metadata import SQLiteMetadataRepository
+from helios_core.metadata import SQLiteMetadataRepository, TraceSpan
 from helios_core.ossie import SemanticModel, build as build_ossie
+from helios_core.tracing import sanitized, utcnow
 
 LOGGER = logging.getLogger(__name__)
 ROOT = runstore.ROOT
@@ -85,6 +87,7 @@ class MCPCaller:
     organization_id: str | None
     request_id: str | None = None
     session_id: str | None = None
+    trace_run_id: str | None = None
 
 
 _caller_context: ContextVar[MCPCaller | None] = ContextVar(
@@ -471,6 +474,79 @@ def _audited_tool(name: str):
     return decorate
 
 
+class MCPTraceMiddleware:
+    """Persist the raw tools/call request independently of the agent loop."""
+
+    async def __call__(self, ctx, call_next):
+        if ctx.method != "tools/call":
+            return await call_next(ctx)
+        params = ctx.params if isinstance(ctx.params, dict) else {}
+        meta = params.get("_meta") or params.get("meta") or {}
+        caller = _caller_context.get()
+        run_id = (
+            meta.get("helios_trace_run_id")
+            if isinstance(meta, dict)
+            else None
+        ) or (caller.trace_run_id if caller else None)
+        if not run_id:
+            return await call_next(ctx)
+        parent_span_id = (
+            meta.get("helios_parent_span_id")
+            if isinstance(meta, dict)
+            else None
+        )
+        try:
+            sequence = int(meta.get("helios_sequence") or 0)
+        except (TypeError, ValueError):
+            sequence = 0
+        if sequence <= 0:
+            sequence = int(time.time_ns() % 1_000_000_000)
+        started = utcnow()
+        result = None
+        error = None
+        try:
+            result = await call_next(ctx)
+            return result
+        except Exception as exc:
+            error = exc
+            raise
+        finally:
+            completed = utcnow()
+            try:
+                metadata_repository.append_trace_span(
+                    TraceSpan(
+                        id=str(uuid.uuid4()),
+                        run_id=run_id,
+                        parent_span_id=parent_span_id,
+                        sequence=sequence,
+                        component="mcp-server",
+                        kind="tool",
+                        name=str(params.get("name") or "unknown"),
+                        status="error" if error else "success",
+                        started_at=started,
+                        completed_at=completed,
+                        latency_ms=(
+                            completed - started
+                        ).total_seconds() * 1000,
+                        input=sanitized({
+                            "raw_params": params,
+                            "arguments": params.get("arguments"),
+                        }),
+                        output=sanitized(result),
+                        attributes={
+                            "request_id": str(ctx.request_id),
+                            "ground_truth": True,
+                        },
+                        error=str(error) if error else None,
+                    )
+                )
+            except Exception:
+                LOGGER.exception(
+                    "failed to persist MCP server trace run_id=%s",
+                    run_id,
+                )
+
+
 # ---------------------------------------------------------------------------- server + tools
 server = MCPServer(
     name="helios",
@@ -479,6 +555,7 @@ server = MCPServer(
                   "search_semantics to find the right metrics and dimensions for a question, then compile_query "
                   "or run_query. Use describe for definitions. Metrics are named; dimensions and filters use "
                   "database.table.column."),
+    middleware=[MCPTraceMiddleware()],
 )
 
 
@@ -873,6 +950,7 @@ def _request_caller(headers: dict[str, str]) -> MCPCaller | None:
             delegated.organization_id,
             delegated.request_id,
             delegated.session_id,
+            delegated.trace_run_id,
         )
     if _DEFAULT_PRINCIPAL_ID:
         issuer, separator, subject = _DEFAULT_PRINCIPAL_ID.partition(":")
