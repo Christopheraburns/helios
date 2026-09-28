@@ -28,6 +28,7 @@ from .repository import (
     EvaluationResult,
     EvaluationRun,
     PrincipalRecord,
+    SemanticRevision,
     StoredConversation,
     StoredConversationTurn,
     StoredModel,
@@ -756,9 +757,10 @@ class SQLiteMetadataRepository:
                     organization_id, model_id, purpose, question_id,
                     question, llm_provider, llm_model, prompt_version,
                     status, termination_reason, answer, started_at,
-                    completed_at, duration_ms, tokens_in, tokens_out
+                    completed_at, duration_ms, tokens_in, tokens_out,
+                    semantic_revision_id
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 (
@@ -782,9 +784,79 @@ class SQLiteMetadataRepository:
                     run.duration_ms,
                     run.tokens_in,
                     run.tokens_out,
+                    run.semantic_revision_id,
                 ),
             )
         return run
+
+    def save_semantic_revision(
+        self, revision: SemanticRevision
+    ) -> SemanticRevision:
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO semantic_artifact_revisions (
+                    id, model_id, sha256, artifact_path, ossie_version,
+                    discovery_run_id, published_at, published_by, size_bytes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    revision.id,
+                    revision.model_id,
+                    revision.sha256,
+                    revision.artifact_path,
+                    revision.ossie_version,
+                    revision.discovery_run_id,
+                    revision.published_at.isoformat(),
+                    revision.published_by,
+                    revision.size_bytes,
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM semantic_artifact_revisions WHERE id = ?",
+                (revision.id,),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("semantic revision was not persisted")
+        stored = _semantic_revision(row)
+        if (
+            stored.model_id != revision.model_id
+            or stored.sha256 != revision.sha256
+            or stored.artifact_path != revision.artifact_path
+            or stored.ossie_version != revision.ossie_version
+            or stored.size_bytes != revision.size_bytes
+        ):
+            raise RuntimeError(
+                "semantic revision metadata is immutable"
+            )
+        return stored
+
+    def semantic_revision(
+        self, revision_id: str
+    ) -> SemanticRevision | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM semantic_artifact_revisions WHERE id = ?
+                """,
+                (revision_id,),
+            ).fetchone()
+        return _semantic_revision(row) if row else None
+
+    def latest_semantic_revision(
+        self, model_id: str
+    ) -> SemanticRevision | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM semantic_artifact_revisions
+                WHERE model_id = ?
+                ORDER BY published_at DESC, id DESC
+                LIMIT 1
+                """,
+                (model_id,),
+            ).fetchone()
+        return _semantic_revision(row) if row else None
 
     def update_trace_run(
         self,
@@ -1458,6 +1530,21 @@ def _trace_run(row: sqlite3.Row) -> TraceRun:
         duration_ms=row["duration_ms"],
         tokens_in=row["tokens_in"],
         tokens_out=row["tokens_out"],
+        semantic_revision_id=row["semantic_revision_id"],
+    )
+
+
+def _semantic_revision(row: sqlite3.Row) -> SemanticRevision:
+    return SemanticRevision(
+        id=row["id"],
+        model_id=row["model_id"],
+        sha256=row["sha256"],
+        artifact_path=row["artifact_path"],
+        ossie_version=row["ossie_version"],
+        discovery_run_id=row["discovery_run_id"],
+        published_at=datetime.fromisoformat(row["published_at"]),
+        published_by=row["published_by"],
+        size_bytes=row["size_bytes"],
     )
 
 

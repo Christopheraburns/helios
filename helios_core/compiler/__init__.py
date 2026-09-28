@@ -1,1 +1,9 @@
-from .compiler import Compiler, CompileError, Compiled, Filter, Measure, SemanticRequest  # noqa: F401
+from .compiler import (  # noqa: F401
+    Compiler,
+    CompileError,
+    Compiled,
+    Filter,
+    FilterValueTypeError,
+    Measure,
+    SemanticRequest,
+)

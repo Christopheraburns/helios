@@ -41,7 +41,13 @@ from helios_core import audit, authz
 from helios_core import runs as runstore
 from helios_core.artifacts import ArtifactStore
 from helios_core.config import atlas_config, impala_config
-from helios_core.compiler import CompileError, Compiler, Filter, SemanticRequest
+from helios_core.compiler import (
+    CompileError,
+    Compiler,
+    Filter,
+    FilterValueTypeError,
+    SemanticRequest,
+)
 from helios_core.data_authorization import (
     DataAction,
     DataPolicy,
@@ -88,6 +94,7 @@ class MCPCaller:
     request_id: str | None = None
     session_id: str | None = None
     trace_run_id: str | None = None
+    semantic_revision_id: str | None = None
 
 
 _caller_context: ContextVar[MCPCaller | None] = ContextVar(
@@ -136,6 +143,27 @@ class ModelStore:
                 raise ValueError(f"model {name!r} is not available")
         else:
             src = srcs[0]
+        caller = _caller_context.get()
+        if (
+            caller
+            and caller.semantic_revision_id
+            and caller.model_id == src["name"]
+        ):
+            artifact_store.revision_ossie_path(
+                src["name"], caller.semantic_revision_id, "yaml"
+            )
+            src = {
+                "name": src["name"],
+                "path": str(
+                    artifact_store.revision_ossie_path(
+                        src["name"],
+                        caller.semantic_revision_id,
+                        "json",
+                    )
+                ),
+                "status": "published revision",
+                "revision_id": caller.semantic_revision_id,
+            }
         mtime = os.path.getmtime(src["path"])
         cached = self._cache.get(src["path"])
         if not cached or cached[0] != mtime:
@@ -212,6 +240,7 @@ def search(
                             "kind": "field",
                             "role": field.role,
                             "name": field.label,
+                            "datatype": field.datatype,
                             "column": (
                                 f"{dataset.source}.{field.name}"
                             ),
@@ -234,6 +263,7 @@ def search(
                         "kind": "metric",
                         "name": metric.name,
                         "dataset": metric.dataset,
+                        "datatype": metric.datatype,
                         "expression": metric.expression,
                         "description": metric.description,
                     },
@@ -256,6 +286,27 @@ def _semantic_error_message(exc: BaseException) -> str:
     return (
         f"{detail}. Use an exact metric name from search_semantics and use "
         "database.table.column identifiers for dimensions and filters."
+    )
+
+
+def _impala_filter_type_error(exc: BaseException) -> str | None:
+    detail = str(exc)
+    if type(exc).__name__ != "HiveServer2Error":
+        return None
+    if "AnalysisException:" not in detail or not any(
+        marker in detail
+        for marker in (
+            "are not comparable",
+            "Incompatible return types",
+            "incompatible types",
+        )
+    ):
+        return None
+    return (
+        "Impala rejected a generated filter because its value type did not "
+        "match the semantic field type. Search for the field again, preserve "
+        "the datatype returned by search_semantics, and use JSON numbers "
+        "without quotes for numeric fields."
     )
 
 
@@ -548,6 +599,11 @@ class MCPTraceMiddleware:
                         attributes={
                             "request_id": str(ctx.request_id),
                             "ground_truth": True,
+                            "semantic_revision_id": (
+                                caller.semantic_revision_id
+                                if caller
+                                else None
+                            ),
                         },
                         error=str(error) if error else None,
                     )
@@ -694,7 +750,9 @@ def describe(name: str, model: str | None = None) -> dict:
 
 @server.tool(description="Compile a semantic request into SQL. Call search_semantics first and copy metric names exactly from its results. "
                          "Dimensions and filter columns must be exact database.table.column identifiers returned by search_semantics or describe; "
-                         "never invent or shorten identifiers. filters: [{column, op, value}] with op in = != < <= > >= IN LIKE BETWEEN; "
+                         "never invent or shorten identifiers. Preserve each returned field datatype in filter JSON: use JSON numbers without quotes "
+                         "for numeric fields, booleans for Boolean fields, and ISO strings for Date/Timestamp fields. "
+                         "filters: [{column, op, value}] with op in = != < <= > >= IN LIKE BETWEEN; "
                          "engine: impala | hive | spark.")
 @_audited_tool("compile_query")
 def compile_query(metrics: list[str], dimensions: list[str] | None = None, filters: list[dict] | None = None,
@@ -715,6 +773,11 @@ def compile_query(metrics: list[str], dimensions: list[str] | None = None, filte
             engine,
         )
         return compiled
+    except FilterValueTypeError as exc:
+        return _error(
+            "invalid_filter_value_type",
+            _semantic_error_message(exc),
+        )
     except (CompileError, KeyError, TypeError, ValueError) as exc:
         return _error(
             "invalid_semantic_query",
@@ -724,6 +787,7 @@ def compile_query(metrics: list[str], dimensions: list[str] | None = None, filte
 
 @server.tool(description="Compile a semantic request and run it on the warehouse. Call search_semantics first, copy metric names exactly, and use "
                          "full database.table.column identifiers for dimensions and filters. Semantic validation happens before Impala execution. "
+                         "Filter JSON values must preserve the datatype returned by search_semantics; numeric values must not be quoted. "
                          "Same arguments as compile_query. Returns columns and rows.")
 @_audited_tool("run_query")
 def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: list[dict] | None = None,
@@ -835,6 +899,11 @@ def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: 
             exc,
             stage="impala_effective_user",
         )
+    except FilterValueTypeError as exc:
+        return _error(
+            "invalid_filter_value_type",
+            _semantic_error_message(exc),
+        )
     except (CompileError, KeyError, TypeError, ValueError) as exc:
         return _error(
             "invalid_semantic_query",
@@ -844,6 +913,19 @@ def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: 
         return _error("query_denied", str(exc))
     except Exception as exc:
         context = audit.current_context()
+        filter_error = _impala_filter_type_error(exc)
+        if filter_error:
+            LOGGER.warning(
+                "Impala rejected generated filter types request_id=%s",
+                context.request_id if context else None,
+            )
+            return _diagnostic_error(
+                "invalid_filter_value_type",
+                filter_error,
+                exc,
+                stage="impala_query_analysis",
+                excluded_values=(compiled_sql,),
+            )
         LOGGER.exception(
             "delegated Impala query failed request_id=%s error_type=%s",
             context.request_id if context else None,
@@ -859,6 +941,11 @@ def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: 
         )
     return {
         "sql": compiled["sql"],
+        "dataset": compiled["dataset"],
+        "joins": compiled["joins"],
+        "data_source_ids": sorted({
+            resource.data_source_id for resource in resources.values()
+        }),
         "columns": res.columns,
         "rows": [[_json(v) for v in r] for r in res.rows],
     }
@@ -975,6 +1062,7 @@ def _request_caller(headers: dict[str, str]) -> MCPCaller | None:
             delegated.request_id,
             delegated.session_id,
             delegated.trace_run_id,
+            delegated.semantic_revision_id,
         )
     if _DEFAULT_PRINCIPAL_ID:
         issuer, separator, subject = _DEFAULT_PRINCIPAL_ID.partition(":")

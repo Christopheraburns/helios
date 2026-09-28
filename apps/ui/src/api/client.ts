@@ -88,6 +88,7 @@ export interface TraceRun {
   duration_ms: number | null;
   tokens_in: number;
   tokens_out: number;
+  semantic_revision_id?: string | null;
 }
 
 export interface TraceSpan {
@@ -123,6 +124,66 @@ export interface TraceCollection {
 export interface TraceDetail {
   run: TraceRun;
   spans: TraceSpan[];
+  semantic_evidence?: SemanticTraceEvidence;
+}
+
+export interface SemanticTraceEvidence {
+  status: "complete" | "incomplete";
+  incomplete_reasons: string[];
+  question: string;
+  assistant: {
+    provider: string;
+    model: string;
+    prompt_version: string;
+  };
+  revision: {
+    id: string;
+    sha256: string;
+    ossie_version: string | null;
+    discovery_run_id: string | null;
+    published_at: string;
+    verified: boolean;
+    verification_error: string | null;
+  } | null;
+  tools: Array<{
+    id: string;
+    name: string;
+    status: string;
+    error: string | null;
+    arguments: Record<string, unknown>;
+  }>;
+  semantic_objects: Array<{
+    id: string;
+    kind: string;
+    name: string;
+    description: string;
+    physical_name?: string;
+    ossie_pointer: string;
+    canvas_element_id?: string;
+  }>;
+  datasets: Array<{
+    id: string;
+    semantic_dataset: string | null;
+    physical_name: string;
+    data_source_id: string | null;
+  }>;
+  query: {
+    id: string;
+    sql: string;
+    columns: string[];
+    row_count: number | null;
+  } | null;
+  edges: Array<{
+    id: string;
+    source: string;
+    target: string;
+    type: string;
+  }>;
+  answer: string | null;
+  error: {
+    reason: string | null;
+    message: string | null;
+  } | null;
 }
 
 export interface EvaluationResult {

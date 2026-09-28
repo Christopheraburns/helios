@@ -25,6 +25,7 @@ class DelegatedContext:
     request_id: str | None = None
     session_id: str | None = None
     trace_run_id: str | None = None
+    semantic_revision_id: str | None = None
 
 
 def _encode(value: bytes) -> str:
@@ -53,6 +54,7 @@ def issue_assertion(
     request_id: str | None = None,
     session_id: str | None = None,
     trace_run_id: str | None = None,
+    semantic_revision_id: str | None = None,
 ) -> str:
     if not organization_id or not model_id:
         raise DelegationError("organization and model context are required")
@@ -75,6 +77,7 @@ def issue_assertion(
         "request_id": request_id,
         "session_id": session_id,
         "trace_run_id": trace_run_id,
+        "semantic_revision_id": semantic_revision_id,
     }
     body = _encode(
         json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
@@ -143,14 +146,18 @@ def verify_assertion(
     trace_run_id = _optional_correlation(
         payload.get("trace_run_id"), "trace run"
     )
+    semantic_revision_id = _optional_correlation(
+        payload.get("semantic_revision_id"), "semantic revision"
+    )
     return DelegatedContext(
-        principal,
-        organization_id,
-        model_id,
-        expires_at,
-        request_id,
-        session_id,
-        trace_run_id,
+        principal=principal,
+        organization_id=organization_id,
+        model_id=model_id,
+        expires_at=expires_at,
+        request_id=request_id,
+        session_id=session_id,
+        trace_run_id=trace_run_id,
+        semantic_revision_id=semantic_revision_id,
     )
 
 

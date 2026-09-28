@@ -5,6 +5,7 @@ artifacts remain readable by model ID during migration.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -79,6 +80,25 @@ class ArtifactStore:
         manifest: dict[str, Any],
     ) -> tuple[Path, Path, Path]:
         _assert_model(document, model_id)
+        revision_id = hashlib.sha256(yaml_text.encode()).hexdigest()
+        manifest.update({
+            "revision_id": revision_id,
+            "sha256": revision_id,
+            "ossie_version": document.get("version"),
+            "size_bytes": len(yaml_text.encode()),
+            "path": str(
+                (
+                    self.revision_directory(model_id, revision_id)
+                    / "semantic.ossie.yaml"
+                ).relative_to(self.root)
+            ),
+        })
+        self.write_revision(
+            model_id,
+            document,
+            yaml_text,
+            manifest,
+        )
         published = self.directory(model_id, "published")
         yaml_path = published / "semantic.ossie.yaml"
         json_path = published / "semantic.ossie.json"
@@ -93,6 +113,136 @@ class ArtifactStore:
         )
         self.write_json(model_id, "published", "manifest.json", manifest)
         return yaml_path, json_path, manifest_path
+
+    def revision_directory(self, model_id: str, revision_id: str) -> Path:
+        _validate_component(model_id, "model_id")
+        _validate_component(revision_id, "revision_id")
+        return self.models_dir / model_id / "revisions" / revision_id
+
+    def write_revision(
+        self,
+        model_id: str,
+        document: dict[str, Any],
+        yaml_text: str,
+        manifest: dict[str, Any],
+    ) -> dict[str, Any]:
+        _assert_model(document, model_id)
+        digest = hashlib.sha256(yaml_text.encode()).hexdigest()
+        if manifest.get("revision_id") not in {None, digest}:
+            raise ValueError("semantic revision does not match artifact hash")
+        directory = self.revision_directory(model_id, digest)
+        yaml_path = directory / "semantic.ossie.yaml"
+        json_path = directory / "semantic.ossie.json"
+        manifest_path = directory / "manifest.json"
+        json_text = json.dumps(document, indent=2) + "\n"
+        revision = {
+            **manifest,
+            "model_id": model_id,
+            "revision_id": digest,
+            "sha256": digest,
+            "ossie_version": document.get("version"),
+            "size_bytes": len(yaml_text.encode()),
+            "json_sha256": hashlib.sha256(json_text.encode()).hexdigest(),
+            "path": str(yaml_path.relative_to(self.root)),
+        }
+        if directory.exists():
+            if (
+                not yaml_path.exists()
+                or yaml_path.read_text() != yaml_text
+                or not json_path.exists()
+                or json_path.read_text() != json_text
+                or not manifest_path.exists()
+            ):
+                raise RuntimeError(
+                    f"immutable semantic revision was modified: {directory}"
+                )
+            existing = json.loads(manifest_path.read_text())
+            if (
+                existing.get("revision_id") != digest
+                or existing.get("sha256") != digest
+                or existing.get("json_sha256")
+                != revision["json_sha256"]
+            ):
+                raise RuntimeError(
+                    f"immutable semantic revision was modified: {directory}"
+                )
+            return existing
+        contents = {
+            yaml_path: yaml_text,
+            json_path: json_text,
+            manifest_path: json.dumps(revision, indent=2) + "\n",
+        }
+        for path, payload in contents.items():
+            _atomic_write(path, payload)
+        return revision
+
+    def ensure_published_revision(
+        self, model_id: str
+    ) -> dict[str, Any] | None:
+        yaml_path = self.published_ossie_path(model_id, "yaml")
+        json_path = self.published_ossie_path(model_id, "json")
+        if not yaml_path.exists() or not json_path.exists():
+            return None
+        yaml_text = yaml_path.read_text()
+        with json_path.open() as handle:
+            document = json.load(handle)
+        _assert_model(document, model_id)
+        scoped_manifest = self.path(
+            model_id, "published", "manifest.json"
+        )
+        legacy_manifest = (
+            self.models_dir / "published" / f"{model_id}.publish.json"
+        )
+        manifest_path = (
+            scoped_manifest
+            if scoped_manifest.exists()
+            else legacy_manifest
+        )
+        manifest = {}
+        if manifest_path.exists():
+            with manifest_path.open() as handle:
+                manifest = json.load(handle)
+        return self.write_revision(
+            model_id,
+            document,
+            yaml_text,
+            manifest,
+        )
+
+    def revision_ossie_path(
+        self,
+        model_id: str,
+        revision_id: str,
+        extension: str = "json",
+    ) -> Path:
+        if extension not in {"yaml", "json"}:
+            raise ValueError("Ossie extension must be yaml or json")
+        path = self.revision_directory(
+            model_id, revision_id
+        ) / f"semantic.ossie.{extension}"
+        if not path.exists():
+            raise FileNotFoundError(
+                f"semantic revision {revision_id!r} is unavailable"
+            )
+        if extension == "yaml":
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            if digest != revision_id:
+                raise RuntimeError("semantic revision hash verification failed")
+        else:
+            manifest_path = (
+                self.revision_directory(model_id, revision_id)
+                / "manifest.json"
+            )
+            if not manifest_path.exists():
+                raise RuntimeError("semantic revision manifest is unavailable")
+            manifest = json.loads(manifest_path.read_text())
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            if (
+                manifest.get("revision_id") != revision_id
+                or manifest.get("json_sha256") != digest
+            ):
+                raise RuntimeError("semantic revision hash verification failed")
+        return path
 
     def published_ossie_path(
         self, model_id: str, extension: str = "yaml"

@@ -128,6 +128,20 @@ class TraceRun:
     duration_ms: float | None = None
     tokens_in: int = 0
     tokens_out: int = 0
+    semantic_revision_id: str | None = None
+
+
+@dataclass(frozen=True)
+class SemanticRevision:
+    id: str
+    model_id: str
+    sha256: str
+    artifact_path: str
+    published_at: datetime
+    size_bytes: int
+    ossie_version: str | None = None
+    discovery_run_id: str | None = None
+    published_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -293,6 +307,18 @@ class MetadataRepository(Protocol):
     ) -> StoredConversation: ...
 
     def create_trace_run(self, run: TraceRun) -> TraceRun: ...
+
+    def save_semantic_revision(
+        self, revision: SemanticRevision
+    ) -> SemanticRevision: ...
+
+    def semantic_revision(
+        self, revision_id: str
+    ) -> SemanticRevision | None: ...
+
+    def latest_semantic_revision(
+        self, model_id: str
+    ) -> SemanticRevision | None: ...
 
     def update_trace_run(
         self,

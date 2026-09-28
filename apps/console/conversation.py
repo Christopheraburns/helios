@@ -7,6 +7,7 @@ import math
 import os
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import anyio
@@ -15,6 +16,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 from helios_core import __version__, audit
+from helios_core.artifacts import ArtifactStore
 from helios_core.authz import Principal
 from helios_core.delegation import issue_assertion
 from helios_core.llm import (
@@ -23,7 +25,7 @@ from helios_core.llm import (
     LLMTimeoutError,
     llm_from_env,
 )
-from helios_core.metadata import MetadataRepository
+from helios_core.metadata import MetadataRepository, SemanticRevision
 from helios_core.tracing import TraceRecorder, utcnow
 
 LOGGER = logging.getLogger(__name__)
@@ -163,6 +165,34 @@ class ConversationService:
         trace_run_id: str | None = None,
     ) -> dict[str, Any]:
         context = audit.current_context()
+        semantic_revision = ArtifactStore().ensure_published_revision(
+            model_id
+        )
+        semantic_revision_id = (
+            str(semantic_revision["revision_id"])
+            if semantic_revision
+            else None
+        )
+        save_revision = getattr(
+            self.trace_repository, "save_semantic_revision", None
+        )
+        if semantic_revision and callable(save_revision):
+            save_revision(
+                SemanticRevision(
+                    id=semantic_revision_id or "",
+                    model_id=model_id,
+                    sha256=str(semantic_revision["sha256"]),
+                    artifact_path=str(semantic_revision["path"]),
+                    ossie_version=semantic_revision.get("ossie_version"),
+                    discovery_run_id=semantic_revision.get("run_id"),
+                    published_at=datetime.fromisoformat(
+                        semantic_revision.get("published_at")
+                        or utcnow().isoformat()
+                    ),
+                    published_by=semantic_revision.get("published_by"),
+                    size_bytes=int(semantic_revision["size_bytes"]),
+                )
+            )
         recorder = (
             TraceRecorder.start(
                 self.trace_repository,
@@ -176,6 +206,7 @@ class ConversationService:
                 purpose=purpose,
                 question_id=question_id,
                 run_id=trace_run_id,
+                semantic_revision_id=semantic_revision_id,
             )
             if self.trace_repository is not None
             else None
@@ -189,6 +220,7 @@ class ConversationService:
                 request_id=context.request_id if context else None,
                 session_id=context.session_id if context else None,
                 trace_run_id=recorder.run.id if recorder else None,
+                semantic_revision_id=semantic_revision_id,
             )
             headers = {
                 "Authorization": f"Bearer {self.mcp.token}",
@@ -294,8 +326,12 @@ class ConversationService:
             "Dimensions and filter columns must use exact "
             "database.table.column identifiers returned by search_semantics "
             "or describe. Never invent, shorten, or convert semantic names. "
-            "If a tool reports an invalid semantic query, search again and "
-            "correct the identifiers. Never label semantic validation, "
+            "Preserve the datatype returned for every filter field: use JSON "
+            "numbers without quotes for numeric fields, JSON booleans for "
+            "Boolean fields, and ISO strings for Date or Timestamp fields. "
+            "If a tool reports an invalid semantic query or filter value, "
+            "search again and correct the identifiers and JSON value types. "
+            "Never label semantic validation, "
             "authorization, or tool-argument errors as an Impala outage. "
             "Explain results accurately and do not invent data."
         )
@@ -535,7 +571,10 @@ class ConversationService:
                                 "Call search_semantics again. Copy metric "
                                 "names exactly and use full "
                                 "database.table.column field identifiers "
-                                "from the tool results before retrying."
+                                "from the tool results before retrying. "
+                                "Preserve each field's returned datatype; "
+                                "numeric filter values must be JSON numbers "
+                                "without quotes."
                             ),
                         }
                     unresolved_tool_error = result
@@ -595,6 +634,12 @@ class ConversationService:
                             "result_size_bytes": len(encoded.encode()),
                             "args_valid": not bool(call.parse_error),
                             "repeated_failure": repeated_failure,
+                            "semantic_revision_id": (
+                                recorder.run.semantic_revision_id
+                            ),
+                            **_semantic_span_evidence(
+                                trace_arguments, result
+                            ),
                         },
                         error=(
                             str(tool_error)
@@ -649,6 +694,7 @@ class ConversationService:
 
 
 _SEMANTIC_ERROR_CODES = frozenset({
+    "invalid_filter_value_type",
     "invalid_semantic_query",
     "invalid_semantic_reference",
     "semantic_not_found",
@@ -671,6 +717,11 @@ _IMPALA_SERVICE_ERROR_CODES = frozenset({
 def _user_facing_tool_error(result: dict[str, Any]) -> str:
     code = str(result.get("error") or "tool_error")
     detail = str(result.get("message") or "").strip()
+    if code == "invalid_filter_value_type":
+        fallback = (
+            "A filter value did not match the approved field's datatype."
+        )
+        return f"Query filter issue: {detail or fallback}"
     if code in _SEMANTIC_ERROR_CODES:
         fallback = (
             "The requested metric or field is not available in the "
@@ -755,6 +806,46 @@ def _safe_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
         key: value
         for key, value in arguments.items()
         if key.lower() not in {"token", "password", "secret", "api_key"}
+    }
+
+
+def _semantic_span_evidence(
+    arguments: dict[str, Any],
+    result: object,
+) -> dict[str, Any]:
+    references: list[str] = []
+    for key in ("metrics", "dimensions"):
+        values = arguments.get(key)
+        if isinstance(values, list):
+            references.extend(
+                value for value in values if isinstance(value, str)
+            )
+    for item in arguments.get("filters") or []:
+        if isinstance(item, dict):
+            value = item.get("field") or item.get("column")
+            if isinstance(value, str):
+                references.append(value)
+    if isinstance(arguments.get("name"), str):
+        references.append(arguments["name"])
+    output = result if isinstance(result, dict) else {}
+    joins = output.get("joins")
+    if not isinstance(joins, list):
+        joins = []
+    assets = [
+        value
+        for value in [
+            output.get("dataset"),
+            *joins,
+        ]
+        if isinstance(value, str)
+    ]
+    data_source_ids = output.get("data_source_ids")
+    return {
+        "semantic_references": list(dict.fromkeys(references)),
+        "physical_assets": list(dict.fromkeys(assets)),
+        "authorized_data_source_ids": (
+            data_source_ids if isinstance(data_source_ids, list) else []
+        ),
     }
 
 

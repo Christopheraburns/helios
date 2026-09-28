@@ -31,6 +31,12 @@ from apps.console.model_provider import (
 from apps.mcp import server as mcp_server
 from helios_core import audit, authz
 from helios_core.config import ImpalaConfig
+from helios_core.compiler import (
+    Compiler,
+    Filter,
+    FilterValueTypeError,
+    SemanticRequest,
+)
 from helios_core.data_authorization import (
     DataPolicy,
     PlatformDataDecision,
@@ -141,6 +147,67 @@ def canonical_model() -> SemanticModel:
     return SemanticModel(document)
 
 
+def test_compiler_coerces_filter_values_using_semantic_datatype():
+    model = canonical_model()
+    model.datasets["customers"].fields["customer_id"].datatype = "BIGINT"
+
+    compiled = Compiler(model).compile(
+        SemanticRequest(
+            metrics=["Customer count"],
+            filters=[
+                Filter("crm.customers.customer_id", "=", "2002")
+            ],
+        ),
+        dialect="hive",
+    )
+
+    assert "customers.customer_id = 2002" in compiled.sql
+    assert "'2002'" not in compiled.sql
+
+
+def test_compiler_rejects_unsafe_filter_type_before_impala():
+    model = canonical_model()
+    model.datasets["customers"].fields["customer_id"].datatype = "BIGINT"
+
+    with pytest.raises(
+        FilterValueTypeError,
+        match="expects BIGINT.*without quotes",
+    ):
+        Compiler(model).compile(
+            SemanticRequest(
+                metrics=["Customer count"],
+                filters=[
+                    Filter(
+                        "crm.customers.customer_id",
+                        "=",
+                        "2001-10-01",
+                    )
+                ],
+            ),
+            dialect="hive",
+        )
+
+
+def test_impala_analysis_type_mismatch_is_not_service_unavailable():
+    hive_server_error = type("HiveServer2Error", (Exception,), {})
+    error = hive_server_error(
+        "AnalysisException: operands of type BIGINT and STRING "
+        "are not comparable"
+    )
+
+    message = mcp_server._impala_filter_type_error(error)
+
+    assert message is not None
+    assert "value type" in message
+    assert mcp_server._impala_filter_type_error(
+        RuntimeError("connection timed out")
+    ) is None
+    assert conversation_module._user_facing_tool_error({
+        "error": "invalid_filter_value_type",
+        "message": "d_year expects BIGINT",
+    }) == "Query filter issue: d_year expects BIGINT"
+
+
 def test_signed_delegation_round_trip_and_tamper_rejection():
     token = issue_assertion(
         SECRET,
@@ -151,6 +218,7 @@ def test_signed_delegation_round_trip_and_tamper_rejection():
         request_id="request-123",
         session_id="session-456",
         trace_run_id="trace-789",
+        semantic_revision_id="a" * 64,
     )
     context = verify_assertion(SECRET, token, now=110)
 
@@ -160,10 +228,56 @@ def test_signed_delegation_round_trip_and_tamper_rejection():
     assert context.request_id == "request-123"
     assert context.session_id == "session-456"
     assert context.trace_run_id == "trace-789"
+    assert context.semantic_revision_id == "a" * 64
     with pytest.raises(DelegationError):
         verify_assertion(SECRET, token[:-1] + "x", now=110)
     with pytest.raises(DelegationError, match="expired"):
         verify_assertion(SECRET, token, now=200)
+
+
+def test_mcp_model_store_keeps_the_turns_pinned_revision(
+    tmp_path, monkeypatch
+):
+    artifacts = mcp_server.ArtifactStore(tmp_path)
+    first, problems = build_ossie(
+        draft_model(),
+        "Customer model",
+        "first definition",
+        model_id="customer360",
+    )
+    assert problems == []
+    first_manifest = {"published_at": "2026-09-28T10:00:00+00:00"}
+    artifacts.write_published_ossie(
+        "customer360",
+        first,
+        "name: Customer model\ndescription: first definition\n",
+        first_manifest,
+    )
+    pinned_revision = first_manifest["revision_id"]
+    second = {**first, "description": "second definition"}
+    artifacts.write_published_ossie(
+        "customer360",
+        second,
+        "name: Customer model\ndescription: second definition\n",
+        {"published_at": "2026-09-28T11:00:00+00:00"},
+    )
+    monkeypatch.setattr(mcp_server, "artifact_store", artifacts)
+    store = mcp_server.ModelStore()
+    token = mcp_server._caller_context.set(
+        mcp_server.MCPCaller(
+            principal(),
+            "customer360",
+            "acme",
+            semantic_revision_id=pinned_revision,
+        )
+    )
+    try:
+        source, loaded = store.load("customer360")
+    finally:
+        mcp_server._caller_context.reset(token)
+
+    assert source["revision_id"] == pinned_revision
+    assert loaded.description == "first definition"
 
 
 @pytest.mark.anyio
@@ -420,7 +534,7 @@ def test_conversation_repository_persists_owned_model_history(
         "There are 12 customers in the result.",
     )
 
-    assert repository.schema_version() == 6
+    assert repository.schema_version() == 7
     assert created.version == 1
     assert [message.role for message in created.messages] == [
         "user",
@@ -583,6 +697,9 @@ def test_mcp_tools_load_published_ossie_artifact(
         searched = mcp_server.search_semantics(
             "customer count", model="customer360"
         )
+        field_matches = mcp_server.search_semantics(
+            "customer id", model="customer360"
+        )
         field = mcp_server.describe(
             "warehouse.customers.customer_id",
             model="customer360",
@@ -596,6 +713,15 @@ def test_mcp_tools_load_published_ossie_artifact(
             ["missing_metric"],
             model="customer360",
         )
+        invalid_filter = mcp_server.compile_query(
+            ["customer_count"],
+            filters=[{
+                "column": "warehouse.customers.customer_id",
+                "op": "=",
+                "value": 12,
+            }],
+            model="customer360",
+        )
         missing = mcp_server.describe(
             "not-a-semantic-object",
             model="customer360",
@@ -605,11 +731,18 @@ def test_mcp_tools_load_published_ossie_artifact(
 
     assert described["datasets"][0]["table"] == "warehouse.customers"
     assert searched["matches"][0]["kind"] in {"dataset", "metric", "field"}
+    assert any(
+        item.get("datatype") == "String"
+        for item in field_matches["matches"]
+        if item["kind"] == "field"
+    )
     assert field["column"] == "customer_id"
     assert compiled["dataset"] == "warehouse.customers"
     assert "GROUP BY" in compiled["sql"]
     assert invalid["error"] == "invalid_semantic_query"
     assert invalid["retryable"] is False
+    assert invalid_filter["error"] == "invalid_filter_value_type"
+    assert "expects STRING" in invalid_filter["message"]
     assert missing == {
         "error": "semantic_not_found",
         "message": (
@@ -735,6 +868,29 @@ def test_mcp_run_query_uses_delegated_identity(
     assert result["rows"] == [[12]]
     assert captured["delegated_user"] == "owner"
     assert captured["limit"] == 1000
+
+    hive_server_error = type("HiveServer2Error", (Exception,), {})
+
+    def analysis_mismatch(
+        _self, _sql, _limit=1000, *, delegated_user=None
+    ):
+        raise hive_server_error(
+            "AnalysisException: operands of type BIGINT and STRING "
+            "are not comparable"
+        )
+
+    monkeypatch.setattr(ImpalaEngine, "query", analysis_mismatch)
+    context_token = mcp_server._caller_context.set(
+        mcp_server.MCPCaller(principal(), "customer360", "acme")
+    )
+    try:
+        mismatch = mcp_server.run_query(
+            ["Customer count"], model="customer360"
+        )
+    finally:
+        mcp_server._caller_context.reset(context_token)
+    assert mismatch["error"] == "invalid_filter_value_type"
+    assert mismatch["retryable"] is False
 
     def ranger_denied(_self, _sql, _limit, *, delegated_user=None):
         raise PermissionError(f"Ranger denied {delegated_user}")
