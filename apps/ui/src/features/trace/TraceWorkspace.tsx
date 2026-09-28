@@ -29,6 +29,7 @@ export default function TraceWorkspace({
   const [includeAll, setIncludeAll] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [runsCollapsed, setRunsCollapsed] = useState(false);
 
   const loadRuns = useCallback(async () => {
     if (!context.selectedModelId) return;
@@ -113,27 +114,17 @@ export default function TraceWorkspace({
   }
 
   return (
-    <section className="trace-workspace" aria-labelledby="trace-workspace-title">
-      <header className="trace-workspace__header">
-        <div>
-          <p className="page-header__eyebrow">Execution evidence</p>
-          <h2 id="trace-workspace-title">MCP traces</h2>
-          <p>
-            Replay each LLM reasoning round and compare the client request with
-            what the MCP server actually received.
-          </p>
-        </div>
+    <section className="trace-workspace" aria-label="MCP traces">
+      <div className="trace-workspace__filters">
         <button
           className="button button--secondary"
           type="button"
-          disabled={loading}
-          onClick={() => void loadRuns()}
+          aria-controls="trace-run-list"
+          aria-expanded={!runsCollapsed}
+          onClick={() => setRunsCollapsed((collapsed) => !collapsed)}
         >
-          Refresh traces
+          {runsCollapsed ? "Show trace list" : "Hide trace list"}
         </button>
-      </header>
-
-      <div className="trace-workspace__filters">
         <label>
           Purpose
           <select
@@ -158,11 +149,26 @@ export default function TraceWorkspace({
             Organization traces
           </label>
         ) : null}
+        <button
+          className="button button--secondary trace-workspace__refresh"
+          type="button"
+          disabled={loading}
+          onClick={() => void loadRuns()}
+        >
+          Refresh traces
+        </button>
       </div>
 
       {error ? <p className="action-message action-message--error" role="alert">{error}</p> : null}
-      <div className="trace-workspace__layout">
-        <aside className="trace-workspace__runs" aria-label="Trace runs">
+      <div className={`trace-workspace__layout${
+        runsCollapsed ? " trace-workspace__layout--runs-collapsed" : ""
+      }`}>
+        <aside
+          className="trace-workspace__runs"
+          id="trace-run-list"
+          aria-label="Trace runs"
+          hidden={runsCollapsed}
+        >
           {loading && !collection ? <p role="status">Loading traces…</p> : null}
           {collection?.items.map((run) => (
             <button
@@ -184,6 +190,7 @@ export default function TraceWorkspace({
         <div className="trace-workspace__canvas">
           {detail ? (
             <ReactFlow
+              key={runsCollapsed ? "runs-collapsed" : "runs-expanded"}
               nodes={flow.nodes}
               edges={flow.edges}
               nodeTypes={nodeTypes}
