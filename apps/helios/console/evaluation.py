@@ -11,7 +11,7 @@ from typing import Any
 
 import anyio
 
-from apps.console.conversation import (
+from apps.helios.console.conversation import (
     ConversationService,
     ConversationUnavailable,
     MCPClientConfig,

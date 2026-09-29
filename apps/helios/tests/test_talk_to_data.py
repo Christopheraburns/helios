@@ -28,7 +28,7 @@ from apps.console.model_provider import (
     llm_for_settings,
     provider_availability,
 )
-from apps.mcp import server as mcp_server
+from apps.helios.mcp import server as mcp_server
 from helios_core import audit, authz
 from helios_core.config import ImpalaConfig
 from helios_core.compiler import (

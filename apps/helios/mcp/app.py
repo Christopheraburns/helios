@@ -29,9 +29,8 @@ port = os.environ.get("CDSW_APP_PORT", "8081")
 cmd = [sys.executable, "-m", "uvicorn", "apps.helios.mcp.server:app", "--host", "127.0.0.1", "--port", port, "--log-level", "info"]
 print("starting helios mcp server:", " ".join(cmd), flush=True)
 python_paths = [
-    ROOT,  # repo root for monorepo structure
-    os.path.join(ROOT, "apps", "helios"),  # query runtime
-    os.path.join(ROOT, "shared"),  # shared core package location
+    os.path.join(ROOT, "shared"),  # shared core package location (first)
+    ROOT,  # repo root for monorepo structure (allows apps.helios imports)
 ]
 dependency_dir = os.environ.get("HELIOS_PYTHON_DEPS") or os.path.join(
     PROJECT_DIR, ".helios-python"
