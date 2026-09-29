@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react'
-import { api } from '../services/api'
+import { api, GenerationRequest } from '../services/api'
 import '../styles/JobSubmission.css'
 
 interface ConfigTemplate {
-  default_tpcds_scale_factors: number[]
+  scale_factors: number[]
   artifact_types: string[]
   scenario_types: string[]
   difficulty_profiles: Array<{
@@ -11,13 +11,6 @@ interface ConfigTemplate {
     description: string
     weights: Record<string, number>
   }>
-}
-
-interface JobConfig {
-  tpcds_scale_factor: number
-  master_seed: number
-  artifact_targets: Record<string, number>
-  difficulty_profile: string
 }
 
 interface JobSubmissionProps {
@@ -31,12 +24,7 @@ export function JobSubmission({ onJobSubmitted }: JobSubmissionProps) {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  const [config, setConfig] = useState<JobConfig>({
-    tpcds_scale_factor: 1,
-    master_seed: 42,
-    artifact_targets: {},
-    difficulty_profile: 'balanced',
-  })
+  const [config, setConfig] = useState<GenerationRequest | null>(null)
 
   useEffect(() => {
     fetchTemplate()
@@ -48,19 +36,7 @@ export function JobSubmission({ onJobSubmitted }: JobSubmissionProps) {
       const data = await api.getConfigTemplate()
       setTemplate(data)
 
-      const defaultConfig = await api.getDefaultConfig()
-      if (defaultConfig.artifact_targets) {
-        setConfig(prev => ({
-          ...prev,
-          artifact_targets: Object.entries(defaultConfig.artifact_targets).reduce(
-            (acc, [key, val]: [string, any]) => {
-              acc[key] = val.target_count
-              return acc
-            },
-            {} as Record<string, number>
-          ),
-        }))
-      }
+      setConfig(await api.getDefaultRequest())
     } catch (err) {
       setError('Failed to load configuration template')
       console.error(err)
@@ -71,12 +47,13 @@ export function JobSubmission({ onJobSubmitted }: JobSubmissionProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!config) return
     setError(null)
     setSuccess(null)
 
     try {
       setSubmitting(true)
-      await api.submitJob(config)
+      await api.createGeneration(config)
       setSuccess('Job submitted successfully!')
       onJobSubmitted()
 
@@ -89,6 +66,7 @@ export function JobSubmission({ onJobSubmitted }: JobSubmissionProps) {
   }
 
   if (loading) return <div className="loading">Loading...</div>
+  if (!config) return <div className="alert alert-error">{error ?? 'No configuration available'}</div>
 
   return (
     <div className="job-submission">
@@ -105,15 +83,15 @@ export function JobSubmission({ onJobSubmitted }: JobSubmissionProps) {
             <label htmlFor="tpcds-scale">TPC-DS Scale Factor</label>
             <select
               id="tpcds-scale"
-              value={config.tpcds_scale_factor}
+              value={config.source.scale_factor}
               onChange={e =>
-                setConfig(prev => ({
-                  ...prev,
-                  tpcds_scale_factor: parseInt(e.target.value),
-                }))
+                setConfig({
+                  ...config,
+                  source: { ...config.source, scale_factor: parseInt(e.target.value) },
+                })
               }
             >
-              {template?.default_tpcds_scale_factors.map(sf => (
+              {template?.scale_factors.map(sf => (
                 <option key={sf} value={sf}>
                   {sf}
                 </option>
@@ -128,12 +106,7 @@ export function JobSubmission({ onJobSubmitted }: JobSubmissionProps) {
               id="master-seed"
               type="number"
               value={config.master_seed}
-              onChange={e =>
-                setConfig(prev => ({
-                  ...prev,
-                  master_seed: parseInt(e.target.value),
-                }))
-              }
+              onChange={e => setConfig({ ...config, master_seed: parseInt(e.target.value) })}
             />
             <small>Controls deterministic generation; same seed produces identical output</small>
           </div>
@@ -148,15 +121,15 @@ export function JobSubmission({ onJobSubmitted }: JobSubmissionProps) {
                 id={`target-${type}`}
                 type="number"
                 min="0"
-                value={config.artifact_targets[type] || 0}
+                value={config.artifact_counts[type] || 0}
                 onChange={e =>
-                  setConfig(prev => ({
-                    ...prev,
-                    artifact_targets: {
-                      ...prev.artifact_targets,
-                      [type]: parseInt(e.target.value),
+                  setConfig({
+                    ...config,
+                    artifact_counts: {
+                      ...config.artifact_counts,
+                      [type]: parseInt(e.target.value) || 0,
                     },
-                  }))
+                  })
                 }
               />
             </div>
@@ -173,12 +146,7 @@ export function JobSubmission({ onJobSubmitted }: JobSubmissionProps) {
                   name="difficulty"
                   value={profile.name}
                   checked={config.difficulty_profile === profile.name}
-                  onChange={e =>
-                    setConfig(prev => ({
-                      ...prev,
-                      difficulty_profile: e.target.value,
-                    }))
-                  }
+                  onChange={e => setConfig({ ...config, difficulty_profile: e.target.value })}
                 />
                 <span>
                   <strong>{profile.name}</strong>: {profile.description}

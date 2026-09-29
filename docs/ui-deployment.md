@@ -95,14 +95,18 @@ directory is deliberately used.
 Use Node.js 20 or newer in a preparation session or CI runner:
 
 ```bash
-cd "$CDSW_PROJECT_DIR/helios/apps/ui"
+cd "$CDSW_PROJECT_DIR/helios/apps/helios/ui"
 npm ci
 npm run typecheck
 HELIOS_UI_BUILD_NUMBER="$(git rev-parse --short HEAD)" npm run build
 test -f dist/index.html
 ```
 
-`npm ci` consumes the committed lock file. `apps/ui/dist` is intentionally
+`prebuild` syncs embedded documentation from the repo (`README.md`,
+`MONOREPO.md`, and allowlisted files under `docs/`) into the UI bundle. The
+project checkout must include those paths.
+
+`npm ci` consumes the committed lock file. `apps/helios/ui/dist` is intentionally
 ignored by Git, so every fresh Project checkout must build or receive this
 artifact before the UI Application starts. A normal Application restart does
 not rebuild it.

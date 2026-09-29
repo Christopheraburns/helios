@@ -4,11 +4,10 @@ The scenario planner selects TPC-DS records to become test scenarios without
 relying on database result order or shared RNG state. For every eligible record,
 compute a stable ranking key, sort, and select the top N.
 """
-import hashlib
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Tuple
 
-from .ids import DeterministicIDGenerator
+from .ids import GENERATOR_SCHEMA_VERSION, hash_parts
 
 
 @dataclass
@@ -76,8 +75,9 @@ class ScenarioPlanner:
         Returns:
             Hex-encoded SHA256 hash (used for sorting)
         """
-        preimage = f"{master_seed}|{scenario_type}|{canonical_tpcds_business_key}|{generator_schema_version}"
-        return hashlib.sha256(preimage.encode()).hexdigest()
+        return hash_parts(
+            master_seed, scenario_type, canonical_tpcds_business_key, generator_schema_version
+        )
 
     def select_candidates(
         self,
@@ -97,30 +97,21 @@ class ScenarioPlanner:
         Returns:
             Selected records, deterministically chosen
         """
-        # Score each record
-        scored = []
+        scored: List[Tuple[str, dict]] = []
         for record in all_records:
             # Extract canonical key (e.g., from sale_id, item_id)
             key = str(record.get("business_key", record))
-
             score = self.compute_candidate_score(
                 self.master_seed,
                 scenario_type,
                 key,
-                "1.0",  # Schema version for reproducibility
+                GENERATOR_SCHEMA_VERSION,
             )
-            scored.append({
-                "record": record,
-                "score": score,
-                "key": key,
-            })
+            scored.append((score, record))
 
-        # Sort by score (deterministic)
-        scored.sort(key=lambda x: x["score"])
-
-        # Take top N
-        selected = scored[:target_count]
-        return [item["record"] for item in selected]
+        # Sort by score only, so input order never affects the result
+        scored.sort(key=lambda item: item[0])
+        return [record for _, record in scored[:target_count]]
 
     def plan_scenarios(
         self,

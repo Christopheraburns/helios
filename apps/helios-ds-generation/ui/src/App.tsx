@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { JobSubmission } from './pages/JobSubmission'
 import { JobMonitor } from './pages/JobMonitor'
 import { ResultsBrowser } from './pages/ResultsBrowser'
