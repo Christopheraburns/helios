@@ -1,0 +1,22 @@
+# Renderer assets arrive with the matching artifact generator task.
+template_id: warehouse_inspection
+template_version: 1.0.0
+template_schema_version: '1.0'
+artifact_type: video
+supported_scenario_types:
+- warehouse_inventory_issue
+required_fields:
+- w_warehouse_name
+- inventory_date
+- i_item_id
+- i_product_name
+optional_fields:
+- i_brand
+rendering_parameters:
+  fps: 24
+  width: 1280
+  height: 720
+  codec: libx264
+  pix_fmt: yuv420p
+  duration_s: 40
+ground_truth_locator_strategy: video_time_span_ms

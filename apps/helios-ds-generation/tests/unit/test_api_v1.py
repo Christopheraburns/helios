@@ -47,12 +47,13 @@ def test_spec_example_request_is_accepted(client):
     )
 
 
-def test_job_status_and_deterministic_dataset_id(client):
+def test_job_status_and_deterministic_config_hash(client):
     first = client.get(_create(client, {"master_seed": 7})["status_uri"]).json()
     second = client.get(_create(client, {"master_seed": 7})["status_uri"]).json()
     third = client.get(_create(client, {"master_seed": 8})["status_uri"]).json()
     assert first["job_id"] != second["job_id"]
-    assert first["dataset_id"] == second["dataset_id"] != third["dataset_id"]
+    assert first["config_hash"] == second["config_hash"] != third["config_hash"]
+    assert first["dataset_id"] is None
 
 
 def test_cancel(client):

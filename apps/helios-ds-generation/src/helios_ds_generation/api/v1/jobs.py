@@ -12,8 +12,6 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import ValidationError
 
-from helios_ds.ids import dataset_id as make_dataset_id
-
 from .models import CANCELLABLE_STATES, GenerationAccepted, GenerationRequest, Job, JobState
 
 router = APIRouter()
@@ -50,7 +48,7 @@ async def create_generation(request: GenerationRequest) -> GenerationAccepted:
     _jobs[job_id] = Job(
         job_id=job_id,
         state=JobState.QUEUED,
-        dataset_id=make_dataset_id(config.config_hash()),
+        config_hash=config.config_hash(),
         request=request,
         created_at=now,
         updated_at=now,

@@ -93,7 +93,8 @@ class Job(BaseModel):
 
     job_id: str
     state: JobState
-    dataset_id: str
+    config_hash: str
+    dataset_id: Optional[str] = None  # set when planning runs; also covers templates + source
     request: GenerationRequest
     created_at: str
     updated_at: str

@@ -1,0 +1,24 @@
+# Renderer assets arrive with the matching artifact generator task.
+template_id: return_report
+template_version: 1.0.0
+template_schema_version: '1.0'
+artifact_type: pdf
+supported_scenario_types:
+- product_return_damage
+required_fields:
+- sr_ticket_number
+- return_date
+- r_reason_desc
+- i_item_id
+- i_product_name
+- c_first_name
+- c_last_name
+- s_store_name
+optional_fields:
+- sale_date
+- sr_return_amt
+- sr_return_quantity
+rendering_parameters:
+  page_size: letter
+  pages: 1
+ground_truth_locator_strategy: pdf_page_text_span

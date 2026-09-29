@@ -1,0 +1,17 @@
+# Renderer assets arrive with the matching artifact generator task.
+template_id: campaign_image
+template_version: 1.0.0
+template_schema_version: '1.0'
+artifact_type: image
+supported_scenario_types:
+- promotion_performance
+required_fields:
+- p_promo_name
+- i_product_name
+optional_fields:
+- i_brand
+rendering_parameters:
+  width: 1200
+  height: 628
+  format: png
+ground_truth_locator_strategy: image_region_bbox

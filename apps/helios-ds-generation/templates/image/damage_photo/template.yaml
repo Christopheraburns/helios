@@ -1,0 +1,18 @@
+# Renderer assets arrive with the matching artifact generator task.
+template_id: damage_photo
+template_version: 1.0.0
+template_schema_version: '1.0'
+artifact_type: image
+supported_scenario_types:
+- product_return_damage
+required_fields:
+- i_item_id
+- i_product_name
+- r_reason_desc
+optional_fields:
+- i_brand
+rendering_parameters:
+  width: 1024
+  height: 768
+  format: png
+ground_truth_locator_strategy: image_region_bbox

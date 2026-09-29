@@ -1,0 +1,18 @@
+# Renderer assets arrive with the matching artifact generator task.
+template_id: support_chat
+template_version: 1.0.0
+template_schema_version: '1.0'
+artifact_type: chat
+supported_scenario_types:
+- customer_complaint
+required_fields:
+- wr_order_number
+- i_product_name
+- r_reason_desc
+optional_fields:
+- c_last_name
+rendering_parameters:
+  channel: support-web
+  min_messages: 4
+  max_messages: 8
+ground_truth_locator_strategy: chat_message_char_span

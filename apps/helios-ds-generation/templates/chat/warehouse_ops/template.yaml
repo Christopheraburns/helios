@@ -1,0 +1,19 @@
+# Renderer assets arrive with the matching artifact generator task.
+template_id: warehouse_ops
+template_version: 1.0.0
+template_schema_version: '1.0'
+artifact_type: chat
+supported_scenario_types:
+- warehouse_inventory_issue
+required_fields:
+- w_warehouse_name
+- i_product_name
+- inv_quantity_on_hand
+- inventory_date
+optional_fields:
+- i_item_id
+rendering_parameters:
+  channel: warehouse-ops
+  min_messages: 3
+  max_messages: 6
+ground_truth_locator_strategy: chat_message_char_span
