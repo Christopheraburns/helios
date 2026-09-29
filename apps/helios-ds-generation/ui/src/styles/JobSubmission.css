@@ -1,0 +1,96 @@
+.job-submission {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 30px;
+  box-shadow: var(--shadow);
+  max-width: 600px;
+}
+
+.job-submission h2 {
+  margin-bottom: 24px;
+  font-size: 24px;
+  color: var(--text);
+}
+
+.submission-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+legend {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--text);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+}
+
+.form-group small {
+  color: var(--text-light);
+  font-size: 13px;
+}
+
+.form-group input[type='radio'] {
+  width: auto;
+  margin-right: 8px;
+}
+
+.form-group label span {
+  display: flex;
+  align-items: center;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.btn {
+  padding: 10px 24px;
+  border-radius: 4px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+  box-shadow: var(--shadow-md);
+}
+
+@media (max-width: 640px) {
+  .job-submission {
+    padding: 20px;
+  }
+
+  .job-submission h2 {
+    font-size: 20px;
+  }
+}
