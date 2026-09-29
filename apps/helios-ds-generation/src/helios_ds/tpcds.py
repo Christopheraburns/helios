@@ -18,6 +18,7 @@ import datetime as dt
 import decimal
 import json
 import os
+import threading
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import duckdb
@@ -129,12 +130,13 @@ class ImpalaTpcds(TpcdsRepository):
 
     def __init__(self, connect: Callable[[], Any]):
         self._connect = connect
-        self._connection: Any = None
+        self._local = threading.local()  # DB-API connections are per thread
 
     def _execute(self, sql: str) -> Tuple[List[str], List[Tuple[Any, ...]]]:
-        if self._connection is None:
-            self._connection = self._connect()
-        cursor = self._connection.cursor()
+        connection = getattr(self._local, "connection", None)
+        if connection is None:
+            connection = self._local.connection = self._connect()
+        cursor = connection.cursor()
         cursor.execute(sql)
         columns = [d[0] for d in cursor.description] if cursor.description else []
         return columns, [tuple(r) for r in cursor.fetchall()]

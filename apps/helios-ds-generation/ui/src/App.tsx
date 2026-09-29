@@ -1,14 +1,20 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { JobSubmission } from './pages/JobSubmission'
 import { JobMonitor } from './pages/JobMonitor'
-import { ResultsBrowser } from './pages/ResultsBrowser'
+import { DatasetBrowser } from './pages/DatasetBrowser'
 import './styles/App.css'
 
-type Tab = 'submit' | 'monitor' | 'results'
+type Tab = 'submit' | 'monitor' | 'datasets'
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('submit')
   const [refreshJobs, setRefreshJobs] = useState(0)
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null)
+
+  const viewManifest = useCallback((datasetId: string) => {
+    setSelectedDatasetId(datasetId)
+    setActiveTab('datasets')
+  }, [])
 
   const handleJobSubmitted = () => {
     setActiveTab('monitor')
@@ -36,17 +42,21 @@ function App() {
           Monitor Jobs
         </button>
         <button
-          className={`nav-button ${activeTab === 'results' ? 'active' : ''}`}
-          onClick={() => setActiveTab('results')}
+          className={`nav-button ${activeTab === 'datasets' ? 'active' : ''}`}
+          onClick={() => setActiveTab('datasets')}
         >
-          Browse Results
+          Datasets &amp; Manifests
         </button>
       </nav>
 
       <main className="app-content">
         {activeTab === 'submit' && <JobSubmission onJobSubmitted={handleJobSubmitted} />}
-        {activeTab === 'monitor' && <JobMonitor refreshTrigger={refreshJobs} />}
-        {activeTab === 'results' && <ResultsBrowser />}
+        {activeTab === 'monitor' && (
+          <JobMonitor refreshTrigger={refreshJobs} onViewManifest={viewManifest} />
+        )}
+        {activeTab === 'datasets' && (
+          <DatasetBrowser selectedDatasetId={selectedDatasetId} onSelect={setSelectedDatasetId} />
+        )}
       </main>
 
       <footer className="app-footer">

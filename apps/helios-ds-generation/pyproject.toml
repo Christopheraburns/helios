@@ -53,7 +53,7 @@ packages = ["helios_ds", "helios_ds_generation"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["boto3", "botocore", "botocore.*", "cml", "cml.*", "impala", "impala.*", "pyarrow", "pyarrow.*", "yaml"]
+module = ["boto3", "botocore", "botocore.*", "cml", "cml.*", "cmlapi", "cmlapi.*", "impala", "impala.*", "pyarrow", "pyarrow.*", "yaml"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

@@ -69,6 +69,31 @@ CREATE TABLE IF NOT EXISTS helios_ds.template_versions (
 )
 STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
 
+CREATE TABLE IF NOT EXISTS helios_ds.generation_jobs (
+  job_id STRING,
+  created_at STRING,
+  config_hash STRING,
+  config_json STRING,
+  request STRING,
+  request_hash STRING,
+  idempotency_key STRING,
+  dispatcher STRING
+)
+STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
+
+CREATE TABLE IF NOT EXISTS helios_ds.job_events (
+  event_id STRING,
+  job_id STRING,
+  occurred_at STRING,
+  state STRING,
+  progress_percent BIGINT,
+  actor STRING,
+  dataset_id STRING,
+  workbench_run_id STRING,
+  message STRING
+)
+STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
+
 CREATE TABLE IF NOT EXISTS helios_ds.artifacts (
   dataset_id STRING,
   artifact_id STRING,
