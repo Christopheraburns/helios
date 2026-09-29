@@ -13,7 +13,7 @@ ROOT = Path(
     os.environ.get("HELIOS_ROOT")
     or Path(os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw")) / "helios"
 )
-DIST = ROOT / "apps" / "ui" / "dist"
+DIST = ROOT / "apps" / "helios" / "ui" / "dist"
 
 
 def configured_api_url() -> str:
@@ -73,7 +73,7 @@ def main() -> None:
     if not (DIST / "index.html").is_file():
         raise SystemExit(
             f"Helios UI build not found at {DIST}; run npm install && npm run build "
-            "in apps/ui before starting the Application"
+            "in apps/helios/ui before starting the Application"
         )
 
     configured_api_url()

@@ -2,9 +2,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from apps.console.api import api_router
-from apps.console.main import configure_cors, configured_cors_origins
-from apps.ui.app import configured_api_url
+from apps.helios.console.api import api_router
+from apps.helios.console.main import configure_cors, configured_cors_origins
+from apps.helios.ui.app import configured_api_url
 from helios_core import authz
 from helios_core.domain import (
     DataSource,

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from apps.console.evaluation import (
+from apps.helios.console.evaluation import (
     _aggregate_metrics,
     _normalized_result,
     list_suites,

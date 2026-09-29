@@ -9,19 +9,19 @@ from fastapi.testclient import TestClient
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
-from apps.console import conversation as conversation_module
-from apps.console.conversation import (
+from apps.helios.console import conversation as conversation_module
+from apps.helios.console.conversation import (
     ConversationService,
     ConversationUnavailable,
     MCPClientConfig,
     _nested_exception,
 )
-from apps.console.main import app
-from apps.console.mcp_settings import (
+from apps.helios.console.main import app
+from apps.helios.console.mcp_settings import (
     SessionMCPSettingsStore,
     environment_max_tool_rounds,
 )
-from apps.console.model_provider import (
+from apps.helios.console.model_provider import (
     LITELLM_GATEWAY_URL,
     SessionModelProvider,
     SessionModelProviderStore,

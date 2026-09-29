@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.console.main import app
+from apps.helios.console.main import app
 from helios_core import health as system_health
 from helios_core import runs as runstore
 from helios_core.graph import ArtifactGraphRepository
