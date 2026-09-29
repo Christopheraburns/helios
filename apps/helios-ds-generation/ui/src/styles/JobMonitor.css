@@ -181,3 +181,13 @@
     grid-template-columns: 1fr;
   }
 }
+
+.job-message {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-light);
+}
+
+.job-message.error {
+  color: var(--danger);
+}

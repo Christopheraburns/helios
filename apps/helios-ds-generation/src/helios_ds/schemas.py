@@ -87,6 +87,34 @@ class TemplateVersionRecord(BaseModel):
     content_hash: str = Field(...)
 
 
+class GenerationJobRecord(BaseModel):
+    """One generation request (operational; job IDs are not deterministic).
+    State lives in job_events. Written before any dataset exists, so no dataset_id."""
+
+    job_id: str = Field(...)
+    created_at: str = Field(..., description="ISO 8601 timestamp")
+    config_hash: str = Field(..., description="Canonical DatasetConfig hash")
+    config_json: str = Field(..., description="Canonical DatasetConfig JSON the worker runs")
+    request: Dict[str, Any] = Field(..., description="The API request as submitted")
+    request_hash: str = Field(..., description="SHA-256 of the canonical request")
+    idempotency_key: Optional[str] = Field(None)
+    dispatcher: str = Field(..., description="workbench or inline")
+
+
+class JobEventRecord(BaseModel):
+    """Append-only job state/progress event. The first terminal event wins."""
+
+    event_id: str = Field(...)
+    job_id: str = Field(...)
+    occurred_at: str = Field(..., description="ISO 8601 timestamp")
+    state: str = Field(..., description="QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED")
+    progress_percent: int = Field(0)
+    actor: str = Field(..., description="api, worker, or a principal")
+    dataset_id: Optional[str] = Field(None)
+    workbench_run_id: Optional[str] = Field(None)
+    message: Optional[str] = Field(None)
+
+
 class ArtifactRecord(BaseModel):
     """Artifact identity and provenance."""
 

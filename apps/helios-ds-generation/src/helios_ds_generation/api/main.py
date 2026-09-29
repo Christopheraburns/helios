@@ -2,6 +2,7 @@
 
 Serves both the REST API and static dashboard UI.
 """
+
 from pathlib import Path
 
 from fastapi import FastAPI

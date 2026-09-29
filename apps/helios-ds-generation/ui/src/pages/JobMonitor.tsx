@@ -4,9 +4,10 @@ import '../styles/JobMonitor.css'
 
 interface JobMonitorProps {
   refreshTrigger: number
+  onViewManifest: (datasetId: string) => void
 }
 
-export function JobMonitor({ refreshTrigger }: JobMonitorProps) {
+export function JobMonitor({ refreshTrigger, onViewManifest }: JobMonitorProps) {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -133,7 +134,26 @@ export function JobMonitor({ refreshTrigger }: JobMonitorProps) {
                     </span>
                   </div>
                 )}
+
+                {job.dataset_id && (
+                  <div className="job-stat">
+                    <span className="stat-label">Dataset</span>
+                    <span className="stat-value">{job.dataset_id.substring(0, 8)}…</span>
+                    <button
+                      className="btn btn-small btn-primary"
+                      onClick={() => onViewManifest(job.dataset_id as string)}
+                    >
+                      View manifest
+                    </button>
+                  </div>
+                )}
               </div>
+
+              {job.message && (
+                <p className={job.state === 'FAILED' ? 'job-message error' : 'job-message'}>
+                  {job.message}
+                </p>
+              )}
             </div>
           ))}
         </div>

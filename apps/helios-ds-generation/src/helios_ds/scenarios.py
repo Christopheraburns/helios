@@ -52,6 +52,16 @@ class ScenarioDefinition:
     eligibility_sql: str
     source_refs: Tuple[SourceRef, ...]
     artifacts: Mapping[str, str] = field(default_factory=dict)  # artifact_type -> template_id
+    # One-line, human-readable story for UIs, filled from the facts (display
+    # only: not part of the manifest or any ID).
+    headline: str = ""
+
+    def describe(self, facts: Mapping[str, Any]) -> str:
+        class _Missing(dict):  # type: ignore[type-arg]
+            def __missing__(self, key: str) -> str:
+                return "?"
+
+        return self.headline.format_map(_Missing({k: v for k, v in facts.items() if v is not None}))
 
     def business_key(self, record: Mapping[str, Any]) -> str:
         return f"{self.source_table}:" + "|".join(f"{c}={record[c]}" for c in self.key_columns)
@@ -138,6 +148,11 @@ SCENARIOS: Dict[str, ScenarioDefinition] = {
                 "image": "damage_photo",
                 "audio": "support_call",
             },
+            headline=(
+                "{c_first_name} {c_last_name} returned {i_category} / {i_class} item "
+                "{i_product_name} ({i_item_id}) to store {s_store_name}, {s_city} {s_state} "
+                "on {return_date}: {r_reason_desc}"
+            ),
         ),
         ScenarioDefinition(
             scenario_type="warehouse_inventory_issue",
@@ -174,6 +189,11 @@ SCENARIOS: Dict[str, ScenarioDefinition] = {
                 "video": "warehouse_inspection",
                 "chat": "warehouse_ops",
             },
+            headline=(
+                "{i_category} / {i_class} item {i_product_name} ({i_item_id}) low at "
+                "warehouse {w_warehouse_name}, {w_city} {w_state}: {inv_quantity_on_hand} on hand "
+                "on {inventory_date}"
+            ),
         ),
         ScenarioDefinition(
             scenario_type="promotion_performance",
@@ -201,6 +221,10 @@ SCENARIOS: Dict[str, ScenarioDefinition] = {
                 "image": "campaign_image",
                 "chat": "marketing_chat",
             },
+            headline=(
+                "Promotion {p_promo_name} ({p_promo_id}) for {i_category} item "
+                "{i_product_name} ({i_item_id}), {start_date} to {end_date}"
+            ),
         ),
         ScenarioDefinition(
             scenario_type="customer_complaint",
@@ -238,6 +262,10 @@ SCENARIOS: Dict[str, ScenarioDefinition] = {
                 "chat": "support_chat",
                 "audio": "support_call",
             },
+            headline=(
+                "{c_first_name} {c_last_name} returned {i_category} item {i_product_name} "
+                "({i_item_id}) from web order {wr_order_number} on {return_date}: {r_reason_desc}"
+            ),
         ),
     )
 }

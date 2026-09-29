@@ -13,6 +13,7 @@ Both expose the same logical tables and records.
 """
 
 import json
+import threading
 import warnings
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional, Sequence
@@ -21,7 +22,7 @@ import pyarrow as pa
 from pydantic import BaseModel
 from pyiceberg.catalog import Catalog
 from pyiceberg.exceptions import NamespaceAlreadyExistsError, NoSuchTableError
-from pyiceberg.expressions import AlwaysTrue, BooleanExpression, EqualTo
+from pyiceberg.expressions import AlwaysTrue, And, BooleanExpression, EqualTo
 from pyiceberg.io.pyarrow import schema_to_pyarrow
 from pyiceberg.table import Table
 
@@ -51,7 +52,7 @@ class LakehouseSink(ABC):
     def _append_rows(self, spec: TableSpec, rows: List[Dict[str, Any]]) -> None: ...
 
     @abstractmethod
-    def _read_rows(self, spec: TableSpec, dataset_id: Optional[str]) -> List[Dict[str, Any]]: ...
+    def _read_rows(self, spec: TableSpec, where: Dict[str, Any]) -> List[Dict[str, Any]]: ...
 
     @abstractmethod
     def _delete_rows(self, spec: TableSpec, dataset_id: str) -> None: ...
@@ -83,11 +84,23 @@ class LakehouseSink(ABC):
             rows.append(row)
         self._append_rows(spec, rows)
 
-    def read(self, table: str, dataset_id: Optional[str] = None) -> List[BaseModel]:
-        """All rows of a table, or only one dataset's rows."""
+    def read(
+        self,
+        table: str,
+        dataset_id: Optional[str] = None,
+        where: Optional[Dict[str, Any]] = None,
+    ) -> List[BaseModel]:
+        """Rows of a table, optionally filtered by column equality (``where``);
+        ``dataset_id`` is shorthand for ``where={"dataset_id": ...}``."""
         spec = self._spec(table)
+        filters = dict(where or {})
+        if dataset_id is not None:
+            filters["dataset_id"] = dataset_id
+        unknown = sorted(set(filters) - set(spec.model.model_fields))
+        if unknown:
+            raise KeyError(f"{table} has no column(s) {unknown}")
         json_fields = self._json_fields(spec)
-        rows = self._read_rows(spec, dataset_id)
+        rows = self._read_rows(spec, filters)
         for row in rows:
             for name in json_fields:
                 if row.get(name) is not None:
@@ -106,7 +119,9 @@ class SqlLakehouseSink(LakehouseSink):
     """Lakehouse access through a DB-API connection (Impala in Workbench).
 
     Values are always bound as ``?`` parameters, so the driver does the quoting.
-    Inserts are batched into multi-row VALUES statements.
+    Inserts are batched into multi-row VALUES statements. DB-API connections
+    (impyla included) are not thread-safe, so each thread gets its own; the API
+    serves requests from a thread pool.
     """
 
     MAX_ROWS_PER_INSERT = 500
@@ -115,12 +130,13 @@ class SqlLakehouseSink(LakehouseSink):
     def __init__(self, connect: Callable[[], Any], dialect: SqlDialect = IMPALA):
         self._connect = connect
         self.dialect = dialect
-        self._connection: Any = None
+        self._local = threading.local()
 
     def _cursor(self) -> Any:
-        if self._connection is None:
-            self._connection = self._connect()
-        return self._connection.cursor()
+        connection = getattr(self._local, "connection", None)
+        if connection is None:
+            connection = self._local.connection = self._connect()
+        return connection.cursor()
 
     def _execute(self, sql: str, params: Optional[Sequence[Any]] = None) -> Any:
         cursor = self._cursor()
@@ -128,9 +144,11 @@ class SqlLakehouseSink(LakehouseSink):
         return cursor
 
     def close(self) -> None:
-        if self._connection is not None:
-            self._connection.close()
-            self._connection = None
+        """Close the calling thread's connection."""
+        connection = getattr(self._local, "connection", None)
+        if connection is not None:
+            connection.close()
+            self._local.connection = None
 
     def ensure_tables(self) -> None:
         for statement in ddl_statements(self.dialect):
@@ -166,13 +184,12 @@ class SqlLakehouseSink(LakehouseSink):
         )
         self._execute(sql, [row[c] for row in batch for c in columns])
 
-    def _read_rows(self, spec: TableSpec, dataset_id: Optional[str]) -> List[Dict[str, Any]]:
+    def _read_rows(self, spec: TableSpec, where: Dict[str, Any]) -> List[Dict[str, Any]]:
         columns = column_names(spec)
         sql = f"SELECT {', '.join(columns)} FROM {spec.full_name}"
-        if dataset_id is None:
-            cursor = self._execute(sql)
-        else:
-            cursor = self._execute(f"{sql} WHERE dataset_id = ?", [dataset_id])
+        if where:  # column names were checked against the record model
+            sql += " WHERE " + " AND ".join(f"{column} = ?" for column in where)
+        cursor = self._execute(sql, list(where.values()) if where else None)
         return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
 
     def _delete_rows(self, spec: TableSpec, dataset_id: str) -> None:
@@ -180,10 +197,14 @@ class SqlLakehouseSink(LakehouseSink):
         self._execute(f"DELETE FROM {spec.full_name} WHERE dataset_id = ?", [dataset_id])
 
 
-def _dataset_filter(dataset_id: str) -> BooleanExpression:
+def _equals(column: str, value: Any) -> BooleanExpression:
     # EqualTo's runtime constructor takes (term, literal); the mypy pydantic
     # plugin only sees its model fields.
-    return EqualTo("dataset_id", dataset_id)  # type: ignore[call-arg,misc]
+    return EqualTo(column, value)  # type: ignore[call-arg,misc]
+
+
+def _dataset_filter(dataset_id: str) -> BooleanExpression:
+    return _equals("dataset_id", dataset_id)
 
 
 class IcebergCatalogSink(LakehouseSink):
@@ -220,10 +241,12 @@ class IcebergCatalogSink(LakehouseSink):
         table = self._table(spec)
         table.append(pa.Table.from_pylist(rows, schema=schema_to_pyarrow(table.schema())))
 
-    def _read_rows(self, spec: TableSpec, dataset_id: Optional[str]) -> List[Dict[str, Any]]:
+    def _read_rows(self, spec: TableSpec, where: Dict[str, Any]) -> List[Dict[str, Any]]:
         table = self._table(spec)
         table.refresh()
-        row_filter = AlwaysTrue() if dataset_id is None else _dataset_filter(dataset_id)
+        row_filter: BooleanExpression = AlwaysTrue()
+        for column, value in where.items():
+            row_filter = And(row_filter, _equals(column, value))
         rows: List[Dict[str, Any]] = table.scan(row_filter=row_filter).to_arrow().to_pylist()
         return rows
 

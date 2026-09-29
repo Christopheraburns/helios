@@ -20,7 +20,7 @@ import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 MANIFEST_PREFIX = "_manifests"
 
@@ -157,3 +157,20 @@ def s3_client_from_connection(name: str = DEFAULT_S3_CONNECTION) -> Any:
     import cml.data_v1 as cmldata
 
     return cmldata.get_connection(name).get_base_connection()
+
+
+def read_locator(
+    locator: Dict[str, Any], s3_client: Optional[Callable[[], Any]] = None
+) -> Optional[bytes]:
+    """Read an object by the locator recorded for it (None if it is missing).
+
+    Lets readers such as the API fetch manifests and artifacts without being
+    configured with the object store the generator wrote to.
+    """
+    kind = locator.get("connector_type")
+    if kind == "helios_ds_file":
+        return LocalObjectStore(locator["root"]).get(locator["key"])
+    if kind == "helios_ds_s3":
+        client = (s3_client or s3_client_from_connection)()
+        return S3ObjectStore(client, locator["bucket"]).get(locator["key"])
+    raise ValueError(f"unsupported locator connector_type {kind!r}")

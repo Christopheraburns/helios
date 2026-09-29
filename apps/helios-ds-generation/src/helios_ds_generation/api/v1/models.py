@@ -1,6 +1,5 @@
 """Request and response models for the /v1 REST contract (spec: "REST contract")."""
 
-from enum import Enum
 from typing import Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -12,6 +11,7 @@ from helios_ds.config import (
     DifficultyConfig,
     default_config,
 )
+from helios_ds.jobs import JobState, JobView
 
 
 class _StrictModel(BaseModel):
@@ -69,17 +69,6 @@ class GenerationRequest(_StrictModel):
         return cls(artifact_counts={t: a.target_count for t, a in defaults.artifacts.items()})
 
 
-class JobState(str, Enum):
-    QUEUED = "QUEUED"
-    RUNNING = "RUNNING"
-    SUCCEEDED = "SUCCEEDED"
-    FAILED = "FAILED"
-    CANCELLED = "CANCELLED"
-
-
-CANCELLABLE_STATES = {JobState.QUEUED, JobState.RUNNING}
-
-
 class GenerationAccepted(BaseModel):
     """202 response for POST /v1/generations."""
 
@@ -94,10 +83,28 @@ class Job(BaseModel):
     job_id: str
     state: JobState
     config_hash: str
-    dataset_id: Optional[str] = None  # set when planning runs; also covers templates + source
+    dataset_id: Optional[str] = None  # set when the worker has planned the dataset
     request: GenerationRequest
     created_at: str
     updated_at: str
     progress_percent: int = Field(default=0, ge=0, le=100)
     artifacts_generated: int = 0
+    workbench_run_id: Optional[str] = None
+    message: Optional[str] = None
     error: Optional[str] = None
+
+    @classmethod
+    def from_view(cls, view: JobView) -> "Job":
+        return cls(
+            job_id=view.job_id,
+            state=view.state,
+            config_hash=view.record.config_hash,
+            dataset_id=view.dataset_id,
+            request=GenerationRequest.model_validate(view.record.request),
+            created_at=view.record.created_at,
+            updated_at=view.updated_at,
+            progress_percent=view.progress_percent,
+            workbench_run_id=view.workbench_run_id,
+            message=view.message,
+            error=view.message if view.state is JobState.FAILED else None,
+        )

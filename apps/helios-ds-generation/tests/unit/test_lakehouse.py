@@ -109,3 +109,35 @@ def test_committed_impala_ddl_is_current():
         "schemas/lakehouse_impala.sql is stale; regenerate with "
         "`python -m helios_ds.lakehouse > schemas/lakehouse_impala.sql`"
     )
+
+
+def test_sql_sink_gives_each_thread_its_own_connection(tmp_path):
+    """DB-API connections (impyla) are not thread-safe; the API uses a thread pool.
+    Regression: a shared connection hung/500'd the manifest viewer (2026-09-29)."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    import duckdb
+
+    from helios_ds.lakehouse import SqlLakehouseSink
+
+    path = str(tmp_path / "lakehouse.duckdb")
+    owners = []
+
+    class OwnedConnection:
+        def __init__(self):
+            self.owner = threading.get_ident()
+            self.inner = duckdb.connect(path)
+            owners.append(self.owner)
+
+        def cursor(self):
+            assert threading.get_ident() == self.owner, "connection used from another thread"
+            return self.inner.cursor()
+
+    sink = SqlLakehouseSink(OwnedConnection, DUCKDB)
+    sink.ensure_tables()
+    sink.append("helios_ds.scenario_plans", [_plan("d1", f"s{i}") for i in range(5)])
+    with ThreadPoolExecutor(4) as pool:
+        counts = list(pool.map(lambda _: len(sink.read("helios_ds.scenario_plans")), range(12)))
+    assert counts == [5] * 12
+    assert len(set(owners)) == len(owners) > 1

@@ -59,6 +59,8 @@ TABLES: Dict[str, TableSpec] = {
         TableSpec(HELIOS_DS, "dataset_lifecycle", schemas.DatasetLifecycleRecord),
         TableSpec(HELIOS_DS, "scenario_plans", schemas.ScenarioPlanRecord),
         TableSpec(HELIOS_DS, "template_versions", schemas.TemplateVersionRecord),
+        TableSpec(HELIOS_DS, "generation_jobs", schemas.GenerationJobRecord),
+        TableSpec(HELIOS_DS, "job_events", schemas.JobEventRecord),
         TableSpec(HELIOS_DS, "artifacts", schemas.ArtifactRecord),
         TableSpec(HELIOS_DS, "artifact_sources", schemas.ArtifactSourceRecord),
         TableSpec(HELIOS_DS, "source_principals", schemas.SourcePrincipalRecord),

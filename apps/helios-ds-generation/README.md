@@ -71,4 +71,18 @@ The S3 path was verified from a Workbench session on 2026-09-29: a probe object 
 4. **Object store:** the project needs the `S3 Object Store` data connection (Project Settings → Data Connections); set `HELIOS_DS_S3_CONNECTION` if it has another name. Its Ranger/RAZ policy must allow read and write under `helios-db/source/`.
 5. **Job:** create a Job for `workbench/plan_dataset.py` on `helios-ds-runtime`, with `HELIOS_DS_TPCDS=impala:tpcds`, `HELIOS_DS_LAKEHOUSE=impala` and `HELIOS_DS_OBJECT_STORE=s3a://applied-ai-buk-d5eff1ab/helios-db/source`.
 
+### Generation jobs (API → Workbench Jobs)
+
+`POST /v1/generations` (or **Submit** in the dashboard) records a job in `helios_ds.generation_jobs` / `helios_ds.job_events` and starts a run of the **`helios-ds-generate`** Workbench Job with `HELIOS_DS_JOB_ID` set. The worker ([workbench/run_generation.py](workbench/run_generation.py)) runs the pipeline and records RUNNING and then SUCCEEDED or FAILED; `GET /v1/jobs/{id}` reads the state back from the lakehouse. Re-running a job is safe.
+
+- **Create or update the Workbench Job:** `python helios/apps/helios-ds-generation/workbench/setup_jobs.py`. This sets helios-ds-runtime, 2 vCPU / 4 GiB, and the lakehouse, TPC-DS and object-store settings. Override the sizes with `HELIOS_DS_WORKER_CPU` and `HELIOS_DS_WORKER_MEMORY`.
+- **API/UI Application (`app.py`):** run it on `helios-ds-runtime` with `HELIOS_DS_LAKEHOUSE=impala` (the Impala variables and `HELIOS_DS_API_KEY` come from the project). `HELIOS_DS_DISPATCHER` defaults to `workbench`; `inline` runs the worker inside the API process, for local development only.
+- **Job state is an event log:** job state is append-only, and the first SUCCEEDED, FAILED or CANCELLED event is final. Events are written at milestones only, because each lakehouse write takes about 1–2 s through Impala.
+
+### Datasets & Manifests (dashboard)
+
+The **Datasets & Manifests** tab (or **View manifest** on a finished job) shows each published dataset. It has these tabs: a summary (target vs planned assets, eligible vs chosen TPC-DS records, lifecycle), a searchable, paginated scenario browser with one-line stories and per-scenario facts, source rows and planned assets, the TPC-DS source fingerprint, templates, config, and a download of the exact manifest file. It's backed by `GET /v1/datasets`, `/v1/datasets/{id}`, `/v1/datasets/{id}/manifest`, `/manifest/raw`, `/scenarios` and `/scenarios/{scenario_id}`. Manifests are read by their recorded location, checked against their SHA-256, and cached.
+
+The manifest shows each scenario's type and source facts, which is close to the answer key, so this Application must never be reachable by the crawler or Helios query users.
+
 Object-store layout under the prefix: crawlable artifacts go in `datasets/`, generator-internal manifests in `_manifests/`, and health-check probes in `_healthcheck/`. The source connector must only enumerate `datasets/`.
