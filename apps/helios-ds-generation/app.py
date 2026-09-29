@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-"""Helios-DS-Generation FastAPI application startup script.
+#Helios-DS-Generation FastAPI application startup script.
 
-Cloudera AI Application entrypoint for the Helios-DS-Generation service.
-Serves both the REST API and the web dashboard.
-"""
+# Cloudera AI Application entrypoint for the Helios-DS-Generation service.
+# Serves both the REST API and the web dashboard.
+
 import os
 import subprocess
 import sys
