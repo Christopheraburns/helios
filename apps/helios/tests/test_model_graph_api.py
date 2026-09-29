@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.console.api import ResourceStore
-from apps.console.main import app
+from apps.helios.console.api import ResourceStore
+from apps.helios.console.main import app
 from helios_core import authz, runs as runstore
 from helios_core.artifacts import ArtifactStore
 from helios_core.domain import DataSourceReference, Model, Organization

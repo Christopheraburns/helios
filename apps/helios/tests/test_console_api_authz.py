@@ -1,8 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from apps.console.main import app
-from apps.console.api import ResourceStore
+from apps.helios.console.main import app
+from apps.helios.console.api import ResourceStore
 from helios_core import authz
 from helios_core.domain import DataSourceReference, Model, Organization
 
