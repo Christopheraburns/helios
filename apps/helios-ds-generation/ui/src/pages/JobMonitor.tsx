@@ -1,14 +1,6 @@
-import React, { useEffect, useState } from 'react'
-import { api } from '../services/api'
+import { useEffect, useState } from 'react'
+import { api, Job } from '../services/api'
 import '../styles/JobMonitor.css'
-
-interface Job {
-  job_id: string
-  status: string
-  progress_percent: number
-  started_at?: string
-  artifacts_generated: number
-}
 
 interface JobMonitorProps {
   refreshTrigger: number
@@ -50,11 +42,11 @@ export function JobMonitor({ refreshTrigger }: JobMonitorProps) {
     }
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
+  const getStatusColor = (state: string) => {
+    switch (state) {
       case 'RUNNING':
         return 'status-running'
-      case 'COMPLETED':
+      case 'SUCCEEDED':
         return 'status-completed'
       case 'FAILED':
         return 'status-failed'
@@ -82,10 +74,11 @@ export function JobMonitor({ refreshTrigger }: JobMonitorProps) {
             onChange={e => setStatusFilter(e.target.value)}
           >
             <option value="">All Statuses</option>
-            <option value="PENDING">Pending</option>
+            <option value="QUEUED">Queued</option>
             <option value="RUNNING">Running</option>
-            <option value="COMPLETED">Completed</option>
+            <option value="SUCCEEDED">Succeeded</option>
             <option value="FAILED">Failed</option>
+            <option value="CANCELLED">Cancelled</option>
           </select>
         </div>
       </div>
@@ -101,11 +94,11 @@ export function JobMonitor({ refreshTrigger }: JobMonitorProps) {
               <div className="job-header">
                 <div className="job-info">
                   <h3>{job.job_id.substring(0, 8)}...</h3>
-                  <span className={`status-badge ${getStatusColor(job.status)}`}>
-                    {job.status}
+                  <span className={`status-badge ${getStatusColor(job.state)}`}>
+                    {job.state}
                   </span>
                 </div>
-                {(job.status === 'PENDING' || job.status === 'RUNNING') && (
+                {(job.state === 'QUEUED' || job.state === 'RUNNING') && (
                   <button
                     className="btn btn-small btn-danger"
                     onClick={() => handleCancel(job.job_id)}
@@ -132,11 +125,11 @@ export function JobMonitor({ refreshTrigger }: JobMonitorProps) {
                   <span className="stat-value">{job.artifacts_generated}</span>
                 </div>
 
-                {job.started_at && (
+                {job.created_at && (
                   <div className="job-stat">
                     <span className="stat-label">Started</span>
                     <span className="stat-value">
-                      {new Date(job.started_at).toLocaleString()}
+                      {new Date(job.created_at).toLocaleString()}
                     </span>
                   </div>
                 )}

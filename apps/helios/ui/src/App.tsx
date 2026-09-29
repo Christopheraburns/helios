@@ -18,6 +18,10 @@ import PlaceholderPage from "./pages/PlaceholderPage";
 import RunDetailPage, {
   HistoricalTableProfilePage,
 } from "./pages/RunDetailPage";
+import DocsArticlePage from "./pages/docs/DocsArticlePage";
+import DocsHubPage from "./pages/docs/DocsHubPage";
+import DocsLayout from "./pages/docs/DocsLayout";
+import DocsProjectPage from "./pages/docs/DocsProjectPage";
 
 interface AppProps {
   client?: HeliosApi;
@@ -262,7 +266,14 @@ function ApplicationShell({ client }: AppProps) {
 export default function App(props: AppProps) {
   return (
     <BrowserRouter>
-      <ApplicationShell {...props} />
+      <Routes>
+        <Route path="/docs" element={<DocsLayout />}>
+          <Route index element={<DocsHubPage />} />
+          <Route path=":project" element={<DocsProjectPage />} />
+          <Route path=":project/:slug" element={<DocsArticlePage />} />
+        </Route>
+        <Route path="*" element={<ApplicationShell {...props} />} />
+      </Routes>
     </BrowserRouter>
   );
 }

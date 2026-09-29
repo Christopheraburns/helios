@@ -1,0 +1,48 @@
+name: helios-ds-gen
+
+on:
+  pull_request:
+    paths:
+      - "apps/helios-ds-generation/**"
+      - "shared/**"
+      - ".github/workflows/helios-ds-gen.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/helios-ds-generation/**"
+      - "shared/**"
+      - ".github/workflows/helios-ds-gen.yml"
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/helios-ds-generation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # matches the helios Workbench runtime
+      # pyproject's helios-core path dependency isn't pip-installable yet, so
+      # install the runtime deps directly until the lockfile lands (F-11).
+      - run: pip install "fastapi>=0.100" "uvicorn>=0.23" "pydantic>=2.0" httpx pytest ruff mypy
+      - run: ruff check src tests
+      - run: mypy
+      - run: pytest -q
+
+  ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/helios-ds-generation/ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/helios-ds-generation/ui/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit -p .
+      - run: npm run build

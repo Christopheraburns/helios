@@ -1,0 +1,23 @@
+{
+  "tpcds_scale_factor": 1,
+  "master_seed": 42,
+  "artifacts": {
+    "pdf": {
+      "enabled": true,
+      "target_count": 3
+    },
+    "email": {
+      "enabled": true,
+      "target_count": 3
+    },
+    "chat": {
+      "enabled": true,
+      "target_count": 3
+    }
+  },
+  "scenarios": {
+    "product_return_damage": {
+      "weight": 1.0
+    }
+  }
+}

@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-
 # ============================================================================
 # helios_ds.* schemas (Generation artifacts & metadata)
 # ============================================================================
@@ -37,7 +36,9 @@ class ArtifactRecord(BaseModel):
     scenario_id: str = Field(..., description="Parent scenario ID")
     artifact_type: str = Field(..., description="pdf, email, chat, image, audio, video")
     mime_type: str = Field(..., description="MIME type of artifact")
-    source_locator: Dict[str, Any] = Field(..., description="How to fetch: {connector_type, bucket, key, ...}")
+    source_locator: Dict[str, Any] = Field(
+        ..., description="How to fetch: {connector_type, bucket, key, ...}"
+    )
     sha256: str = Field(..., description="Content hash of artifact bytes")
     size_bytes: int = Field(...)
     semantic_timestamp: str = Field(..., description="ISO 8601 timestamp from TPC-DS context")
@@ -110,7 +111,10 @@ class TruthClaimRecord(BaseModel):
     obj: str = Field(...)
     truth_status: str = Field(
         ...,
-        description="INTENDED_TRUE, INTENDED_FALSE, INTENDED_AMBIGUOUS, SOURCE_CLAIM_ONLY, CONTRADICTS_STRUCTURED_EVIDENCE"
+        description=(
+            "INTENDED_TRUE, INTENDED_FALSE, INTENDED_AMBIGUOUS, SOURCE_CLAIM_ONLY, "
+            "CONTRADICTS_STRUCTURED_EVIDENCE"
+        ),
     )
 
 

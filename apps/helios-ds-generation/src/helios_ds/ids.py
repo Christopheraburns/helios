@@ -1,10 +1,21 @@
-"""Deterministic ID generation for Helios-DS artifacts."""
-import hashlib
-import uuid
-from typing import Optional
+"""Deterministic ID and seed generation for Helios-DS artifacts.
 
+Content identities (dataset, scenario, artifact, entity, claim) are UUIDv5 values.
+Every identity below the dataset is namespaced by the dataset ID, as the spec
+requires. Seeds are SHA-256 chains so each artifact gets its own local RNG; no
+code may rely on the process-global ``random`` state.
+"""
+
+import hashlib
+import json
+import random
+import uuid
 
 HELIOS_DS_NAMESPACE = uuid.UUID("550e8400-e29b-41d4-a716-446655440000")
+
+# Version of the ID/seed derivation rules. Part of candidate ranking, so changing
+# any rule in this module must bump it.
+GENERATOR_SCHEMA_VERSION = "1.0"
 
 
 def deterministic_hash(data: str, algorithm: str = "sha256") -> str:
@@ -20,6 +31,21 @@ def deterministic_hash(data: str, algorithm: str = "sha256") -> str:
     h = hashlib.new(algorithm)
     h.update(data.encode("utf-8"))
     return h.hexdigest()
+
+
+def hash_parts(*parts: object) -> str:
+    """SHA-256 over an unambiguous encoding of ``parts``.
+
+    The spec writes seed preimages as ``a || b || c``. Plain concatenation is
+    ambiguous (``"ab" || "c"`` == ``"a" || "bc"``), so parts are encoded as a
+    compact JSON array instead.
+    """
+    encoded = json.dumps(list(parts), separators=(",", ":"), ensure_ascii=False)
+    return deterministic_hash(encoded)
+
+
+def _dataset_namespace(dataset_id: str) -> uuid.UUID:
+    return uuid.UUID(dataset_id)
 
 
 def dataset_id(config_hash: str) -> str:
@@ -45,11 +71,11 @@ def scenario_id(dataset_id: str, scenario_type: str, source_key: str) -> str:
     Returns:
         UUID v5 string
     """
-    namespace = uuid.UUID(dataset_id)
-    return str(uuid.uuid5(namespace, f"{scenario_type}:{source_key}"))
+    return str(uuid.uuid5(_dataset_namespace(dataset_id), f"scenario:{scenario_type}:{source_key}"))
 
 
 def artifact_id(
+    dataset_id: str,
     scenario_id: str,
     artifact_type: str,
     ordinal: int,
@@ -58,6 +84,7 @@ def artifact_id(
     """Generate stable artifact ID.
 
     Args:
+        dataset_id: Parent dataset ID
         scenario_id: Parent scenario ID
         artifact_type: Type of artifact (pdf, email, image, etc.)
         ordinal: Position in sequence
@@ -66,25 +93,26 @@ def artifact_id(
     Returns:
         UUID v5 string
     """
-    namespace = uuid.UUID(scenario_id)
-    key = f"{artifact_type}:{ordinal}:v{template_version}"
-    return str(uuid.uuid5(namespace, key))
+    key = f"artifact:{scenario_id}:{artifact_type}:{ordinal}:{template_version}"
+    return str(uuid.uuid5(_dataset_namespace(dataset_id), key))
 
 
-def truth_entity_id(entity_type: str, source_key: str) -> str:
+def truth_entity_id(dataset_id: str, entity_type: str, source_key: str) -> str:
     """Generate stable entity ID for ground truth.
 
     Args:
+        dataset_id: Parent dataset ID
         entity_type: Type of entity (Item, Customer, Sale, etc.)
         source_key: Canonical TPC-DS source key
 
     Returns:
         UUID v5 string
     """
-    return str(uuid.uuid5(HELIOS_DS_NAMESPACE, f"entity:{entity_type}:{source_key}"))
+    return str(uuid.uuid5(_dataset_namespace(dataset_id), f"entity:{entity_type}:{source_key}"))
 
 
 def claim_id(
+    dataset_id: str,
     scenario_id: str,
     claim_type: str,
     subject: str,
@@ -94,6 +122,7 @@ def claim_id(
     """Generate stable claim ID.
 
     Args:
+        dataset_id: Parent dataset ID
         scenario_id: Parent scenario ID
         claim_type: Type of claim (e.g., PACKAGING_DAMAGED)
         subject: Subject entity reference
@@ -103,9 +132,8 @@ def claim_id(
     Returns:
         UUID v5 string
     """
-    namespace = uuid.UUID(scenario_id)
-    key = f"{claim_type}:{subject}:{obj}:{ordinal}"
-    return str(uuid.uuid5(namespace, key))
+    key = f"claim:{scenario_id}:{claim_type}:{subject}:{obj}:{ordinal}"
+    return str(uuid.uuid5(_dataset_namespace(dataset_id), key))
 
 
 def generation_job_id() -> str:
@@ -118,6 +146,37 @@ def generation_job_id() -> str:
         Random UUID v4 string
     """
     return str(uuid.uuid4())
+
+
+def dataset_seed(master_seed: int) -> str:
+    """Root seed for a dataset, derived from the configured master seed.
+
+    Deliberately excludes artifact counts and other config, so changing a count
+    does not change the content of artifacts that were already planned.
+    """
+    return hash_parts("dataset_seed", master_seed)
+
+
+def scenario_seed(dataset_seed: str, scenario_type: str, canonical_source_key: str) -> str:
+    """Spec: SHA256(dataset_seed || scenario_type || canonical_source_key)."""
+    return hash_parts(dataset_seed, scenario_type, canonical_source_key)
+
+
+def artifact_seed(
+    scenario_seed: str,
+    artifact_type: str,
+    ordinal: int,
+    template_id: str,
+    template_version: str,
+) -> str:
+    """Spec: SHA256(scenario_seed || artifact_type || ordinal || template_id ||
+    template_version)."""
+    return hash_parts(scenario_seed, artifact_type, ordinal, template_id, template_version)
+
+
+def rng_for(seed: str) -> random.Random:
+    """Local RNG for one seed. All generator randomness must come from one of these."""
+    return random.Random(int(seed, 16))
 
 
 class DeterministicIDGenerator:
@@ -144,7 +203,11 @@ class DeterministicIDGenerator:
         template_version: str,
     ) -> str:
         """Generate artifact ID."""
-        return artifact_id(scenario_id, artifact_type, ordinal, template_version)
+        return artifact_id(self.dataset_id, scenario_id, artifact_type, ordinal, template_version)
+
+    def entity(self, entity_type: str, source_key: str) -> str:
+        """Generate ground-truth entity ID."""
+        return truth_entity_id(self.dataset_id, entity_type, source_key)
 
     def claim(
         self,
@@ -155,4 +218,4 @@ class DeterministicIDGenerator:
         ordinal: int = 0,
     ) -> str:
         """Generate claim ID."""
-        return claim_id(scenario_id, claim_type, subject, obj, ordinal)
+        return claim_id(self.dataset_id, scenario_id, claim_type, subject, obj, ordinal)

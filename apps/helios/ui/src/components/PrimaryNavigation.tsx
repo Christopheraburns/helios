@@ -12,6 +12,7 @@ const iconPaths = {
   governance: <path d="M12 3 5 6v5c0 4.6 2.8 8.4 7 10 4.2-1.6 7-5.4 7-10V6zm-3 9 2 2 4-5" />,
   mcp: <path d="M8 4v4m8-4v4M6 8h12v5a6 6 0 0 1-12 0zm6 11v3m-4 0h8" />,
   activity: <path d="M4 4h16v16H4zM8 9h8M8 13h8M8 17h5" />,
+  docs: <path d="M6 4h12v16H6zm2 2v4h8V6zm0 6v6h8v-6z" />,
 } as const;
 
 type NavigationIconName = keyof typeof iconPaths;
@@ -143,6 +144,10 @@ export default function PrimaryNavigation({
           : []),
         { label: "Activity Logs", to: "/activity", icon: "activity" },
       ],
+    },
+    {
+      label: "Help",
+      items: [{ label: "Documentation", to: "/docs", icon: "docs" }],
     },
   ];
   const visibleNavigation = navigation

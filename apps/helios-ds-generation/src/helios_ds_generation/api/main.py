@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from .routers import jobs, config, results
+from . import v1
 
 app = FastAPI(
     title="Helios-DS-Generation",
@@ -15,18 +15,16 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# Include API routers
-app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
-app.include_router(config.router, prefix="/api/config", tags=["config"])
-app.include_router(results.router, prefix="/api/results", tags=["results"])
-
-# Mount static files (React dashboard)
-dist_path = Path(__file__).parent.parent.parent.parent.parent / "ui" / "dist"
-if dist_path.exists():
-    app.mount("/", StaticFiles(directory=dist_path, html=True), name="static")
+app.include_router(v1.router)
 
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
     return {"status": "ok", "service": "helios-ds-generation"}
+
+
+# Mount static files (React dashboard) last so it doesn't shadow API routes
+dist_path = Path(__file__).parents[3] / "ui" / "dist"
+if dist_path.exists():
+    app.mount("/", StaticFiles(directory=dist_path, html=True), name="static")

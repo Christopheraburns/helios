@@ -740,6 +740,34 @@ describe("Helios application shell", () => {
     vi.restoreAllMocks();
   });
 
+  it("renders documentation without waiting for the Helios API", () => {
+    const pending = new Promise<never>(() => undefined);
+    const client: HeliosApi = {
+      health: vi.fn(() => pending),
+      diagnostics: vi.fn(() => pending),
+      organizations: vi.fn(() => pending),
+      models: vi.fn(() => pending),
+      modelOverview: vi.fn(() => pending),
+      modelStatus: vi.fn(() => pending),
+      modelGraph: vi.fn(() => pending),
+      modelGraphDetail: vi.fn(() => pending),
+      decideModelProposal: vi.fn(() => pending),
+      modelReview: vi.fn(() => pending),
+      decideModelDataset: vi.fn(() => pending),
+      bulkAcceptModelProposals: vi.fn(() => pending),
+      resetModelReview: vi.fn(() => pending),
+      publishModelReview: vi.fn(() => pending),
+    };
+    window.history.replaceState({}, "", "/docs");
+
+    render(<App client={client} />);
+
+    expect(
+      screen.getByRole("heading", { name: "Documentation" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("renders loading controls and status while API data is pending", () => {
     const pending = new Promise<never>(() => undefined);
     const client: HeliosApi = {

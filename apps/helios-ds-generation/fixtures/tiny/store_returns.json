@@ -1,0 +1,74 @@
+[
+  {
+    "business_key": "sr_item_sk=8129|sr_ticket_number=88291",
+    "sr_item_sk": 8129,
+    "sr_ticket_number": 88291,
+    "sr_reason_sk": 7
+  },
+  {
+    "business_key": "sr_item_sk=8129|sr_ticket_number=88305",
+    "sr_item_sk": 8129,
+    "sr_ticket_number": 88305,
+    "sr_reason_sk": 7
+  },
+  {
+    "business_key": "sr_item_sk=1021|sr_ticket_number=10442",
+    "sr_item_sk": 1021,
+    "sr_ticket_number": 10442,
+    "sr_reason_sk": 3
+  },
+  {
+    "business_key": "sr_item_sk=1021|sr_ticket_number=10447",
+    "sr_item_sk": 1021,
+    "sr_ticket_number": 10447,
+    "sr_reason_sk": 12
+  },
+  {
+    "business_key": "sr_item_sk=5550|sr_ticket_number=20031",
+    "sr_item_sk": 5550,
+    "sr_ticket_number": 20031,
+    "sr_reason_sk": 7
+  },
+  {
+    "business_key": "sr_item_sk=5550|sr_ticket_number=20033",
+    "sr_item_sk": 5550,
+    "sr_ticket_number": 20033,
+    "sr_reason_sk": 1
+  },
+  {
+    "business_key": "sr_item_sk=7713|sr_ticket_number=30990",
+    "sr_item_sk": 7713,
+    "sr_ticket_number": 30990,
+    "sr_reason_sk": 7
+  },
+  {
+    "business_key": "sr_item_sk=7713|sr_ticket_number=31002",
+    "sr_item_sk": 7713,
+    "sr_ticket_number": 31002,
+    "sr_reason_sk": 5
+  },
+  {
+    "business_key": "sr_item_sk=2204|sr_ticket_number=40118",
+    "sr_item_sk": 2204,
+    "sr_ticket_number": 40118,
+    "sr_reason_sk": 9
+  },
+  {
+    "business_key": "sr_item_sk=2204|sr_ticket_number=40120",
+    "sr_item_sk": 2204,
+    "sr_ticket_number": 40120,
+    "sr_reason_sk": 7
+  },
+  {
+    "business_key": "sr_item_sk=9001|sr_ticket_number=51777",
+    "sr_item_sk": 9001,
+    "sr_ticket_number": 51777,
+    "sr_reason_sk": 2
+  },
+  {
+    "business_key": "sr_item_sk=9001|sr_ticket_number=51780",
+    "sr_item_sk": 9001,
+    "sr_ticket_number": 51780,
+    "sr_reason_sk": 7
+  }
+]

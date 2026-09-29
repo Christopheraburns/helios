@@ -10,4 +10,6 @@ state/
 *.db-shm
 node_modules/
 apps/ui/dist/
+apps/helios/ui/dist/
+apps/helios/ui/src/content/docs/
 *.tsbuildinfo

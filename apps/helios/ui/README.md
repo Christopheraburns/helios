@@ -8,10 +8,16 @@ Helios UI Application.
 Node.js 20 or newer is required for frontend development.
 
 ```bash
-cd apps/ui
+cd apps/helios/ui
 npm install
 npm run dev
 ```
+
+`predev` and `prebuild` run `scripts/sync-docs-for-ui.mjs`, which copies
+allowlisted markdown from the repo root (`README.md`, `MONOREPO.md`, `docs/`)
+into `src/content/docs/` and refreshes `src/content/docs-manifest.json`. The
+checkout must include those sources (normal git clone). Documentation is served
+at `/docs` in the built UI and does not require the Helios API.
 
 Vite prints the local development URL, normally `http://localhost:5173`.
 Copy `.env.example` to `.env.local` and set `VITE_HELIOS_API_URL` to the
@@ -21,13 +27,13 @@ locally running API origin. The API must allow the Vite origin through
 ## Production build
 
 ```bash
-cd apps/ui
+cd apps/helios/ui
 npm install
 npm run typecheck
 npm run build
 ```
 
-Vite writes the static production application to `apps/ui/dist`. Build output
+Vite writes the static production application to `apps/helios/ui/dist`. Build output
 is intentionally ignored by git and should be produced by the deployment
 pipeline or copied into the Cloudera AI project workspace as a build artifact.
 Each build displays a UTC timestamp-based build number beneath the Helios
@@ -44,14 +50,14 @@ not the Cloudera AI production server.
 
 Create a separate Cloudera AI Application with:
 
-- **Script:** `helios/apps/ui/app.py` relative to the Workbench project root
+- **Script:** `helios/apps/helios/ui/app.py` relative to the Workbench project root
 - **Subdomain:** for example, `helios-ui`
 - **Runtime:** a standard PBJ Workbench Python 3.12 runtime
 - **Environment:** set `HELIOS_ROOT` only if the checkout is not at
   `$CDSW_PROJECT_DIR/helios`; set `HELIOS_API_URL` to the API Application's
   stable HTTPS URL
 
-Build the UI before starting the Application and ensure `apps/ui/dist` exists
+Build the UI before starting the Application and ensure `apps/helios/ui/dist` exists
 in the project workspace. The Application entry point uses only Python's
 standard library, so Node.js and a custom Cloudera runtime are not required to
 serve the production build.
