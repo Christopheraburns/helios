@@ -48,6 +48,14 @@ extend-immutable-calls = ["fastapi.Query", "fastapi.Depends"]
 
 [tool.mypy]
 python_version = "3.11"
-mypy_path = "src"
+mypy_path = "src:../../shared"
 packages = ["helios_ds", "helios_ds_generation"]
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["boto3", "botocore", "botocore.*", "cml", "cml.*", "impala", "impala.*", "pyarrow", "pyarrow.*", "yaml"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["helios_core", "helios_core.*"]
+follow_imports = "silent"

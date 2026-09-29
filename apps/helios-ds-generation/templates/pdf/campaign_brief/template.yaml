@@ -1,0 +1,21 @@
+# Renderer assets arrive with the matching artifact generator task.
+template_id: campaign_brief
+template_version: 1.0.0
+template_schema_version: '1.0'
+artifact_type: pdf
+supported_scenario_types:
+- promotion_performance
+required_fields:
+- p_promo_id
+- p_promo_name
+- start_date
+- end_date
+- i_product_name
+optional_fields:
+- p_purpose
+- p_cost
+- i_brand
+rendering_parameters:
+  page_size: letter
+  pages: 2
+ground_truth_locator_strategy: pdf_page_text_span

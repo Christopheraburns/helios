@@ -16,6 +16,15 @@ on:
 jobs:
   python:
     runs-on: ubuntu-latest
+    services:
+      postgres: # PyIceberg SQL catalog for the offline lakehouse tests (spec F-02)
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: iceberg_catalog
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     defaults:
       run:
         working-directory: apps/helios-ds-generation
@@ -26,10 +35,17 @@ jobs:
           python-version: "3.12" # matches the helios Workbench runtime
       # pyproject's helios-core path dependency isn't pip-installable yet, so
       # install the runtime deps directly until the lockfile lands (F-11).
-      - run: pip install "fastapi>=0.100" "uvicorn>=0.23" "pydantic>=2.0" httpx pytest ruff mypy
-      - run: ruff check src tests
+      - run: >-
+          pip install "fastapi>=0.100" "uvicorn>=0.23" "pydantic>=2.0" httpx pytest ruff mypy
+          "pyiceberg[sql-sqlite,sql-postgres,pyarrow]==0.12.0" duckdb==1.5.5 pyyaml boto3 impyla==0.24.0
+      - run: ruff check src tests workbench
       - run: mypy
-      - run: pytest -q
+      - name: pytest (SQLite Iceberg catalog)
+        run: pytest -q
+      - name: pytest (PostgreSQL Iceberg catalog)
+        run: pytest -q tests/unit/test_lakehouse.py tests/unit/test_lifecycle.py tests/deterministic/test_foundation_exit_gate.py
+        env:
+          HELIOS_DS_TEST_CATALOG_URI: postgresql+psycopg2://postgres:postgres@localhost:5432/iceberg_catalog
 
   ui:
     runs-on: ubuntu-latest

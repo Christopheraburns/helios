@@ -1,0 +1,18 @@
+# Renderer assets arrive with the matching artifact generator task.
+template_id: marketing_chat
+template_version: 1.0.0
+template_schema_version: '1.0'
+artifact_type: chat
+supported_scenario_types:
+- promotion_performance
+required_fields:
+- p_promo_name
+- i_product_name
+- start_date
+optional_fields:
+- p_cost
+rendering_parameters:
+  channel: marketing
+  min_messages: 3
+  max_messages: 6
+ground_truth_locator_strategy: chat_message_char_span

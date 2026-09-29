@@ -1,0 +1,19 @@
+# Renderer assets arrive with the matching artifact generator task.
+template_id: complaint_email
+template_version: 1.0.0
+template_schema_version: '1.0'
+artifact_type: email
+supported_scenario_types:
+- customer_complaint
+required_fields:
+- c_first_name
+- c_last_name
+- c_email_address
+- i_product_name
+- r_reason_desc
+- wr_order_number
+optional_fields:
+- wp_web_page_id
+rendering_parameters:
+  attachments: 0
+ground_truth_locator_strategy: email_body_char_span

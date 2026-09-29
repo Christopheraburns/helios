@@ -17,7 +17,8 @@ export interface GenerationRequest {
 export interface Job {
   job_id: string
   state: string
-  dataset_id: string
+  config_hash: string
+  dataset_id?: string | null
   created_at: string
   updated_at: string
   progress_percent: number

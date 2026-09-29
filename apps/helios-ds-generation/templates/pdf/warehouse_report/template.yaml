@@ -1,0 +1,21 @@
+# Renderer assets arrive with the matching artifact generator task.
+template_id: warehouse_report
+template_version: 1.0.0
+template_schema_version: '1.0'
+artifact_type: pdf
+supported_scenario_types:
+- warehouse_inventory_issue
+required_fields:
+- w_warehouse_name
+- inventory_date
+- i_item_id
+- i_product_name
+- inv_quantity_on_hand
+optional_fields:
+- w_city
+- w_state
+- i_category
+rendering_parameters:
+  page_size: letter
+  pages: 1
+ground_truth_locator_strategy: pdf_page_text_span
