@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import uuid
@@ -108,3 +109,29 @@ def make_env(make_sink, tmp_path):
         return sink, LocalObjectStore(str(tmp_path / f"{label}-objects"))
 
     return _make
+
+
+class FakeS3Client:
+    """Just enough of the boto3 S3 client that a Workbench data connection returns."""
+
+    def __init__(self, deny=False):
+        self.objects = {}
+        self.deny = deny
+
+    def get_object(self, Bucket, Key):
+        from botocore.exceptions import ClientError
+
+        if self.deny:
+            raise ClientError({"Error": {"Code": "AccessDenied"}}, "GetObject")
+        if (Bucket, Key) not in self.objects:
+            raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
+        return {"Body": io.BytesIO(self.objects[(Bucket, Key)])}
+
+    def put_object(self, Bucket, Key, Body):
+        self.objects[(Bucket, Key)] = Body
+
+
+@pytest.fixture
+def fake_s3():
+    """The FakeS3Client class (call it to get a client)."""
+    return FakeS3Client

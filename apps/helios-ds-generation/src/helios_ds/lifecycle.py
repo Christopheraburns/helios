@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Callable, Dict, FrozenSet, List, Optional
 
 from .lakehouse import LakehouseSink
-from .manifests import GenerationManifest
+from .manifests import GenerationManifest, manifest_key
 from .object_store import ObjectStore, sha256_hex
 from .schemas import (
     DatasetLifecycleRecord,
@@ -67,9 +67,13 @@ def validate_published(sink: LakehouseSink, store: ObjectStore, dataset_id: str)
     record = datasets[0]
     assert isinstance(record, DatasetRecord)
 
-    data = store.get(record.manifest_locator["key"])
+    # Look the manifest up by its logical key: locators hold backend-specific
+    # addresses (an S3 locator's key already includes the store prefix).
+    data = store.get(manifest_key(dataset_id))
     if data is None:
-        return [f"manifest object {record.manifest_locator['key']} is missing"]
+        return [f"manifest object {manifest_key(dataset_id)} is missing"]
+    if store.locator(manifest_key(dataset_id)) != record.manifest_locator:
+        problems.append("datasets.manifest_locator does not match the object store")
     if sha256_hex(data) != record.manifest_sha256:
         return ["manifest object hash does not match datasets.manifest_sha256"]
     manifest = GenerationManifest.from_bytes(data)

@@ -1,5 +1,3 @@
-import io
-
 import pytest
 
 from helios_ds.object_store import (
@@ -44,31 +42,11 @@ def test_invalid_keys_are_rejected(tmp_path, key):
         LocalObjectStore(str(tmp_path)).put(key, b"x")
 
 
-class _FakeS3:
-    """Just enough of the boto3 S3 client that a Workbench data connection returns."""
-
-    def __init__(self, deny=False):
-        self.objects = {}
-        self.deny = deny
-
-    def get_object(self, Bucket, Key):
-        from botocore.exceptions import ClientError
-
-        if self.deny:
-            raise ClientError({"Error": {"Code": "AccessDenied"}}, "GetObject")
-        if (Bucket, Key) not in self.objects:
-            raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
-        return {"Body": io.BytesIO(self.objects[(Bucket, Key)])}
-
-    def put_object(self, Bucket, Key, Body):
-        self.objects[(Bucket, Key)] = Body
-
-
 BUCKET = "applied-ai-buk-d5eff1ab"
 
 
-def test_s3_put_uses_prefix_and_verifies():
-    client = _FakeS3()
+def test_s3_put_uses_prefix_and_verifies(fake_s3):
+    client = fake_s3()
     store = S3ObjectStore(client, BUCKET, "helios-db/source/")
     result = store.put("datasets/d/a.eml", b"mail")
     assert result.created
@@ -84,21 +62,21 @@ def test_s3_put_uses_prefix_and_verifies():
     assert client.objects[(BUCKET, "helios-db/source/datasets/d/a.eml")] == b"mail"
 
 
-def test_s3_access_errors_are_not_mistaken_for_missing_objects():
+def test_s3_access_errors_are_not_mistaken_for_missing_objects(fake_s3):
     from botocore.exceptions import ClientError
 
     with pytest.raises(ClientError, match="AccessDenied"):
-        S3ObjectStore(_FakeS3(deny=True), BUCKET, "p").get("datasets/x")
+        S3ObjectStore(fake_s3(deny=True), BUCKET, "p").get("datasets/x")
 
 
-def test_s3a_uri_uses_the_workbench_data_connection(monkeypatch):
+def test_s3a_uri_uses_the_workbench_data_connection(monkeypatch, fake_s3):
     from helios_ds import backends
 
     seen = {}
 
     def fake_connection(name):
         seen["name"] = name
-        return _FakeS3()
+        return fake_s3()
 
     monkeypatch.setattr(backends, "s3_client_from_connection", fake_connection)
     monkeypatch.delenv("HELIOS_DS_S3_CONNECTION", raising=False)
