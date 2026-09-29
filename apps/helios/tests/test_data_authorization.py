@@ -152,7 +152,7 @@ def test_semantic_model_permission_does_not_grant_physical_data_access():
 def test_mcp_query_execution_fails_closed_without_identity_propagation(
     monkeypatch,
 ):
-    from apps.mcp import server as mcp_server
+    from apps.helios.mcp import server as mcp_server
 
     monkeypatch.setattr(
         mcp_server.store,

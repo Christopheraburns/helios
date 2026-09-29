@@ -48,13 +48,13 @@ from helios_core.metadata import (
     EvaluationRun,
 )
 from helios_core.llm import llm_from_env
-from apps.console.conversation import (
+from apps.helios.console.conversation import (
     MCPClientConfig,
     ConversationService,
     ConversationUnavailable,
     inspect_mcp,
 )
-from apps.console.mcp_settings import (
+from apps.helios.console.mcp_settings import (
     MAX_TOOL_ROUNDS,
     MIN_TOOL_ROUNDS,
     DEFAULT_SESSION_MCP_SETTINGS_STORE,
@@ -62,7 +62,7 @@ from apps.console.mcp_settings import (
     SessionMCPSettingsStore,
     environment_max_tool_rounds,
 )
-from apps.console.model_provider import (
+from apps.helios.console.model_provider import (
     DEFAULT_SESSION_MODEL_PROVIDER_STORE,
     SUPPORTED_PROVIDERS,
     SessionModelProvider,
@@ -71,7 +71,7 @@ from apps.console.model_provider import (
     llm_for_settings,
     provider_availability,
 )
-from apps.console.evaluation import (
+from apps.helios.console.evaluation import (
     execute_evaluation,
     list_suites,
     load_suite,

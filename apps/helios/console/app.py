@@ -28,9 +28,8 @@ if os.environ.get("HELIOS_DEV") == "1":
  
 print("starting helios console:", " ".join(cmd), flush=True)
 python_paths = [
-    ROOT,  # repo root for monorepo structure
-    os.path.join(ROOT, "apps", "helios"),  # query runtime
-    os.path.join(ROOT, "shared"),  # shared core package location
+    os.path.join(ROOT, "shared"),  # shared core package location (first)
+    ROOT,  # repo root for monorepo structure (allows apps.helios imports)
 ]
 dependency_dir = os.environ.get("HELIOS_PYTHON_DEPS") or os.path.join(
     PROJECT_DIR, ".helios-python"
