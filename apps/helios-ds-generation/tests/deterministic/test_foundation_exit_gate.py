@@ -5,7 +5,7 @@ import pytest
 
 from helios_ds.lifecycle import DatasetLifecycle, DatasetState
 from helios_ds.manifests import manifest_key
-from helios_ds.object_store import DeterminismIntegrityError
+from helios_ds.object_store import DeterminismIntegrityError, S3ObjectStore
 from helios_ds.pipeline import plan_and_publish
 from helios_ds.schemas import ScenarioPlanRecord
 from helios_ds.templates import TemplateRegistry
@@ -110,3 +110,46 @@ def test_partial_publish_is_cleaned_up_on_retry(make_env, tiny_config, small_rep
     rows = _published(sink2, result.dataset_id)
     rows[0][0].pop("manifest_locator"), expected[0][0].pop("manifest_locator")
     assert rows == expected
+
+
+def test_prefixed_s3_store_publishes_validates_and_approves(
+    make_env, fake_s3, tiny_config, small_repo, templates
+):
+    """Regression: an S3 locator's key includes the store prefix, so validation
+    must look the manifest up by its logical key (failed in Workbench 2026-09-29)."""
+    sink, _ = make_env("s3")
+    client = fake_s3()
+    store = S3ObjectStore(client, "applied-ai-buk-d5eff1ab", "helios-db/source")
+    result = plan_and_publish(tiny_config, small_repo, templates, sink, store)
+    assert result.state is DatasetState.IN_REVIEW
+    key = f"helios-db/source/_manifests/{result.dataset_id}/generation-manifest.json"
+    assert ("applied-ai-buk-d5eff1ab", key) in client.objects
+    assert not plan_and_publish(tiny_config, small_repo, templates, sink, store).newly_published
+    DatasetLifecycle(sink).approve(result.dataset_id, store, "user:erin")
+    assert DatasetLifecycle(sink).visible_datasets() == [result.dataset_id]
+
+
+def test_failed_validation_run_recovers_on_retry(
+    make_env, fake_s3, tiny_config, small_repo, templates, monkeypatch
+):
+    """A run that failed validation after publishing its rows is retried cleanly."""
+    from helios_ds import pipeline
+
+    sink, store = make_env("retry")
+    monkeypatch.setattr(pipeline, "validate_published", lambda *a: ["simulated failure"])
+    with pytest.raises(Exception, match="simulated failure"):
+        plan_and_publish(tiny_config, small_repo, templates, sink, store)
+    monkeypatch.undo()
+
+    result = plan_and_publish(tiny_config, small_repo, templates, sink, store)
+    assert result.state is DatasetState.IN_REVIEW
+    assert not result.newly_published  # rows from the failed run are reused
+    assert [e.state for e in DatasetLifecycle(sink).history(result.dataset_id)] == [
+        "CREATING",
+        "VALIDATING",
+        "FAILED",
+        "CREATING",
+        "VALIDATING",
+        "IN_REVIEW",
+    ]
+    assert len(sink.read_dataset("helios_ds.datasets", result.dataset_id)) == 1
