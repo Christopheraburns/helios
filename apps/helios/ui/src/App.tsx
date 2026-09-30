@@ -224,7 +224,7 @@ function ApplicationShell({ client }: AppProps) {
               />
               <Route
                 path="/ontology"
-                element={<OntologyPage />}
+                element={<OntologyPage context={context} />}
               />
               <Route
                 path="/governance"

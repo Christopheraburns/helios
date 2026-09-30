@@ -977,9 +977,42 @@ function apiErrorMessage(payload: unknown): string | null {
   return null;
 }
 
+export interface OntologyVersionSummary {
+  version: string;
+  content_hash: string;
+  node_count: number;
+  edge_count: number;
+  enum_count: number;
+  is_active: boolean;
+}
+
+export interface OntologyGraphPayload {
+  version: string;
+  content_hash: string;
+  nodes: Array<{ label: string; key: string; properties: Record<string, unknown> }>;
+  edges: Array<{
+    type: string;
+    from_label: string;
+    from_key: string;
+    to_label: string;
+    to_key: string;
+    properties: Record<string, unknown>;
+  }>;
+}
+
+export interface OntologyClassDetail {
+  class: { name: string; properties: Record<string, unknown> };
+  parents: string[];
+  attributes: Array<{ name: string; properties: Record<string, unknown> }>;
+  ranges: Array<{ attribute: string; range_class: string }>;
+}
+
 export interface HeliosApi {
   health(): Promise<ApiHealth>;
   diagnostics(): Promise<ApiDiagnostics>;
+  ontologyVersions?(): Promise<OntologyVersionSummary[]>;
+  ontologyGraph?(version: string): Promise<OntologyGraphPayload>;
+  ontologyClass?(version: string, className: string): Promise<OntologyClassDetail>;
   modelProviderSettings?(): Promise<ModelProviderSettings>;
   updateModelProviderSettings?(
     settings: ModelProviderSettingsWrite,
@@ -1216,6 +1249,22 @@ export class HeliosApiClient implements HeliosApi {
 
   modelProviderSettings(): Promise<ModelProviderSettings> {
     return this.get<ModelProviderSettings>("/api/v1/model-provider-settings");
+  }
+
+  ontologyVersions(): Promise<OntologyVersionSummary[]> {
+    return this.get<OntologyVersionSummary[]>("/api/v1/ontology/versions");
+  }
+
+  ontologyGraph(version: string): Promise<OntologyGraphPayload> {
+    return this.get<OntologyGraphPayload>(
+      `/api/v1/ontology/${encodeURIComponent(version)}/graph`,
+    );
+  }
+
+  ontologyClass(version: string, className: string): Promise<OntologyClassDetail> {
+    return this.get<OntologyClassDetail>(
+      `/api/v1/ontology/${encodeURIComponent(version)}/classes/${encodeURIComponent(className)}`,
+    );
   }
 
   updateModelProviderSettings(

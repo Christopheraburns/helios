@@ -54,6 +54,9 @@ import {
   ModelProviderSettingsWrite,
   ModelSystemStatus,
   ModelSummary,
+  OntologyClassDetail,
+  OntologyGraphPayload,
+  OntologyVersionSummary,
   OrganizationSummary,
 } from "../api/client";
 
@@ -78,6 +81,9 @@ export interface ApplicationContextState {
   selectOrganization: (organizationId: string) => void;
   selectModel: (modelId: string) => void;
   retry: () => void;
+  loadOntologyVersions: () => Promise<OntologyVersionSummary[]>;
+  loadOntologyGraph: (version: string) => Promise<OntologyGraphPayload>;
+  loadOntologyClass: (version: string, className: string) => Promise<OntologyClassDetail>;
   loadModelProviderSettings: () => Promise<ModelProviderSettings>;
   updateModelProviderSettings: (
     settings: ModelProviderSettingsWrite,
@@ -564,6 +570,28 @@ export function useApplicationContext(
     [client, models, selectedOrganizationId, writeContext],
   );
 
+  const loadOntologyVersions = useCallback(() => {
+    const api = client();
+    if (!api.ontologyVersions) {
+      throw new ApiUnavailableError("The ontology API is unavailable.");
+    }
+    return api.ontologyVersions();
+  }, [client]);
+  const loadOntologyGraph = useCallback((version: string) => {
+    const api = client();
+    if (!api.ontologyGraph) {
+      throw new ApiUnavailableError("The ontology API is unavailable.");
+    }
+    return api.ontologyGraph(version);
+  }, [client]);
+  const loadOntologyClass = useCallback((version: string, className: string) => {
+    const api = client();
+    if (!api.ontologyClass) {
+      throw new ApiUnavailableError("The ontology API is unavailable.");
+    }
+    return api.ontologyClass(version, className);
+  }, [client]);
+
   const loadModelProviderSettings = useCallback(() => {
     const api = client();
     if (!api.modelProviderSettings) {
@@ -1018,6 +1046,9 @@ export function useApplicationContext(
     selectOrganization,
     selectModel,
     retry: () => setLoadVersion((version) => version + 1),
+    loadOntologyVersions,
+    loadOntologyGraph,
+    loadOntologyClass,
     loadModelProviderSettings,
     updateModelProviderSettings,
     deleteModelProviderSettings,
