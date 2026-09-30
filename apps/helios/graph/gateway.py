@@ -24,18 +24,29 @@ from .bolt import connect
 _TOKEN = os.environ.get("HELIOS_GRAPH_TOKEN")
 
 _memgraph = memgraph_process.MemgraphProcess()
-_state: dict[str, Any] = {"client": None, "started_at": None, "startup_seconds": None}
+_state: dict[str, Any] = {
+    "client": None,
+    "started_at": None,
+    "startup_seconds": None,
+    "startup_error": None,
+}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     started = time.monotonic()
-    _memgraph.start()
-    _memgraph.wait_until_listening()
-    _state["client"] = connect()
-    _state["started_at"] = time.time()
-    _state["startup_seconds"] = round(time.monotonic() - started, 2)
-    print(f"memgraph ready in {_state['startup_seconds']}s (pid {_memgraph.pid})", flush=True)
+    try:
+        _memgraph.start()
+        _memgraph.wait_until_listening()
+        _state["client"] = connect()
+        _state["started_at"] = time.time()
+        _state["startup_seconds"] = round(time.monotonic() - started, 2)
+        print(f"memgraph ready in {_state['startup_seconds']}s (pid {_memgraph.pid})", flush=True)
+    except Exception as exc:
+        # Serve anyway: /health and /v1/diagnostics are how an operator finds out
+        # why Memgraph is down, and a pod that refuses to boot answers nothing.
+        _state["startup_error"] = f"{type(exc).__name__}: {exc}"
+        print(f"MEMGRAPH STARTUP FAILED -- serving degraded\n{exc}", flush=True)
     try:
         yield
     finally:
@@ -71,6 +82,7 @@ async def health() -> dict[str, Any]:
         "service": "helios-graph",
         "memgraph_running": _memgraph.running,
         "memgraph_pid": _memgraph.pid,
+        "startup_error": _state["startup_error"],
     }
 
 
@@ -104,15 +116,22 @@ async def diagnostics() -> dict[str, Any]:
         storage = "unavailable"
     else:
         storage = client.query("SHOW STORAGE INFO")
+    try:
+        binary = memgraph_process.binary_path()
+    except RuntimeError as exc:
+        binary = str(exc)
     return {
         "memgraph": {
-            "binary": memgraph_process.binary_path(),
+            "binary": binary,
             "command": _memgraph.command,
             "pid": _memgraph.pid,
             "running": _memgraph.running,
             "data_directory": str(memgraph_process.data_directory()),
+            "config_file": str(memgraph_process.isolated_config_path()),
             "startup_seconds": _state["startup_seconds"],
             "started_at": _state["started_at"],
+            "startup_error": _state["startup_error"],
+            "output": _memgraph.diagnostic_output(),
         },
         "memory": {
             "pod_limit_mib": memgraph_process.pod_memory_limit_mib(),
