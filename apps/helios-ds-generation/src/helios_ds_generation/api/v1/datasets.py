@@ -14,7 +14,7 @@ import email.policy
 import json
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 
 from helios_ds.catalog import (
@@ -24,10 +24,13 @@ from helios_ds.catalog import (
     DatasetNotFound,
     ManifestUnavailable,
 )
+from helios_ds.deletion import DatasetGone, delete_dataset
+from helios_ds.lifecycle import InvalidTransition
 from helios_ds.manifests import GenerationManifest
 from helios_ds.scenarios import SCENARIOS, ArtifactPlan, ScenarioPlan
 from helios_ds.schemas import ArtifactRecord
 
+from .identity import require_user
 from .service import GenerationService, get_service
 
 router = APIRouter()
@@ -39,6 +42,7 @@ class LifecycleEvent(BaseModel):
     actor: str
     occurred_at: str
     reason: Optional[str] = None
+    related_dataset_id: Optional[str] = None
 
 
 class DatasetSummary(BaseModel):
@@ -187,9 +191,13 @@ def _search_text(scenario: ScenarioPlan, headline: str) -> str:
 
 
 @router.get("/datasets", response_model=List[DatasetSummary])
-def list_datasets(service: GenerationService = Depends(get_service)) -> List[DatasetSummary]:
+def list_datasets(
+    state: Optional[str] = Query(None, description="Filter by lifecycle state, e.g. IN_REVIEW"),
+    service: GenerationService = Depends(get_service),
+) -> List[DatasetSummary]:
     """Published datasets, newest first. Not in the spec contract; used by the dashboard."""
-    return [_summary(info) for info in service.datasets.list()]
+    infos = service.datasets.list()
+    return [_summary(i) for i in infos if state is None or i.state == state.upper()]
 
 
 @router.get("/datasets/{dataset_id}", response_model=DatasetSummary)
@@ -391,6 +399,52 @@ def get_artifact_content(
         headers={
             "Content-Disposition": f'{disposition}; filename="{record.artifact_id}.{extension}"'
         },
+    )
+
+
+class DeleteRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+class DeleteResult(BaseModel):
+    dataset_id: str
+    objects_deleted: int
+    tables_purged: List[str]
+
+
+@router.post("/datasets/{dataset_id}:delete", response_model=DeleteResult)
+def delete_dataset_endpoint(
+    dataset_id: str,
+    body: DeleteRequest,
+    request: Request,
+    service: GenerationService = Depends(get_service),
+) -> DeleteResult:
+    """Delete a dataset's objects and rows; its lifecycle log is kept with a DELETED
+    event. Refused while the dataset is being generated. Retrying finishes an
+    interrupted deletion."""
+    actor = require_user(request)
+    try:
+        result = delete_dataset(
+            service.jobs.sink,
+            service.open_store,
+            dataset_id,
+            actor,
+            (body.reason or "").strip()[:4000] or None,
+        )
+    except DatasetGone:
+        raise HTTPException(status_code=404, detail=f"dataset {dataset_id} not found") from None
+    except InvalidTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"deletion stopped part-way ({type(exc).__name__}: {exc}); "
+            "delete the dataset again to finish",
+        ) from exc
+    return DeleteResult(
+        dataset_id=result.dataset_id,
+        objects_deleted=result.objects_deleted,
+        tables_purged=result.tables_purged,
     )
 
 

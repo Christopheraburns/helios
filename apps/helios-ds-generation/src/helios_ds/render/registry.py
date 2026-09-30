@@ -16,6 +16,11 @@ from ..ids import rng_for
 from ..scenarios import ArtifactPlan, ScenarioPlan
 from ..templates import Template, TemplateRegistry
 from .base import Case, RenderContext, RenderedArtifact
+from .stories import Story, product_return_damage
+
+STORIES: Dict[str, Callable[[RenderContext], Story]] = {
+    "product_return_damage": product_return_damage,
+}
 
 Renderer = Callable[[RenderContext], RenderedArtifact]
 
@@ -52,6 +57,23 @@ def _phrases(template: Template) -> Dict[str, Any]:
     path = template.path / "phrases.yaml"
     loaded: Dict[str, Any] = yaml.safe_load(path.read_text()) if path.is_file() else {}
     return loaded
+
+
+def story_for(scenario: ScenarioPlan) -> Optional[Story]:
+    """The scenario's shared story (canonical names, claims, relationships), if its
+    scenario type has renderers yet."""
+    build = STORIES.get(scenario.scenario_type)
+    if build is None or not scenario.artifacts:
+        return None
+    ctx = RenderContext(
+        scenario=scenario,
+        artifact=scenario.artifacts[0],
+        phrases={},
+        rendering_parameters={},
+        case=Case.for_scenario(scenario),
+        rng=rng_for(scenario.scenario_seed),
+    )
+    return build(ctx)
 
 
 def render_artifact(

@@ -112,7 +112,8 @@ SCENARIOS: Dict[str, ScenarioDefinition] = {
                        sr.sr_reason_sk, sr.sr_return_quantity, sr.sr_return_amt,
                        rd.d_date AS return_date, r.r_reason_desc,
                        i.i_item_id, i.i_product_name, i.i_brand, i.i_category, i.i_class,
-                       i.i_manufact, c.c_customer_id, c.c_first_name, c.c_last_name,
+                       i.i_manufact, i.i_color, c.c_customer_id, c.c_salutation,
+                       c.c_first_name, c.c_last_name,
                        c.c_email_address, s.s_store_id, s.s_store_name, s.s_city, s.s_state,
                        ss.ss_ticket_number, ss.ss_item_sk, sd.d_date AS sale_date,
                        ss.ss_sales_price, ss.ss_quantity, ss.ss_promo_sk

@@ -102,6 +102,13 @@ def _summary(result: PublishResult) -> str:
         f"{result.total_rendered} artifacts rendered"
         + (f" ({_counts(result.rendered)})" if result.rendered else ""),
     ]
+    if result.ground_truth:
+        parts.append(f"ground truth: {_counts(result.ground_truth)}")
+    if result.locators_unchecked:
+        parts.append(
+            f"{result.locators_unchecked} PDF locators not verified (pypdf missing from the "
+            "runtime; rebuild it with the pinned requirements)"
+        )
     if result.pending:
         parts.append(
             f"{sum(result.pending.values())} planned artifacts have no renderer yet "

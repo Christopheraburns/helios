@@ -136,6 +136,11 @@ def claim_id(
     return str(uuid.uuid5(_dataset_namespace(dataset_id), key))
 
 
+def truth_row_id(dataset_id: str, kind: str, *parts: object) -> str:
+    """Stable ID for a ground-truth row (mention, evidence, relationship)."""
+    return str(uuid.uuid5(_dataset_namespace(dataset_id), f"{kind}:{hash_parts(*parts)}"))
+
+
 def generation_job_id() -> str:
     """Generate random job ID for operational tracking.
 

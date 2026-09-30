@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArtifactPreview } from './ArtifactPreview'
+import { AuditTrail } from './AuditTrail'
 import {
   api,
   ArtifactSummary,
@@ -36,6 +37,9 @@ export const stateClass = (state: string | null) => {
     case 'FAILED':
     case 'REJECTED':
       return 'status-failed'
+    case 'SUPERSEDED':
+    case 'DELETED':
+      return 'status-superseded'
     default:
       return 'status-pending'
   }
@@ -216,6 +220,10 @@ function SummaryTab({ dataset, manifest }: { dataset: DatasetSummary; manifest: 
           </li>
         ))}
       </ol>
+      <details className="technical">
+        <summary>Full history: decisions and review marks</summary>
+        <AuditTrail datasetId={dataset.dataset_id} />
+      </details>
 
       <details className="technical">
         <summary>Identity (why the dataset has this ID)</summary>

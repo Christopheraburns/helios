@@ -141,3 +141,63 @@ def test_sql_sink_gives_each_thread_its_own_connection(tmp_path):
         counts = list(pool.map(lambda _: len(sink.read("helios_ds.scenario_plans")), range(12)))
     assert counts == [5] * 12
     assert len(set(owners)) == len(owners) > 1
+
+
+# Impala reserved words that could plausibly be chosen as column names. Regression:
+# a `comment` column broke CREATE TABLE in Impala (DuckDB accepts it).
+IMPALA_RESERVED = {
+    "comment",
+    "location",
+    "partition",
+    "range",
+    "sort",
+    "role",
+    "rows",
+    "row",
+    "table",
+    "column",
+    "columns",
+    "data",
+    "date",
+    "default",
+    "format",
+    "function",
+    "group",
+    "key_",
+    "limit",
+    "order",
+    "schema",
+    "select",
+    "set",
+    "stats",
+    "timestamp",
+    "values",
+    "view",
+    "change",
+    "cache",
+    "class",
+    "current",
+    "delete",
+    "desc",
+    "describe",
+    "file",
+    "files",
+    "first",
+    "last",
+    "left",
+    "right",
+    "offset",
+    "over",
+    "replace",
+    "update",
+    "user",
+    "with",
+}
+
+
+def test_no_column_name_is_an_impala_reserved_word():
+    from helios_ds.lakehouse.tables import column_names
+
+    for spec in TABLES.values():
+        clashes = set(column_names(spec)) & IMPALA_RESERVED
+        assert not clashes, (spec.full_name, clashes)

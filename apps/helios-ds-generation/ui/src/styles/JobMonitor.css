@@ -101,6 +101,11 @@
   color: #374151;
 }
 
+.status-superseded {
+  background: #e5e7eb;
+  color: #374151;
+}
+
 .status-pending {
   background: #fef3c7;
   color: #92400e;

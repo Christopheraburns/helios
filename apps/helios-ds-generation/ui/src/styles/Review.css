@@ -1,0 +1,256 @@
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.review-dataset {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 320px;
+}
+
+.review-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.review-progress .progress-bar {
+  width: 240px;
+}
+
+.review-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1000px) {
+  .review-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.review-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.review-filters select {
+  flex: 1;
+}
+
+.review-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  background: var(--bg-light);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-weight: normal;
+}
+
+.review-item.selected {
+  border-color: var(--primary);
+  background: #eff6ff;
+}
+
+.review-item.status-accepted {
+  border-left-color: var(--success);
+}
+
+.review-item.status-flagged {
+  border-left-color: var(--danger);
+}
+
+.review-status {
+  font-size: 11px;
+  color: var(--text-light);
+  text-transform: lowercase;
+}
+
+.review-headline {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.review-main {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 0;
+}
+
+.review-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.review-nav {
+  display: flex;
+  gap: 6px;
+}
+
+.review-actions {
+  display: flex;
+  gap: 10px;
+  margin: 12px 0;
+  align-items: stretch;
+}
+
+.review-actions textarea {
+  flex: 1;
+  resize: vertical;
+}
+
+.review-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.review-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 20px;
+}
+
+@media (max-width: 1200px) {
+  .review-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.review-artifact h4,
+.review-truth h4 {
+  margin-bottom: 8px;
+}
+
+.review-truth h5 {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  color: var(--text-light);
+  text-transform: uppercase;
+}
+
+.gt-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.gt-list.compact {
+  gap: 4px;
+  font-size: 13px;
+}
+
+.gt-list li.clickable {
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.gt-list li.clickable:hover,
+.gt-list li.selected {
+  background: #fef9c3;
+}
+
+.gt-list blockquote {
+  margin: 4px 0 0;
+  padding-left: 8px;
+  border-left: 3px solid #93c5fd;
+  color: var(--text-light);
+}
+
+.gt-mention {
+  background: #fef08a;
+  border-radius: 2px;
+}
+
+.gt-evidence {
+  text-decoration: underline;
+  text-decoration-color: #2563eb;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.gt-focus {
+  background: #fb923c;
+  color: white;
+}
+
+.legend {
+  margin-top: 8px;
+}
+
+.legend span {
+  padding: 0 4px;
+}
+
+.decision-panel {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px 4px;
+  margin-bottom: 16px;
+}
+
+.decision-lineage {
+  margin-top: 6px;
+  font-size: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.lineage-member .status-badge {
+  padding: 1px 8px;
+  font-size: 11px;
+}
+
+.decision-panel .alert ul {
+  margin: 6px 0 0 18px;
+}
+
+.review-history {
+  margin-top: 16px;
+}
+
+.audit-trail .timeline {
+  margin-top: 8px;
+}
+
+.audit-trail .timeline .reason {
+  color: var(--text);
+}

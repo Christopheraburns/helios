@@ -20,6 +20,7 @@ from helios_ds.render.base import (
     TextBuilder,
     at_time,
     compose,
+    compose_claim,
     iso,
     parse_date,
     pick,
@@ -42,12 +43,13 @@ def render(ctx: RenderContext) -> RenderedArtifact:
     body = TextBuilder()
     compose(body, pick(rng, ctx.phrases["greeting"]), values, mentions).add("\n\n")
     compose(body, pick(rng, tone["opening"]), values, mentions).add(" ")
-    compose(body, pick(rng, tone["damage"]), values, mentions)
+    compose_claim(body, "PACKAGING_DAMAGED", pick(rng, tone["damage"]), values, mentions)
     note = pick(rng, ctx.phrases["reason_note"])
     if note:
-        compose(body.add(" "), note, values, mentions)
+        compose_claim(body.add(" "), "RETURN_REASON", note, values, mentions)
     body.add("\n\n")
-    compose(body, pick(rng, tone["request"]), values, mentions).add("\n\n")
+    compose_claim(body, "REFUND_REQUESTED", pick(rng, tone["request"]), values, mentions)
+    body.add("\n\n")
     compose(body, pick(rng, tone["closing"]), values, mentions).add("\n")
     compose(body, pick(rng, ctx.phrases["signoff"]), values, mentions).add("\n")
 
@@ -64,7 +66,10 @@ def render(ctx: RenderContext) -> RenderedArtifact:
 
     header_mentions = [
         Mention(
-            "Customer", mentions["customer"][2] or {}, values["customer_name"], {"header": "From"}
+            "Customer",
+            mentions["customer"].source_key or {},
+            values["customer_name"],
+            {"header": "From"},
         )
     ]
     return RenderedArtifact(
@@ -77,4 +82,5 @@ def render(ctx: RenderContext) -> RenderedArtifact:
         # Offsets count characters of the decoded body with line endings
         # normalised to "\n" (the transport form uses CRLF).
         + body.mentions(part="body", line_endings="LF"),
+        evidence=body.evidence(part="body", line_endings="LF"),
     )

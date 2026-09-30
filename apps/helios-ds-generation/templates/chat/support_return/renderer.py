@@ -15,7 +15,7 @@ from helios_ds.render.base import (
     RenderedArtifact,
     TextBuilder,
     at_time,
-    compose,
+    compose_claim,
     iso,
     parse_date,
     pick,
@@ -50,12 +50,14 @@ def render(ctx: RenderContext) -> RenderedArtifact:
     day = parse_date(ctx.fact("return_date")) + dt.timedelta(days=ctx.case.chat_delay_days)
     moment = at_time(day, rng, 9, 17)
     thread_id = f"thread-{ctx.artifact.artifact_id[:8]}"
-    messages, mentions = [], []
-    for index, (role, text) in enumerate(turns):
+    messages, mentions, evidence = [], [], []
+    for index, turn in enumerate(turns):
+        role, text = turn[0], turn[1]
+        claim_type = turn[2] if len(turn) > 2 else None
         if index:
             moment += dt.timedelta(seconds=rng.randrange(20, 600))
         message_id = f"msg-{hash_parts(ctx.artifact.artifact_id, index)[:12]}"
-        builder = compose(TextBuilder(), text, story.values, story.mentions)
+        builder = compose_claim(TextBuilder(), claim_type, text, story.values, story.mentions)
         messages.append(
             {
                 "message_id": message_id,
@@ -66,6 +68,7 @@ def render(ctx: RenderContext) -> RenderedArtifact:
             }
         )
         mentions += builder.mentions(message_id=message_id)
+        evidence += builder.evidence(message_id=message_id)
 
     thread = {
         "schema": SCHEMA,
@@ -85,4 +88,5 @@ def render(ctx: RenderContext) -> RenderedArtifact:
         extension="json",
         semantic_timestamp=messages[0]["timestamp"],
         mentions=mentions,
+        evidence=evidence,
     )

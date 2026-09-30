@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS helios_ds.dataset_lifecycle (
   run_id STRING,
   actor STRING,
   occurred_at STRING,
-  reason STRING
+  reason STRING,
+  related_dataset_id STRING
 )
 STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
 
@@ -91,6 +92,17 @@ CREATE TABLE IF NOT EXISTS helios_ds.job_events (
   dataset_id STRING,
   workbench_run_id STRING,
   message STRING
+)
+STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
+
+CREATE TABLE IF NOT EXISTS helios_ds.review_marks (
+  dataset_id STRING,
+  mark_id STRING,
+  artifact_id STRING,
+  status STRING,
+  note STRING,
+  reviewer STRING,
+  created_at STRING
 )
 STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
 
@@ -154,7 +166,11 @@ CREATE TABLE IF NOT EXISTS helios_ground_truth.entity_mentions (
   surface_form STRING,
   modality STRING,
   start_offset BIGINT,
-  end_offset BIGINT
+  end_offset BIGINT,
+  scenario_id STRING,
+  entity_type STRING,
+  locator STRING,
+  difficulty STRING
 )
 STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
 
@@ -164,7 +180,9 @@ CREATE TABLE IF NOT EXISTS helios_ground_truth.relationships (
   source_entity_id STRING,
   predicate STRING,
   target_entity_id STRING,
-  confidence DOUBLE
+  confidence DOUBLE,
+  scenario_id STRING,
+  artifact_id STRING
 )
 STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
 
@@ -175,7 +193,8 @@ CREATE TABLE IF NOT EXISTS helios_ground_truth.claims (
   claim_type STRING,
   subject STRING,
   obj STRING,
-  truth_status STRING
+  truth_status STRING,
+  statement STRING
 )
 STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
 
@@ -187,7 +206,10 @@ CREATE TABLE IF NOT EXISTS helios_ground_truth.evidence (
   segment_id STRING,
   start_offset BIGINT,
   end_offset BIGINT,
-  locator_type STRING
+  locator_type STRING,
+  scenario_id STRING,
+  locator STRING,
+  excerpt STRING
 )
 STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
 

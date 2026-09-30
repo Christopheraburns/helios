@@ -26,7 +26,13 @@ def _published(sink, dataset_id):
         (a.artifact_id, a.sha256, a.size_bytes)
         for a in sink.read_dataset("helios_ds.artifacts", dataset_id)
     )
-    return [d.model_dump() for d in datasets], plans, templates, artifacts
+    from helios_ds.ground_truth import TRUTH_TABLES
+
+    truth = {
+        table: sorted(r.model_dump_json() for r in sink.read_dataset(table, dataset_id))
+        for table in TRUTH_TABLES
+    }
+    return [d.model_dump() for d in datasets], plans, templates, artifacts, truth
 
 
 def test_two_clean_environments_produce_identical_results(

@@ -86,10 +86,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 0
 
-    record = DatasetLifecycle(sink).approve(
+    approval = DatasetLifecycle(sink).approve(
         args.dataset_id, object_store_from_uri(args.store), args.approver
     )
-    print(f"{record.dataset_id} -> {record.state}")
+    print(f"{approval.record.dataset_id} -> {approval.record.state}")
+    for other in approval.superseded:
+        print(f"{other} -> SUPERSEDED")
     return 0
 
 

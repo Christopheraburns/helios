@@ -38,6 +38,7 @@ export interface LifecycleEvent {
   actor: string
   occurred_at: string
   reason?: string | null
+  related_dataset_id?: string | null
 }
 
 export interface DatasetSummary {
@@ -141,6 +142,121 @@ export interface ArtifactPreviewData {
   chat?: ChatThread | null
 }
 
+export interface WhoAmI {
+  user: string | null
+  identity_header: string | null
+  headers_seen: string[]
+}
+
+export interface ReviewItem {
+  artifact_id: string
+  artifact_type: string
+  template_id: string
+  scenario_id: string
+  headline: string | null
+  status: string
+  comment_count: number
+  last_mark_at: string | null
+}
+
+export interface DatasetReview {
+  dataset: DatasetSummary
+  counts: { total: number; unreviewed: number; accepted: number; flagged: number; comments: number }
+  items: ReviewItem[]
+  lineage: LineageMember[]
+}
+
+export interface LineageMember {
+  dataset_id: string
+  state: string | null
+  created_at: string | null
+}
+
+export interface DecisionResult {
+  dataset: DatasetSummary
+  superseded: string[]
+}
+
+export interface DeleteResult {
+  dataset_id: string
+  objects_deleted: number
+  tables_purged: string[]
+}
+
+export interface AuditEvent {
+  occurred_at: string
+  kind: 'lifecycle' | 'review'
+  action: string
+  actor: string
+  dataset_id: string
+  artifact_id?: string | null
+  note?: string | null
+  related_dataset_id?: string | null
+  event_seq?: number | null
+  review_counts?: Record<string, number> | null
+}
+
+export interface Locator {
+  part?: string
+  header?: string
+  message_id?: string
+  page?: number
+  text?: string
+  start?: number
+  end?: number
+}
+
+export interface MentionView {
+  mention_id: string
+  entity_id: string
+  entity_type: string
+  canonical_name: string
+  surface_form: string
+  locator: Locator
+  difficulty?: string | null
+}
+
+export interface EvidenceView {
+  evidence_id: string
+  claim_id: string
+  claim_type: string
+  statement: string | null
+  truth_status: string
+  excerpt: string | null
+  locator: Locator
+}
+
+export interface RelationshipView {
+  predicate: string
+  source: string
+  target: string
+  from_this_artifact: boolean
+}
+
+export interface MarkView {
+  mark_id: string
+  status: string
+  comment: string | null
+  reviewer: string
+  created_at: string
+}
+
+export interface ReviewBundle {
+  preview: ArtifactPreviewData
+  scenario: {
+    scenario_id: string
+    scenario_type: string
+    headline: string
+    facts: Record<string, unknown>
+    source_refs: { table: string; key: Record<string, unknown> }[]
+  } | null
+  mentions: MentionView[]
+  evidence: EvidenceView[]
+  relationships: RelationshipView[]
+  status: string
+  marks: MarkView[]
+}
+
 export interface ScenarioDetail {
   scenario_id: string
   scenario_type: string
@@ -188,8 +304,60 @@ export const api = {
     return response.data
   },
 
-  async listDatasets(): Promise<DatasetSummary[]> {
-    const response = await apiClient.get('/datasets', SLOW)
+  async listDatasets(state?: string): Promise<DatasetSummary[]> {
+    const response = await apiClient.get('/datasets', { params: state ? { state } : {}, ...SLOW })
+    return response.data
+  },
+
+  async whoami(): Promise<WhoAmI> {
+    const response = await apiClient.get('/whoami')
+    return response.data
+  },
+
+  async getDatasetReview(datasetId: string): Promise<DatasetReview> {
+    const response = await apiClient.get(`/review/datasets/${datasetId}`, SLOW)
+    return response.data
+  },
+
+  async approveDataset(datasetId: string, note?: string): Promise<DecisionResult> {
+    const response = await apiClient.post(
+      `/review/datasets/${datasetId}:approve`,
+      { note: note || null },
+      SLOW
+    )
+    return response.data
+  },
+
+  async rejectDataset(datasetId: string, reason: string): Promise<DecisionResult> {
+    const response = await apiClient.post(`/review/datasets/${datasetId}:reject`, { note: reason }, SLOW)
+    return response.data
+  },
+
+  async deleteDataset(datasetId: string, reason?: string): Promise<DeleteResult> {
+    const response = await apiClient.post(
+      `/datasets/${datasetId}:delete`,
+      { reason: reason || null },
+      { timeout: 120000 }
+    )
+    return response.data
+  },
+
+  async getDatasetHistory(datasetId: string): Promise<AuditEvent[]> {
+    const response = await apiClient.get(`/review/datasets/${datasetId}/history`, SLOW)
+    return response.data
+  },
+
+  async getReviewBundle(artifactId: string): Promise<ReviewBundle> {
+    const response = await apiClient.get(`/review/artifacts/${artifactId}`, SLOW)
+    return response.data
+  },
+
+  async addMark(artifactId: string, status: string, comment?: string): Promise<MarkView> {
+    const response = await apiClient.post(
+      `/review/artifacts/${artifactId}/marks`,
+      { status, comment: comment || null },
+      SLOW
+    )
     return response.data
   },
 

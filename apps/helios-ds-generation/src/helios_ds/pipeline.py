@@ -28,7 +28,12 @@ from .templates import TemplateRegistry
 from .tpcds import TpcdsRepository, fingerprint_hash
 
 ACTOR = "service:helios-ds-generator"
-PUBLISHED_STATES = {DatasetState.IN_REVIEW, DatasetState.READY, DatasetState.REJECTED}
+PUBLISHED_STATES = {
+    DatasetState.IN_REVIEW,
+    DatasetState.READY,
+    DatasetState.SUPERSEDED,
+    DatasetState.REJECTED,
+}
 
 
 @dataclass(frozen=True)
@@ -42,6 +47,8 @@ class PublishResult:
     scenario_counts: Dict[str, Dict[str, int]]
     rendered: Dict[str, int]  # artifact_type -> artifacts rendered
     pending: Dict[str, int]  # artifact_type -> planned artifacts with no renderer yet
+    ground_truth: Dict[str, int]  # helios_ground_truth table -> rows
+    locators_unchecked: int  # locators not verifiable here (e.g. PDFs without pypdf)
 
     @property
     def total_rendered(self) -> int:
@@ -171,7 +178,7 @@ def plan_and_publish(
             summary = render_all()
             newly_published = False
         else:
-            if state in (None, DatasetState.FAILED):
+            if state in (None, DatasetState.FAILED, DatasetState.DELETED):
                 lifecycle.transition(dataset_id, DatasetState.CREATING, ACTOR, run_id)
             put = store.put(manifest_key(dataset_id), data)
             newly_published = _publish_rows(sink, manifest, put.sha256, put.locator)
@@ -197,6 +204,8 @@ def plan_and_publish(
             scenario_counts=manifest.scenario_counts,
             rendered=summary.rendered,
             pending=summary.pending,
+            ground_truth=summary.ground_truth,
+            locators_unchecked=summary.locators_unchecked,
         )
     except Exception as exc:
         if dataset_id != "unknown" and lifecycle.state(dataset_id) in (

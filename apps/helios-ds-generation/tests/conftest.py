@@ -130,6 +130,19 @@ class FakeS3Client:
     def put_object(self, Bucket, Key, Body):
         self.objects[(Bucket, Key)] = Body
 
+    def list_objects_v2(self, Bucket, Prefix, MaxKeys=2):
+        # Small pages (S3 returns up to 1,000) so tests exercise paging.
+        keys = sorted(k for b, k in self.objects if b == Bucket and k.startswith(Prefix))
+        return {
+            "Contents": [{"Key": k} for k in keys[:MaxKeys]],
+            "IsTruncated": len(keys) > MaxKeys,
+        }
+
+    def delete_objects(self, Bucket, Delete):
+        for obj in Delete["Objects"]:
+            self.objects.pop((Bucket, obj["Key"]), None)
+        return {}
+
 
 @pytest.fixture
 def fake_s3():

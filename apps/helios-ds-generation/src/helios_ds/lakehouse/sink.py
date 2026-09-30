@@ -16,7 +16,7 @@ import json
 import threading
 import warnings
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import pyarrow as pa
 from pydantic import BaseModel
@@ -32,7 +32,9 @@ from .tables import (
     TABLES,
     SqlDialect,
     TableSpec,
+    column_iceberg_types,
     column_names,
+    column_sql_types,
     ddl_statements,
     iceberg_schema,
     is_json_field,
@@ -110,6 +112,21 @@ class LakehouseSink(ABC):
     def read_dataset(self, table: str, dataset_id: str) -> List[BaseModel]:
         return self.read(table, dataset_id)
 
+    def count_by(self, table: str, columns: Sequence[str]) -> Dict[Tuple[Any, ...], int]:
+        """Row counts grouped by ``columns`` (e.g. artifacts per dataset and type)."""
+        spec = self._spec(table)
+        unknown = sorted(set(columns) - set(spec.model.model_fields))
+        if unknown:
+            raise KeyError(f"{table} has no column(s) {unknown}")
+        return self._count_rows(spec, list(columns))
+
+    def _count_rows(self, spec: TableSpec, columns: List[str]) -> Dict[Tuple[Any, ...], int]:
+        counts: Dict[Tuple[Any, ...], int] = {}
+        for row in self._read_rows(spec, {}):
+            key = tuple(row[c] for c in columns)
+            counts[key] = counts.get(key, 0) + 1
+        return counts
+
     def delete_dataset_rows(self, table: str, dataset_id: str) -> None:
         """Remove a dataset's rows from one table (used to clear a partial publish)."""
         self._delete_rows(self._spec(table), dataset_id)
@@ -151,8 +168,20 @@ class SqlLakehouseSink(LakehouseSink):
             self._local.connection = None
 
     def ensure_tables(self) -> None:
+        """Create missing namespaces and tables, then add any columns the record
+        models gained since a table was created (additive only: never drops)."""
         for statement in ddl_statements(self.dialect):
             self._execute(statement)
+        for spec in TABLES.values():
+            cursor = self._execute(f"DESCRIBE {spec.full_name}")
+            existing = {str(row[0]).lower() for row in cursor.fetchall()}
+            for column, sql_type in column_sql_types(spec):
+                if column.lower() not in existing:
+                    self._execute(
+                        self.dialect.add_column.format(
+                            table=spec.full_name, column=column, type=sql_type
+                        )
+                    )
 
     def _append_rows(self, spec: TableSpec, rows: List[Dict[str, Any]]) -> None:
         columns = column_names(spec)
@@ -192,6 +221,14 @@ class SqlLakehouseSink(LakehouseSink):
         cursor = self._execute(sql, list(where.values()) if where else None)
         return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
 
+    def _count_rows(self, spec: TableSpec, columns: List[str]) -> Dict[Tuple[Any, ...], int]:
+        # Column names were checked against the record model.
+        group = ", ".join(columns)
+        cursor = self._execute(
+            f"SELECT {group}, COUNT(*) FROM {spec.full_name} GROUP BY {group}", None
+        )
+        return {tuple(row[:-1]): int(row[-1]) for row in cursor.fetchall()}
+
     def _delete_rows(self, spec: TableSpec, dataset_id: str) -> None:
         # Impala supports DELETE on Iceberg v2 tables.
         self._execute(f"DELETE FROM {spec.full_name} WHERE dataset_id = ?", [dataset_id])
@@ -221,11 +258,18 @@ class IcebergCatalogSink(LakehouseSink):
             except NamespaceAlreadyExistsError:
                 pass
         for spec in TABLES.values():
-            self.catalog.create_table_if_not_exists(
+            table = self.catalog.create_table_if_not_exists(
                 spec.identifier,
                 schema=iceberg_schema(spec),
                 properties={"format-version": "2"},
             )
+            existing = {f.name for f in table.schema().fields}
+            missing = [(n, t) for n, t in column_iceberg_types(spec) if n not in existing]
+            if missing:  # additive schema evolution for tables created earlier
+                with table.update_schema() as update:
+                    for name, field_type in missing:
+                        update.add_column(name, field_type)
+                self._tables.pop(spec.full_name, None)
 
     def _table(self, spec: TableSpec) -> Table:
         if spec.full_name not in self._tables:
