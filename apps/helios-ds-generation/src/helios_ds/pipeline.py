@@ -1,10 +1,13 @@
-"""Foundation pipeline (spec exit criterion for the Foundation milestone):
+"""Generation pipeline:
 
-    TPC-DS -> scenario planner -> deterministic scenario plan -> Iceberg generation manifest
+    TPC-DS -> scenario planner -> deterministic plan -> generation manifest
+           -> rendered artifacts (phase 3+) -> validation -> IN_REVIEW
 
 ``plan_and_publish`` is idempotent. Re-running it for the same inputs recomputes
-the plan and manifest and checks them byte-for-byte against what was already
-published; any difference is a determinism failure, never an overwrite.
+the plan, manifest and artifacts and checks them byte-for-byte against what was
+already published; any difference is a determinism failure, never an overwrite.
+Rendering happens while the dataset is CREATING (spec: publish protocol), so a
+dataset only reaches VALIDATING and IN_REVIEW once its artifacts exist.
 """
 
 import platform
@@ -18,6 +21,7 @@ from .lakehouse.sink import canonical_json
 from .lifecycle import DatasetLifecycle, DatasetState, ValidationFailed, utc_now, validate_published
 from .manifests import GenerationIdentity, GenerationManifest, manifest_key
 from .object_store import DeterminismIntegrityError, ObjectStore
+from .render.dataset import RenderSummary, render_dataset, renderable_artifact_ids
 from .scenarios import ScenarioPlanner, tables_for
 from .schemas import DatasetRecord, GenerationRunRecord, ScenarioPlanRecord, TemplateVersionRecord
 from .templates import TemplateRegistry
@@ -36,6 +40,12 @@ class PublishResult:
     newly_published: bool
     artifact_counts: Dict[str, Dict[str, int]]
     scenario_counts: Dict[str, Dict[str, int]]
+    rendered: Dict[str, int]  # artifact_type -> artifacts rendered
+    pending: Dict[str, int]  # artifact_type -> planned artifacts with no renderer yet
+
+    @property
+    def total_rendered(self) -> int:
+        return sum(self.rendered.values())
 
 
 def build_manifest(
@@ -133,7 +143,11 @@ def plan_and_publish(
     store: ObjectStore,
     job_id: Optional[str] = None,
     clock: Callable[[], str] = utc_now,
+    render: bool = True,
+    progress: Optional[Callable[[int, int], None]] = None,
 ) -> PublishResult:
+    """Plan, publish and (unless ``render`` is False) render a dataset.
+    ``progress(done, total)`` is called as artifacts are rendered."""
     run_id = f"run_{uuid.uuid4().hex}"
     started_at = clock()
     lifecycle = DatasetLifecycle(sink, clock)
@@ -144,19 +158,28 @@ def plan_and_publish(
         data = manifest.to_bytes()
         state = lifecycle.state(dataset_id)
 
+        def render_all() -> RenderSummary:
+            if not render:
+                return RenderSummary()
+            return render_dataset(manifest, templates, store, sink, progress)
+
         if state in PUBLISHED_STATES:
-            # Already published: this run is a reproducibility check only.
+            # Already published: this run is a reproducibility check only
+            # (re-rendered artifacts must match the stored bytes exactly).
             put = store.put(manifest_key(dataset_id), data)
             _publish_rows(sink, manifest, put.sha256, put.locator)
+            summary = render_all()
             newly_published = False
         else:
             if state in (None, DatasetState.FAILED):
                 lifecycle.transition(dataset_id, DatasetState.CREATING, ACTOR, run_id)
             put = store.put(manifest_key(dataset_id), data)
             newly_published = _publish_rows(sink, manifest, put.sha256, put.locator)
+            summary = render_all()
             if lifecycle.state(dataset_id) is DatasetState.CREATING:
                 lifecycle.transition(dataset_id, DatasetState.VALIDATING, ACTOR, run_id)
-            problems = validate_published(sink, store, dataset_id)
+            expected = renderable_artifact_ids(manifest, templates) if render else None
+            problems = validate_published(sink, store, dataset_id, expected)
             if problems:
                 raise ValidationFailed(dataset_id, problems)
             lifecycle.transition(dataset_id, DatasetState.IN_REVIEW, ACTOR, run_id)
@@ -172,6 +195,8 @@ def plan_and_publish(
             newly_published=newly_published,
             artifact_counts=manifest.artifact_counts,
             scenario_counts=manifest.scenario_counts,
+            rendered=summary.rendered,
+            pending=summary.pending,
         )
     except Exception as exc:
         if dataset_id != "unknown" and lifecycle.state(dataset_id) in (

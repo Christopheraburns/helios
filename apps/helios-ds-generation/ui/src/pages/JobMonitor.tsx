@@ -121,11 +121,6 @@ export function JobMonitor({ refreshTrigger, onViewManifest }: JobMonitorProps) 
                   <span className="stat-value">{job.progress_percent}%</span>
                 </div>
 
-                <div className="job-stat">
-                  <span className="stat-label">Artifacts Generated</span>
-                  <span className="stat-value">{job.artifacts_generated}</span>
-                </div>
-
                 {job.created_at && (
                   <div className="job-stat">
                     <span className="stat-label">Started</span>

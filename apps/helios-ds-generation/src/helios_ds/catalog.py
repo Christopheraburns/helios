@@ -6,15 +6,15 @@ checked against ``datasets.manifest_sha256`` and cached by that hash.
 """
 
 import threading
-from collections import OrderedDict
-from dataclasses import dataclass
+from collections import Counter, OrderedDict
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 from .lakehouse import LakehouseSink
 from .lifecycle import DatasetLifecycle
 from .manifests import GenerationManifest
 from .object_store import read_locator, sha256_hex
-from .schemas import DatasetLifecycleRecord, DatasetRecord
+from .schemas import ArtifactRecord, DatasetLifecycleRecord, DatasetRecord
 
 
 class DatasetNotFound(KeyError):
@@ -25,10 +25,23 @@ class ManifestUnavailable(RuntimeError):
     """The manifest object is missing or does not match its recorded hash."""
 
 
+class ArtifactNotFound(KeyError):
+    pass
+
+
+class ArtifactUnavailable(RuntimeError):
+    """The artifact object is missing or does not match its recorded hash."""
+
+
 @dataclass
 class DatasetInfo:
     record: DatasetRecord
     lifecycle: List[DatasetLifecycleRecord]
+    rendered_by_type: Dict[str, int] = field(default_factory=dict)
+
+    @property
+    def rendered_artifact_count(self) -> int:
+        return sum(self.rendered_by_type.values())
 
     @property
     def dataset_id(self) -> str:
@@ -77,7 +90,36 @@ class DatasetCatalog:
             raise DatasetNotFound(dataset_id)
         record = records[0]
         assert isinstance(record, DatasetRecord)
-        return DatasetInfo(record, DatasetLifecycle(self.sink).history(dataset_id))
+        rendered = Counter(a.artifact_type for a in self.artifacts(dataset_id))
+        return DatasetInfo(
+            record, DatasetLifecycle(self.sink).history(dataset_id), dict(sorted(rendered.items()))
+        )
+
+    def artifacts(self, dataset_id: str) -> List[ArtifactRecord]:
+        return [
+            a
+            for a in self.sink.read_dataset("helios_ds.artifacts", dataset_id)
+            if isinstance(a, ArtifactRecord)
+        ]
+
+    def artifact(self, artifact_id: str) -> ArtifactRecord:
+        rows = self.sink.read("helios_ds.artifacts", where={"artifact_id": artifact_id})
+        if not rows:
+            raise ArtifactNotFound(artifact_id)
+        record = rows[0]
+        assert isinstance(record, ArtifactRecord)
+        return record
+
+    def artifact_bytes(self, record: ArtifactRecord) -> bytes:
+        """The artifact's stored bytes, verified against its recorded SHA-256."""
+        data = self.read_object(record.source_locator)
+        if data is None:
+            raise ArtifactUnavailable(f"artifact {record.artifact_id} is missing from storage")
+        if sha256_hex(data) != record.sha256:
+            raise ArtifactUnavailable(
+                f"artifact {record.artifact_id} does not match its recorded SHA-256"
+            )
+        return data
 
     def manifest_bytes(self, dataset_id: str) -> bytes:
         return self.load(self.get(dataset_id).record)[0]

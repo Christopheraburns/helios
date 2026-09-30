@@ -1,0 +1,79 @@
+# Phrase bank for customer emails about a damaged product return.
+# {name} fills a display value; {@name} places a tracked entity mention.
+# Every variant must stay consistent with the TPC-DS facts.
+# {a_item} is "a" or "an" to match the item name that follows.
+
+subject:
+  - "Damaged {@item} - return {@rma}"
+  - "Return {@rma}: item arrived damaged"
+  - "Problem with my {@item} (ticket {@ticket})"
+  - "Damaged package - {@item}"
+  - "Re: return of {@item_id}"
+  - "Still waiting on refund for {@rma}"
+
+greeting:
+  - "Hello {company} Customer Care,"
+  - "Hi,"
+  - "Dear Customer Service,"
+  - "To whom it may concern,"
+  - "Hi there,"
+
+tones:
+  polite:
+    opening:
+      - "I bought {a_item} {@item} ({@item_id}) at your {@store} store on {sale_date_long}, and I brought it back on {return_date_long}."
+      - "I'm writing about {a_item} {@item} I purchased at the {@store} store in {store_location}. I returned it on {return_date_long}."
+      - "Earlier this month I returned {a_item} {@item} to your {@store} location (receipt ticket {@ticket})."
+    damage:
+      - "Unfortunately the packaging was badly damaged when I opened it, and the item inside was scuffed."
+      - "When I got it home, the box was crushed on one corner and the contents had shifted."
+      - "The outer carton was torn open and the product itself had visible dents."
+      - "The package arrived damaged; it looked like it had been dropped in transit."
+    request:
+      - "The store gave me return authorization {@rma}. Could you let me know when to expect the refund of {refund}?"
+      - "Could you please confirm that return {@rma} has been processed and that I'll receive {refund}?"
+      - "I'd appreciate a replacement if one is available; otherwise a refund to my card is fine. The return number is {@rma}."
+    closing:
+      - "Thank you for your help."
+      - "Thanks in advance, I appreciate it."
+      - "Many thanks,"
+  frustrated:
+    opening:
+      - "This is the second time I'm writing about the {@item} I bought at {@store}."
+      - "I am very disappointed with the {@item} ({@item_id}) I purchased at your {@store} store."
+      - "I returned {a_item} {@item} on {return_date_long} and I still haven't heard anything."
+    damage:
+      - "The box was completely crushed and the product is unusable. This is not acceptable."
+      - "It came in a package that had clearly been damaged, and the item was broken as a result."
+      - "Whoever packed this did not care: the carton was ripped and the item was cracked."
+    request:
+      - "I want my {refund} back for return {@rma}, please process it immediately."
+      - "Please refund me for return {@rma} without further delay."
+      - "I expect a full refund of {refund}. My return authorization is {@rma}."
+    closing:
+      - "I'd like a response today."
+      - "Please do not make me call again."
+      - "Regards,"
+  brief:
+    opening:
+      - "Returned {a_item} {@item} at {@store} on {return_date_long}."
+      - "Re: {@item} ({@item_id}), returned {return_date_long}."
+    damage:
+      - "Package was crushed, item damaged."
+      - "Box arrived torn; product scratched."
+    request:
+      - "Return # {@rma}. When will the refund post?"
+      - "Please confirm refund for {@rma}."
+    closing:
+      - "Thanks."
+      - "Thx,"
+
+reason_note:
+  - "At the counter the reason was recorded as \"{@reason}\"."
+  - "The return slip says: {@reason}."
+  - ""
+
+signoff:
+  - "{@customer}"
+  - "{@first_name}"
+  - "{@customer}\n{customer_email}"

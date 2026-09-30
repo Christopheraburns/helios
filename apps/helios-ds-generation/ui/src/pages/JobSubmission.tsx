@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { scenarioLabel } from '../components/ManifestViewer'
 import { api, GenerationRequest } from '../services/api'
 import '../styles/JobSubmission.css'
 
@@ -129,6 +130,33 @@ export function JobSubmission({ onJobSubmitted }: JobSubmissionProps) {
                       ...config.artifact_counts,
                       [type]: parseInt(e.target.value) || 0,
                     },
+                  })
+                }
+              />
+            </div>
+          ))}
+        </fieldset>
+
+        <fieldset>
+          <legend>Scenarios</legend>
+          <small>
+            Relative weights; 0 leaves a story type out. Currently rendered: damaged product
+            return PDFs, emails and chats. Other types are planned but not rendered yet.
+          </small>
+          {template?.scenario_types.map(type => (
+            <div key={type} className="form-group">
+              <label htmlFor={`scenario-${type}`}>{scenarioLabel(type)}</label>
+              <input
+                id={`scenario-${type}`}
+                type="number"
+                min="0"
+                max="1"
+                step="0.05"
+                value={config.scenarios?.[type] ?? 0}
+                onChange={e =>
+                  setConfig({
+                    ...config,
+                    scenarios: { ...(config.scenarios ?? {}), [type]: parseFloat(e.target.value) || 0 },
                   })
                 }
               />

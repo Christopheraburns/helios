@@ -26,8 +26,10 @@ uvicorn[standard]==0.53.0
 httpx==0.28.1
 mcp==2.2.0
 
-# Renderers and job service (arrive in phases 2-3; pin when first used)
+# Renderers. PDF bytes depend on the ReportLab version, so it is pinned exactly
+# (verified with phase 3's tests); pypdf is used to validate rendered PDFs.
+reportlab==5.0.1
+pypdf==6.19.0
 pillow==12.3.0
-reportlab>=4.0
 celery>=5.4
 redis>=5.0

@@ -131,7 +131,9 @@ class ArtifactRecord(BaseModel):
     semantic_timestamp: str = Field(..., description="ISO 8601 timestamp from TPC-DS context")
     template_id: str = Field(...)
     template_version: str = Field(...)
-    acl_policy_id: str = Field(..., description="Reference to source_acl_bindings")
+    acl_policy_id: Optional[str] = Field(
+        None, description="Reference to source_acl_bindings (set from task C-06)"
+    )
 
 
 class ArtifactSourceRecord(BaseModel):

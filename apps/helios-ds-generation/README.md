@@ -79,6 +79,16 @@ The S3 path was verified from a Workbench session on 2026-09-29: a probe object 
 - **API/UI Application (`app.py`):** run it on `helios-ds-runtime` with `HELIOS_DS_LAKEHOUSE=impala` (the Impala variables and `HELIOS_DS_API_KEY` come from the project). `HELIOS_DS_DISPATCHER` defaults to `workbench`; `inline` runs the worker inside the API process, for local development only.
 - **Job state is an event log:** job state is append-only, and the first SUCCEEDED, FAILED or CANCELLED event is final. Events are written at milestones only, because each lakehouse write takes about 1–2 s through Impala.
 
+### Rendering artifacts (phase 3+)
+
+A template can be rendered once its directory has a `renderer.py` (`render(ctx) -> RenderedArtifact`) and, usually, a `phrases.yaml` phrase bank. No ML model is involved:
+- **Content:** TPC-DS facts from the scenario plan.
+- **Structure:** the renderer's layout.
+- **Wording:** seeded choices from the phrase bank (`{name}` fills a value; `{@name}` places a tracked entity mention).
+- **Case values:** values shared by a story's artifacts (RMA number, case number, staff, timeline) derive from the scenario seed, so they agree.
+
+Shared helpers are in `src/helios_ds/render/`. Changing a template directory changes the dataset ID; changing shared render code needs a generator version bump. Currently rendered: `return_report` (PDF), `damaged_item` (email) and `support_return` (chat), all for damaged product returns. Files are stored at `datasets/<dataset_id>/artifacts/<artifact_id>.<ext>`.
+
 ### Datasets & Manifests (dashboard)
 
 The **Datasets & Manifests** tab (or **View manifest** on a finished job) shows each published dataset. It has these tabs: a summary (target vs planned assets, eligible vs chosen TPC-DS records, lifecycle), a searchable, paginated scenario browser with one-line stories and per-scenario facts, source rows and planned assets, the TPC-DS source fingerprint, templates, config, and a download of the exact manifest file. It's backed by `GET /v1/datasets`, `/v1/datasets/{id}`, `/v1/datasets/{id}/manifest`, `/manifest/raw`, `/scenarios` and `/scenarios/{scenario_id}`. Manifests are read by their recorded location, checked against their SHA-256, and cached.

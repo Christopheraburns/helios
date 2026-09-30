@@ -22,7 +22,11 @@ def _published(sink, dataset_id):
         (t.model_dump() for t in sink.read_dataset("helios_ds.template_versions", dataset_id)),
         key=lambda t: t["template_id"],
     )
-    return [d.model_dump() for d in datasets], plans, templates
+    artifacts = sorted(
+        (a.artifact_id, a.sha256, a.size_bytes)
+        for a in sink.read_dataset("helios_ds.artifacts", dataset_id)
+    )
+    return [d.model_dump() for d in datasets], plans, templates, artifacts
 
 
 def test_two_clean_environments_produce_identical_results(
@@ -153,3 +157,50 @@ def test_failed_validation_run_recovers_on_retry(
         "IN_REVIEW",
     ]
     assert len(sink.read_dataset("helios_ds.datasets", result.dataset_id)) == 1
+
+
+def test_pipeline_renders_every_renderable_artifact(make_env, tiny_config, small_repo, templates):
+    sink, store = make_env("r")
+    result = plan_and_publish(tiny_config, small_repo, templates, sink, store)
+    assert result.rendered == {"chat": 3, "email": 3, "pdf": 3}
+    assert result.pending == {}
+    artifacts = sink.read_dataset("helios_ds.artifacts", result.dataset_id)
+    assert len(artifacts) == 9
+    for a in artifacts:
+        key = a.source_locator["key"]
+        assert (
+            key == f"datasets/{result.dataset_id}/artifacts/{a.artifact_id}.{key.rsplit('.', 1)[1]}"
+        )
+        assert store.get(key) is not None
+    sources = sink.read_dataset("helios_ds.artifact_sources", result.dataset_id)
+    assert {s.artifact_id for s in sources} == {a.artifact_id for a in artifacts}
+
+    again = plan_and_publish(tiny_config, small_repo, templates, sink, store)
+    assert again.rendered == result.rendered
+    assert len(sink.read_dataset("helios_ds.artifacts", result.dataset_id)) == 9
+    assert len(sink.read_dataset("helios_ds.artifact_sources", result.dataset_id)) == len(sources)
+
+
+def test_tampered_artifact_fails_the_rerun(make_env, tiny_config, small_repo, templates):
+    sink, store = make_env("t")
+    result = plan_and_publish(tiny_config, small_repo, templates, sink, store)
+    artifact = sink.read_dataset("helios_ds.artifacts", result.dataset_id)[0]
+    path = store.root / artifact.source_locator["key"]
+    path.write_bytes(b"tampered")
+    with pytest.raises(DeterminismIntegrityError):
+        plan_and_publish(tiny_config, small_repo, templates, sink, store)
+    assert path.read_bytes() == b"tampered"
+
+
+def test_artifact_types_without_renderers_are_reported_pending(make_env, small_repo, templates):
+    from helios_ds.config import ArtifactConfig, DatasetConfig, ScenarioConfig
+
+    config = DatasetConfig(
+        artifacts={"pdf": ArtifactConfig(target_count=2), "image": ArtifactConfig(target_count=2)},
+        scenarios={"product_return_damage": ScenarioConfig(weight=1.0)},
+    )
+    sink, store = make_env("p")
+    result = plan_and_publish(config, small_repo, templates, sink, store)
+    assert result.rendered == {"pdf": 2}
+    assert result.pending == {"image": 2}
+    assert result.state is DatasetState.IN_REVIEW
