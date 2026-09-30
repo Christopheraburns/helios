@@ -1,117 +1,97 @@
 import { useEffect, useState } from "react";
-import { useApplicationContext } from "../hooks/useApplicationContext";
+import type {
+  OntologyClassDetail,
+  OntologyVersionSummary,
+} from "../api/client";
 import { ErrorState, LoadingState } from "../components/AsyncState";
+import type { ApplicationContextState } from "../hooks/useApplicationContext";
 import "./OntologyPage.css";
 
-interface OntologyVersion {
-  version: string;
-  content_hash: string;
-  node_count: number;
-  edge_count: number;
-  enum_count: number;
-  is_active: boolean;
+interface OntologyPageProps {
+  context: ApplicationContextState;
 }
 
-interface ClassDetail {
-  class: {
-    name: string;
-    properties: Record<string, unknown>;
-  };
-  parents: string[];
-  attributes: Array<{
-    name: string;
-    properties: Record<string, unknown>;
-  }>;
-  ranges: Array<{
-    attribute: string;
-    range_class: string;
-  }>;
+function message(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
 }
 
-export default function OntologyPage() {
-  const context = useApplicationContext();
-  const [versions, setVersions] = useState<OntologyVersion[]>([]);
+export default function OntologyPage({ context }: OntologyPageProps) {
+  const { loadOntologyVersions, loadOntologyGraph, loadOntologyClass } = context;
+  const [versions, setVersions] = useState<OntologyVersionSummary[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
   const [classFilter, setClassFilter] = useState("");
   const [classNames, setClassNames] = useState<string[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
-  const [classDetail, setClassDetail] = useState<ClassDetail | null>(null);
+  const [classDetail, setClassDetail] = useState<OntologyClassDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch versions on mount
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch("/api/v1/ontology/versions");
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data: OntologyVersion[] = await response.json();
+        const data = await loadOntologyVersions();
+        if (cancelled) return;
         setVersions(data);
-        if (data.length > 0) {
-          setSelectedVersion(data[0].version);
-        }
+        const active = data.find((v) => v.is_active) ?? data[0];
+        if (active) setSelectedVersion(active.version);
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to load versions"
-        );
+        if (!cancelled) setError(message(err, "Failed to load versions"));
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [loadOntologyVersions]);
 
-  // Load class list when version changes
   useEffect(() => {
     if (!selectedVersion) return;
-
+    let cancelled = false;
+    setClassNames([]);
+    setSelectedClass(null);
+    setClassDetail(null);
     (async () => {
       try {
-        setClassNames([]);
-        setSelectedClass(null);
-        setClassDetail(null);
-
-        const response = await fetch(`/api/v1/ontology/${selectedVersion}/graph`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const graph = await response.json();
-
-        const classes = graph.nodes
-          .filter((n: { label: string }) => n.label === "Class")
-          .map((n: { key: string }) => n.key)
-          .sort();
-
-        setClassNames(classes);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to load graph"
+        const graph = await loadOntologyGraph(selectedVersion);
+        if (cancelled) return;
+        setClassNames(
+          graph.nodes
+            .filter((n) => n.label === "Class")
+            .map((n) => n.key)
+            .sort(),
         );
+      } catch (err) {
+        if (!cancelled) setError(message(err, "Failed to load graph"));
       }
     })();
-  }, [selectedVersion]);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedVersion, loadOntologyGraph]);
 
-  // Load class detail when selection changes
   useEffect(() => {
     if (!selectedVersion || !selectedClass) {
       setClassDetail(null);
       return;
     }
-
+    let cancelled = false;
+    setClassDetail(null);
     (async () => {
       try {
-        const response = await fetch(
-          `/api/v1/ontology/${selectedVersion}/classes/${selectedClass}`
-        );
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const detail: ClassDetail = await response.json();
-        setClassDetail(detail);
+        const detail = await loadOntologyClass(selectedVersion, selectedClass);
+        if (!cancelled) setClassDetail(detail);
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to load class detail"
-        );
+        if (!cancelled) setError(message(err, "Failed to load class detail"));
       }
     })();
-  }, [selectedVersion, selectedClass]);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedVersion, selectedClass, loadOntologyClass]);
 
   const filteredClasses = classNames.filter((name) =>
     name.toLowerCase().includes(classFilter.toLowerCase())
@@ -242,10 +222,10 @@ export default function OntologyPage() {
                         )}
                         {attr.properties && (
                           <div className="attribute-properties">
-                            {attr.properties.multivalued && (
+                            {(attr.properties.multivalued as boolean) && (
                               <span className="badge">multivalued</span>
                             )}
-                            {attr.properties.identifier && (
+                            {(attr.properties.identifier as boolean) && (
                               <span className="badge identifier">identifier</span>
                             )}
                           </div>

@@ -1716,9 +1716,18 @@ describe("Helios application shell", () => {
     expect(screen.getByLabelText("Organization")).toHaveValue("north");
     expect(screen.getByLabelText("Model")).toBeDisabled();
     expect(window.location.search).not.toContain("model=");
-    expect(
-      screen.queryByRole("heading", { name: "Build" }),
-    ).not.toBeInTheDocument();
+    for (const modelScoped of [
+      "Model Overview",
+      "Semantic Model",
+      "Models & Discovery",
+      "Data Sources",
+    ]) {
+      expect(
+        screen.queryByRole("link", { name: modelScoped }),
+      ).not.toBeInTheDocument();
+    }
+    // The ontology is not model-scoped, so it stays reachable.
+    expect(screen.getByRole("link", { name: "Ontology" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Activity Logs" }))
       .toBeInTheDocument();
   });
