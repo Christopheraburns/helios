@@ -3,7 +3,7 @@
 Plan for hosting Memgraph in the Helios project and building an ontology visualizer in the Helios UI. It comes before the first Helios crawler.
 Source: `ontology/README.md` and the LinkML files under `ontology/`, plus a survey of the Helios UI, API and deployment (`apps/helios`, `docs/ui-deployment.md`, `docs/ui-api-networking.md`, `docs/ui-backend-contract.md`).
 
-**Status (2026-09-30):** plan only. No Memgraph, graph-DB driver or ontology code exists in the repo yet, and `linkml` is not installed.
+**Status (2026-09-30):** O-0 done — the Helios Graph Application runs Memgraph in the Workbench and answers `RETURN 1` through the gateway. O-1 items 1–4 landed with it; the materialise and read endpoints plus startup rebuild remain. No ontology parser yet, and `linkml` is not installed.
 
 **How to use:** work top to bottom. A task is done only when its **Done when** check passes. Check the box and add the commit hash.
 
@@ -75,16 +75,30 @@ Browser ──► Helios UI (new Ontology page)
 
 ## Tasks
 
-- [ ] **O-0** Spike: prove Memgraph runs in a Workbench Application pod. Check install, start as a non-root user, Bolt on `127.0.0.1`, behaviour under the pod's memory limits, and restart behaviour. Try both install routes (see decision 1). *Done when:* a throwaway Application answers `RETURN 1` through a minimal HTTP gateway.
-- [ ] **O-1** Helios Graph Application:
-  - the runtime image or install script;
-  - `apps/helios/graph/app.py`, which starts Memgraph and the gateway on `CDSW_APP_PORT`;
-  - health and readiness endpoints;
-  - service-token authentication (`HELIOS_GRAPH_TOKEN`);
-  - `POST /v1/ontology/{version}:materialise` (idempotent) and read endpoints;
-  - rebuild of the active version on startup.
+- [x] **O-0** Spike: prove Memgraph runs in a Workbench Application pod. Check install, start as a non-root user, Bolt on `127.0.0.1`, behaviour under the pod's memory limits, and restart behaviour. Try both install routes (see decision 1). *Done when:* a throwaway Application answers `RETURN 1` through a minimal HTTP gateway. — `92e7e6e`, `1691c8d`
 
-  *Done when:* the Application starts from scratch, loads a version, and rebuilds it after a restart.
+  **Findings.** Decision 1 settled: a custom runtime image (PBJ Workbench, Python 3.11) with the Memgraph binary and a Bolt driver baked in. The `.deb`-into-project-storage route was not needed.
+  - Memgraph reads `/etc/memgraph/memgraph.conf` unless `MEMGRAPH_CONFIG` says otherwise. The packaged file targets a root-run systemd service and points `--log-file` into root-owned `/var/log/memgraph`, so it exits **13 (EACCES)** under the `cdsw` user before logging anything. The Application now supplies an empty config and passes every flag explicitly.
+  - `--memory-limit` is derived from the pod's cgroup ceiling (60%, leaving room for uvicorn and the O-2 parser) rather than left unbounded.
+  - Data and log directories are node-local under `/tmp/helios-graph`. Memgraph is a disposable copy, and project storage is NFS — a poor fit for a database.
+  - The gateway boots **degraded** rather than aborting when Memgraph will not start, so `/health` and `/v1/diagnostics` stay reachable. A pod that refuses to boot answers nothing.
+  - Code was written at the O-1 location (`apps/helios/graph/`), so items 1–4 of O-1 are already in place.
+- [ ] **O-1** Helios Graph Application:
+  - [ ] the runtime image or install script — **deferred by choice.** The runtime is built and registered in the Runtime Catalog, but its `Dockerfile`/`build.sh` are not in the repo, so the image is only reproducible from the registry. Add `apps/helios/runtimes/helios-graph/` when convenient.
+  - [x] `apps/helios/graph/app.py`, which starts Memgraph and the gateway on `CDSW_APP_PORT` — `92e7e6e`
+  - [x] health and readiness endpoints — `92e7e6e`
+  - [x] service-token authentication (`HELIOS_GRAPH_TOKEN`) — `92e7e6e`
+  - [x] `POST /v1/ontology/{version}:materialise` (idempotent) and read endpoints
+  - [x] rebuild of the active version on startup
+
+  *Done when:* the Application starts from scratch, loads a version, and rebuilds it after a restart. **Code complete and unit-tested against a fake Bolt client (43 tests); the deployed round trip is unverified** because there is no parser yet to produce a real version. Closing this needs either a hand-written payload POSTed to `:materialise`, or O-2.
+
+  **Design notes.**
+  - The normalised graph contract lives in `shared/helios_core/ontology/`, so O-2's parser and the gateway agree on one shape and the crawler's resolver can reuse it. `content_hash` is a SHA-256 over a canonicalised form — node and edge order do not affect it, which is what makes republishing idempotent.
+  - Node labels and edge types are a **closed whitelist**. Cypher cannot parameterise a label or relationship type, so the loader interpolates them; that is only safe because every one is checked against the whitelist first. Every other value is a bound parameter, and there is a test asserting no caller value reaches the statement text.
+  - Versions coexist: every node carries `version` and `key`, and `IN_VERSION` links it to its `OntologyVersion` node. The blue/green swap is therefore a pointer change — `:materialise` with `activate: false`, then `:activate`.
+  - A version node is marked `complete: false` while loading, so a crash mid-load is visible and gets reloaded rather than trusted.
+  - **Decision 2 moved to O-2**, where the lakehouse snapshot actually happens. For O-1 the gateway keeps its own content-addressed payload cache on project storage (`$CDSW_PROJECT_DIR/.helios-graph/ontology/`) and rebuilds from it. That cache is explicitly *not* a system of record: a miss just means the publisher must materialise again.
 - [ ] **O-2** Parser and publish:
   - LinkML → normalised graph in `helios_core.ontology`;
   - validation in CI: `linkml-lint` on core, pack and extension, and `linkml-validate` of mapping files against `mappings/mapping.schema.yaml`;
@@ -110,12 +124,8 @@ Browser ──► Helios UI (new Ontology page)
 
 ## Decisions needed
 
-1. **How to install Memgraph.**
-   - Recommended: a custom runtime image (e.g. `christopheraburns/helios-graph-runtime`), built with a `build.sh` like the Helios-DS runtimes.
-   - Alternative: a setup script that unpacks the Memgraph `.deb` into project storage, with no runtime to build. Quicker to try, but more fragile.
-
-   The O-0 spike can test both.
-2. **Where published ontology versions are stored:** a lakehouse table such as `helios_index.ontology_versions` (next to the crawler's index, matching the README's "the active version is part of the index generation"), or Helios's own metadata store.
+1. ~~**How to install Memgraph.**~~ **Settled (O-0):** a custom runtime image on PBJ Workbench, Python 3.11, with the Memgraph binary and a Bolt driver baked in. The `.deb`-into-project-storage route was not needed. The runtime is registered in the Runtime Catalog; its build files are not yet in the repo (see O-1).
+2. **Where published ontology versions are stored:** a lakehouse table such as `helios_index.ontology_versions` (next to the crawler's index, matching the README's "the active version is part of the index generation"), or Helios's own metadata store. **Deferred to O-2**, which owns the snapshot step; O-1 needs no answer because the gateway rebuilds from its own payload cache. Two things to weigh when it comes up: the Workbench reaches the lakehouse through Impala, not PyIceberg (`helios_ds.lakehouse.impala`), so the lakehouse route adds Impala config to whichever component publishes; and nothing creates `helios_index.*` today — the Helios-DS generator deliberately never does, and there is a test enforcing that.
 3. **Memgraph licence:** Memgraph Community is under the Business Source Licence. That's fine for internal use; confirm it's acceptable for how Helios will be distributed.
 
 ## After this
