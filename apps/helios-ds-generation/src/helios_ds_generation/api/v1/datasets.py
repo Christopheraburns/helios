@@ -9,14 +9,24 @@ the answer key: this API must stay inside the generation project, never
 reachable by the crawler or Helios query users.
 """
 
+import email
+import email.policy
+import json
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 
-from helios_ds.catalog import DatasetInfo, DatasetNotFound, ManifestUnavailable
+from helios_ds.catalog import (
+    ArtifactNotFound,
+    ArtifactUnavailable,
+    DatasetInfo,
+    DatasetNotFound,
+    ManifestUnavailable,
+)
 from helios_ds.manifests import GenerationManifest
 from helios_ds.scenarios import SCENARIOS, ArtifactPlan, ScenarioPlan
+from helios_ds.schemas import ArtifactRecord
 
 from .service import GenerationService, get_service
 
@@ -37,6 +47,8 @@ class DatasetSummary(BaseModel):
     created_at: Optional[str]
     scenario_count: int
     planned_artifact_count: int
+    rendered_artifact_count: int
+    rendered_by_type: Dict[str, int]
     manifest_sha256: str
     manifest_uri: Optional[str]
     config_hash: str
@@ -77,6 +89,37 @@ class ScenarioPage(BaseModel):
     items: List[ScenarioSummary]
 
 
+class ArtifactSummary(BaseModel):
+    artifact_id: str
+    scenario_id: str
+    artifact_type: str
+    template_id: str
+    template_version: str
+    mime_type: str
+    size_bytes: int
+    sha256: str
+    semantic_timestamp: str
+    source_locator: Dict[str, Any]
+    content_uri: str
+    preview_uri: str
+    scenario_type: Optional[str] = None
+    headline: Optional[str] = None
+
+
+class EmailPreview(BaseModel):
+    headers: Dict[str, str]
+    body: str
+
+
+class ArtifactPreview(BaseModel):
+    """What the dashboard needs to show an artifact without parsing its format."""
+
+    artifact: ArtifactSummary
+    kind: str  # pdf, email, chat or other
+    email: Optional[EmailPreview] = None
+    chat: Optional[Dict[str, Any]] = None
+
+
 class ScenarioDetail(BaseModel):
     scenario_id: str
     scenario_type: str
@@ -97,6 +140,8 @@ def _summary(info: DatasetInfo) -> DatasetSummary:
         created_at=info.created_at,
         scenario_count=record.scenario_count,
         planned_artifact_count=record.planned_artifact_count,
+        rendered_artifact_count=info.rendered_artifact_count,
+        rendered_by_type=info.rendered_by_type,
         manifest_sha256=record.manifest_sha256,
         manifest_uri=record.manifest_locator.get("uri") or record.manifest_locator.get("key"),
         config_hash=record.config_hash,
@@ -234,19 +279,119 @@ def get_scenario(
     raise HTTPException(status_code=404, detail=f"scenario {scenario_id} not found")
 
 
-@router.get("/datasets/{dataset_id}/artifacts")
+def _scenario_index(service: GenerationService, dataset_id: str) -> Dict[str, Tuple[str, str]]:
+    """scenario_id -> (scenario_type, headline), from the cached manifest."""
+    try:
+        manifest = _manifest(service, dataset_id)
+    except HTTPException:
+        return {}
+    return {s.scenario_id: (s.scenario_type, _headline(s)) for s in manifest.scenarios}
+
+
+def _artifact_summary(
+    record: ArtifactRecord, scenarios: Optional[Dict[str, Tuple[str, str]]] = None
+) -> ArtifactSummary:
+    scenario_type, headline = (scenarios or {}).get(record.scenario_id, (None, None))
+    return ArtifactSummary(
+        scenario_type=scenario_type,
+        headline=headline,
+        preview_uri=f"/v1/artifacts/{record.artifact_id}/preview",
+        artifact_id=record.artifact_id,
+        scenario_id=record.scenario_id,
+        artifact_type=record.artifact_type,
+        template_id=record.template_id,
+        template_version=record.template_version,
+        mime_type=record.mime_type,
+        size_bytes=record.size_bytes,
+        sha256=record.sha256,
+        semantic_timestamp=record.semantic_timestamp,
+        source_locator=record.source_locator,
+        content_uri=f"/v1/artifacts/{record.artifact_id}/content",
+    )
+
+
+@router.get("/datasets/{dataset_id}/artifacts", response_model=List[ArtifactSummary])
 def list_dataset_artifacts(
     dataset_id: str, service: GenerationService = Depends(get_service)
-) -> list:
-    """Artifact inventory. Empty until artifacts are rendered (phase 3)."""
+) -> List[ArtifactSummary]:
+    """Rendered artifacts of a dataset (the artifact inventory)."""
     _info(service, dataset_id)
-    return []
+    scenarios = _scenario_index(service, dataset_id)
+    summaries = [_artifact_summary(r, scenarios) for r in service.datasets.artifacts(dataset_id)]
+    return sorted(summaries, key=lambda a: (a.headline or "", a.artifact_type, a.artifact_id))
 
 
-@router.get("/artifacts/{artifact_id}")
-def get_artifact(artifact_id: str) -> dict:
-    """Artifact metadata and retrievable locator (phase 3)."""
-    raise HTTPException(status_code=404, detail=f"artifact {artifact_id} not found")
+def _artifact(service: GenerationService, artifact_id: str) -> ArtifactRecord:
+    try:
+        return service.datasets.artifact(artifact_id)
+    except ArtifactNotFound:
+        raise HTTPException(status_code=404, detail=f"artifact {artifact_id} not found") from None
+
+
+@router.get("/artifacts/{artifact_id}", response_model=ArtifactSummary)
+def get_artifact(
+    artifact_id: str, service: GenerationService = Depends(get_service)
+) -> ArtifactSummary:
+    """Artifact metadata and retrievable locator."""
+    record = _artifact(service, artifact_id)
+    return _artifact_summary(record, _scenario_index(service, record.dataset_id))
+
+
+def _artifact_bytes(service: GenerationService, record: ArtifactRecord) -> bytes:
+    try:
+        return service.datasets.artifact_bytes(record)
+    except ArtifactUnavailable as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get("/artifacts/{artifact_id}/preview", response_model=ArtifactPreview)
+def preview_artifact(
+    artifact_id: str, service: GenerationService = Depends(get_service)
+) -> ArtifactPreview:
+    """An artifact prepared for display: parsed email headers and body, or the chat
+    thread. PDFs are shown from ``content_uri`` directly."""
+    record = _artifact(service, artifact_id)
+    summary = _artifact_summary(record, _scenario_index(service, record.dataset_id))
+    if record.mime_type == "application/pdf":
+        return ArtifactPreview(artifact=summary, kind="pdf")
+    data = _artifact_bytes(service, record)
+    if record.mime_type == "message/rfc822":
+        msg = email.message_from_bytes(data, policy=email.policy.default)
+        part = msg.get_body(preferencelist=("plain",))
+        body = part.get_content() if part is not None else ""
+        headers = {
+            name: str(msg[name])
+            for name in ("From", "To", "Subject", "Date", "Message-ID")
+            if msg[name] is not None
+        }
+        return ArtifactPreview(
+            artifact=summary,
+            kind="email",
+            email=EmailPreview(headers=headers, body=body.replace("\r\n", "\n")),
+        )
+    if record.mime_type == "application/json":
+        return ArtifactPreview(artifact=summary, kind="chat", chat=json.loads(data))
+    return ArtifactPreview(artifact=summary, kind="other")
+
+
+@router.get("/artifacts/{artifact_id}/content")
+def get_artifact_content(
+    artifact_id: str,
+    download: bool = Query(False),
+    service: GenerationService = Depends(get_service),
+) -> Response:
+    """The artifact's native bytes, verified against its recorded SHA-256."""
+    record = _artifact(service, artifact_id)
+    data = _artifact_bytes(service, record)
+    extension = record.source_locator.get("key", "").rsplit(".", 1)[-1]
+    disposition = "attachment" if download else "inline"
+    return Response(
+        content=data,
+        media_type=record.mime_type,
+        headers={
+            "Content-Disposition": f'{disposition}; filename="{record.artifact_id}.{extension}"'
+        },
+    )
 
 
 @router.post("/datasets/{dataset_id}:crawl")

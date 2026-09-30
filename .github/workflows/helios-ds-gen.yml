@@ -38,7 +38,8 @@ jobs:
       - run: >-
           pip install "fastapi>=0.100" "uvicorn>=0.23" "pydantic>=2.0" httpx pytest ruff mypy
           "pyiceberg[sql-sqlite,sql-postgres,pyarrow]==0.12.0" duckdb==1.5.5 pyyaml boto3 impyla==0.24.0
-      - run: ruff check src tests workbench
+          reportlab==5.0.1 pypdf==6.19.0
+      - run: ruff check src tests templates workbench
       - run: mypy
       - name: pytest (SQLite Iceberg catalog)
         run: pytest -q

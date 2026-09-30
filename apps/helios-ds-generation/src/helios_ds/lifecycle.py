@@ -9,12 +9,13 @@ re-validates the published dataset first.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Callable, Dict, FrozenSet, List, Optional
+from typing import Callable, Dict, FrozenSet, List, Optional, Set
 
 from .lakehouse import LakehouseSink
 from .manifests import GenerationManifest, manifest_key
 from .object_store import ObjectStore, sha256_hex
 from .schemas import (
+    ArtifactRecord,
     DatasetLifecycleRecord,
     DatasetRecord,
     ScenarioPlanRecord,
@@ -58,8 +59,17 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def validate_published(sink: LakehouseSink, store: ObjectStore, dataset_id: str) -> List[str]:
-    """Problems that must block a dataset from leaving VALIDATING. Empty = valid."""
+def validate_published(
+    sink: LakehouseSink,
+    store: ObjectStore,
+    dataset_id: str,
+    expected_artifact_ids: Optional[Set[str]] = None,
+) -> List[str]:
+    """Problems that must block a dataset from leaving VALIDATING. Empty = valid.
+
+    ``expected_artifact_ids`` (the planned artifacts that have a renderer) makes
+    the check require exactly those artifacts to be recorded.
+    """
     problems: List[str] = []
     datasets = sink.read_dataset("helios_ds.datasets", dataset_id)
     if len(datasets) != 1:
@@ -98,6 +108,21 @@ def validate_published(sink: LakehouseSink, store: ObjectStore, dataset_id: str)
     )
     if stored != sorted((t["template_id"], t["content_hash"]) for t in manifest.templates):
         problems.append("template_versions rows do not match the manifest")
+
+    artifacts = [
+        a
+        for a in sink.read_dataset("helios_ds.artifacts", dataset_id)
+        if isinstance(a, ArtifactRecord)
+    ]
+    ids = [a.artifact_id for a in artifacts]
+    planned = {a.artifact_id for s in manifest.scenarios for a in s.artifacts}
+    if len(ids) != len(set(ids)):
+        problems.append("helios_ds.artifacts has duplicate artifact rows")
+    if set(ids) - planned:
+        problems.append(f"{len(set(ids) - planned)} recorded artifacts are not in the plan")
+    if expected_artifact_ids is not None and set(ids) != expected_artifact_ids:
+        missing = len(expected_artifact_ids - set(ids))
+        problems.append(f"{missing} renderable planned artifacts were not recorded")
     return problems
 
 

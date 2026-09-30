@@ -222,3 +222,20 @@ def test_config_template_lists_profiles(client):
 
 def test_legacy_api_prefix_is_gone(client):
     assert client.post("/api/jobs/submit", json={}).status_code in (404, 405)
+
+
+def test_scenario_weights_reach_the_plan_config(client):
+    job = client.get(
+        _create(client, {"scenarios": {"product_return_damage": 1, "promotion_performance": 0}})[
+            "status_uri"
+        ]
+    ).json()
+    default = client.get(_create(client, {})["status_uri"]).json()
+    assert job["config_hash"] != default["config_hash"]
+    assert job["request"]["scenarios"] == {"product_return_damage": 1, "promotion_performance": 0}
+    assert (
+        client.post("/v1/generations", json={"scenarios": {"product_return_damage": 0}}).status_code
+        == 422
+    )
+    # The default request carries the default weights explicitly.
+    assert client.get("/v1/config/default").json()["scenarios"]["product_return_damage"] == 0.25

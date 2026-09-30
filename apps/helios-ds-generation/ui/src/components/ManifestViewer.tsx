@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArtifactPreview } from './ArtifactPreview'
 import {
   api,
+  ArtifactSummary,
   DatasetSummary,
   ManifestOverview,
   ScenarioDetail,
@@ -16,7 +18,7 @@ const SCENARIO_LABELS: Record<string, string> = {
 
 const PAGE_SIZE = 25
 
-type Tab = 'summary' | 'scenarios' | 'source' | 'templates' | 'config'
+type Tab = 'summary' | 'scenarios' | 'artifacts' | 'source' | 'templates' | 'config'
 
 export const scenarioLabel = (type: string) => SCENARIO_LABELS[type] ?? type
 
@@ -53,6 +55,7 @@ export function ManifestViewer({ datasetId }: ManifestViewerProps) {
   const [tab, setTab] = useState<Tab>('summary')
   const [dataset, setDataset] = useState<DatasetSummary | null>(null)
   const [manifest, setManifest] = useState<ManifestOverview | null>(null)
+  const [artifacts, setArtifacts] = useState<Record<string, ArtifactSummary>>({})
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -60,11 +63,12 @@ export function ManifestViewer({ datasetId }: ManifestViewerProps) {
     let cancelled = false
     setLoading(true)
     setError(null)
-    Promise.all([api.getDataset(datasetId), api.getManifest(datasetId)])
-      .then(([d, m]) => {
+    Promise.all([api.getDataset(datasetId), api.getManifest(datasetId), api.listArtifacts(datasetId)])
+      .then(([d, m, a]) => {
         if (!cancelled) {
           setDataset(d)
           setManifest(m)
+          setArtifacts(Object.fromEntries(a.map(x => [x.artifact_id, x])))
         }
       })
       .catch(err => {
@@ -99,15 +103,22 @@ export function ManifestViewer({ datasetId }: ManifestViewerProps) {
       </div>
 
       <div className="tabs">
-        {(['summary', 'scenarios', 'source', 'templates', 'config'] as Tab[]).map(t => (
+        {(['summary', 'scenarios', 'artifacts', 'source', 'templates', 'config'] as Tab[]).map(t => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
-            {t === 'scenarios' ? `Scenarios (${dataset.scenario_count})` : t[0].toUpperCase() + t.slice(1)}
+            {t === 'scenarios'
+              ? `Scenarios (${dataset.scenario_count})`
+              : t === 'artifacts'
+                ? `Artifacts (${dataset.rendered_artifact_count})`
+                : t[0].toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
 
       {tab === 'summary' && <SummaryTab dataset={dataset} manifest={manifest} />}
-      {tab === 'scenarios' && <ScenariosTab datasetId={datasetId} manifest={manifest} />}
+      {tab === 'scenarios' && (
+        <ScenariosTab datasetId={datasetId} manifest={manifest} artifacts={artifacts} />
+      )}
+      {tab === 'artifacts' && <ArtifactsTab artifacts={Object.values(artifacts)} />}
       {tab === 'source' && <SourceTab manifest={manifest} />}
       {tab === 'templates' && <TemplatesTab manifest={manifest} />}
       {tab === 'config' && <pre className="json">{JSON.stringify(manifest.config, null, 2)}</pre>}
@@ -128,8 +139,8 @@ function SummaryTab({ dataset, manifest }: { dataset: DatasetSummary; manifest: 
           <span className="stat-caption">planned artifacts</span>
         </div>
         <div className="stat-card">
-          <span className="stat-number">0</span>
-          <span className="stat-caption">rendered artifacts (phase 3)</span>
+          <span className="stat-number">{dataset.rendered_artifact_count}</span>
+          <span className="stat-caption">rendered artifacts</span>
         </div>
       </div>
 
@@ -140,6 +151,7 @@ function SummaryTab({ dataset, manifest }: { dataset: DatasetSummary; manifest: 
             <th>Type</th>
             <th className="num">Target</th>
             <th className="num">Planned</th>
+            <th className="num">Rendered</th>
             <th />
           </tr>
         </thead>
@@ -149,11 +161,19 @@ function SummaryTab({ dataset, manifest }: { dataset: DatasetSummary; manifest: 
               <td>{type}</td>
               <td className="num">{c.target}</td>
               <td className={`num ${c.planned < c.target ? 'short' : ''}`}>{c.planned}</td>
+              <td className="num">
+                {dataset.rendered_by_type[type] ?? 0}
+                {!dataset.rendered_by_type[type] && c.planned > 0 && (
+                  <span className="muted"> (no renderer yet)</span>
+                )}
+              </td>
               <td className="bar-cell">
                 <div className="progress-bar">
                   <div
                     className="progress-fill"
-                    style={{ width: `${c.target ? (100 * c.planned) / c.target : 0}%` }}
+                    style={{
+                      width: `${c.target ? (100 * (dataset.rendered_by_type[type] ?? 0)) / c.target : 0}%`,
+                    }}
                   />
                 </div>
               </td>
@@ -222,7 +242,15 @@ function SummaryTab({ dataset, manifest }: { dataset: DatasetSummary; manifest: 
   )
 }
 
-function ScenariosTab({ datasetId, manifest }: { datasetId: string; manifest: ManifestOverview }) {
+function ScenariosTab({
+  datasetId,
+  manifest,
+  artifacts,
+}: {
+  datasetId: string
+  manifest: ManifestOverview
+  artifacts: Record<string, ArtifactSummary>
+}) {
   const [scenarioType, setScenarioType] = useState('')
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
@@ -335,16 +363,28 @@ function ScenariosTab({ datasetId, manifest }: { datasetId: string; manifest: Ma
         </>
       )}
 
-      {selected && <ScenarioDetailPanel datasetId={datasetId} scenarioId={selected} />}
+      {selected && (
+        <ScenarioDetailPanel datasetId={datasetId} scenarioId={selected} artifacts={artifacts} />
+      )}
     </div>
   )
 }
 
-function ScenarioDetailPanel({ datasetId, scenarioId }: { datasetId: string; scenarioId: string }) {
+function ScenarioDetailPanel({
+  datasetId,
+  scenarioId,
+  artifacts,
+}: {
+  datasetId: string
+  scenarioId: string
+  artifacts: Record<string, ArtifactSummary>
+}) {
   const [detail, setDetail] = useState<ScenarioDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [previewId, setPreviewId] = useState<string | null>(null)
 
   useEffect(() => {
+    setPreviewId(null)
     setDetail(null)
     setError(null)
     api
@@ -369,17 +409,37 @@ function ScenarioDetailPanel({ datasetId, scenarioId }: { datasetId: string; sce
               <tr>
                 <th>Type</th>
                 <th>Template</th>
+                <th>File</th>
               </tr>
             </thead>
             <tbody>
-              {detail.artifacts.map(a => (
-                <tr key={a.artifact_id}>
-                  <td>{a.artifact_type}</td>
-                  <td>
-                    {a.template_id} <span className="muted">v{a.template_version}</span>
-                  </td>
-                </tr>
-              ))}
+              {detail.artifacts.map(a => {
+                const rendered = artifacts[a.artifact_id]
+                return (
+                  <tr key={a.artifact_id}>
+                    <td>{a.artifact_type}</td>
+                    <td>
+                      {a.template_id} <span className="muted">v{a.template_version}</span>
+                    </td>
+                    <td className="nowrap">
+                      {rendered ? (
+                        <>
+                          <button
+                            className="btn btn-small btn-primary"
+                            onClick={() => setPreviewId(a.artifact_id)}
+                          >
+                            Preview
+                          </button>{' '}
+                          <a href={`${rendered.content_uri}?download=true`}>Download</a>
+                          <span className="muted"> {(rendered.size_bytes / 1024).toFixed(1)} KB</span>
+                        </>
+                      ) : (
+                        <span className="muted">not rendered yet</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
 
@@ -412,6 +472,10 @@ function ScenarioDetailPanel({ datasetId, scenarioId }: { datasetId: string; sce
           </table>
         </div>
       </div>
+
+      {previewId && (
+        <ArtifactPreview artifactId={previewId} onClose={() => setPreviewId(null)} />
+      )}
 
       <details className="technical">
         <summary>Technical details</summary>
@@ -446,6 +510,108 @@ function ScenarioDetailPanel({ datasetId, scenarioId }: { datasetId: string; sce
           </tbody>
         </table>
       </details>
+    </div>
+  )
+}
+
+const ARTIFACT_PAGE = 25
+
+function ArtifactsTab({ artifacts }: { artifacts: ArtifactSummary[] }) {
+  const [type, setType] = useState('')
+  const [query, setQuery] = useState('')
+  const [offset, setOffset] = useState(0)
+  const [selected, setSelected] = useState<string | null>(null)
+
+  const types = useMemo(() => Array.from(new Set(artifacts.map(a => a.artifact_type))).sort(), [artifacts])
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return artifacts
+      .filter(a => !type || a.artifact_type === type)
+      .filter(a => !needle || `${a.headline ?? ''} ${a.template_id}`.toLowerCase().includes(needle))
+      .sort((x, y) => (x.headline ?? '').localeCompare(y.headline ?? '') || x.artifact_type.localeCompare(y.artifact_type))
+  }, [artifacts, type, query])
+
+  if (artifacts.length === 0) {
+    return <div className="empty-state">No rendered artifacts in this dataset yet.</div>
+  }
+
+  const page = filtered.slice(offset, offset + ARTIFACT_PAGE)
+  return (
+    <div className="tab-body">
+      <div className="scenario-filters">
+        <select
+          value={type}
+          onChange={e => {
+            setType(e.target.value)
+            setOffset(0)
+          }}
+        >
+          <option value="">All types</option>
+          {types.map(t => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+        <input
+          type="search"
+          placeholder="Filter by story (customer, product, store…)"
+          value={query}
+          onChange={e => {
+            setQuery(e.target.value)
+            setOffset(0)
+          }}
+        />
+      </div>
+
+      <table className="data-table scenario-table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Story</th>
+            <th>Date</th>
+            <th className="num">Size</th>
+          </tr>
+        </thead>
+        <tbody>
+          {page.map(a => (
+            <tr
+              key={a.artifact_id}
+              className={`clickable ${selected === a.artifact_id ? 'selected' : ''}`}
+              onClick={() => setSelected(selected === a.artifact_id ? null : a.artifact_id)}
+            >
+              <td className="nowrap">
+                <span className="chip">{a.artifact_type}</span>
+              </td>
+              <td>{a.headline ?? a.scenario_id}</td>
+              <td className="nowrap">{new Date(a.semantic_timestamp).toLocaleDateString()}</td>
+              <td className="num">{(a.size_bytes / 1024).toFixed(1)} KB</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="pager">
+        <button
+          className="btn btn-small"
+          disabled={offset === 0}
+          onClick={() => setOffset(Math.max(0, offset - ARTIFACT_PAGE))}
+        >
+          ← Previous
+        </button>
+        <span className="muted">
+          {filtered.length === 0 ? 0 : offset + 1}–{Math.min(offset + ARTIFACT_PAGE, filtered.length)} of{' '}
+          {filtered.length}
+        </span>
+        <button
+          className="btn btn-small"
+          disabled={offset + ARTIFACT_PAGE >= filtered.length}
+          onClick={() => setOffset(offset + ARTIFACT_PAGE)}
+        >
+          Next →
+        </button>
+      </div>
+
+      {selected && <ArtifactPreview artifactId={selected} onClose={() => setSelected(null)} />}
     </div>
   )
 }

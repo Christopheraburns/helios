@@ -30,6 +30,7 @@ CONFIG = DatasetConfig(
     artifacts={
         "pdf": ArtifactConfig(target_count=6),
         "email": ArtifactConfig(target_count=4),
+        "chat": ArtifactConfig(target_count=2),
         "video": ArtifactConfig(target_count=2),
     },
     scenarios={
@@ -60,7 +61,10 @@ def test_list_and_get_dataset(published):
     assert summary["manifest_sha256"] == result.manifest_sha256
     detail = client.get(f"/v1/datasets/{result.dataset_id}").json()
     assert [e["state"] for e in detail["lifecycle"]] == ["CREATING", "VALIDATING", "IN_REVIEW"]
-    assert detail["planned_artifact_count"] == 12
+    assert detail["planned_artifact_count"] == 14
+    # Warehouse PDFs and videos have no renderer yet; return PDFs, emails and chats do.
+    assert detail["rendered_by_type"]["email"] == 4
+    assert detail["rendered_artifact_count"] == sum(detail["rendered_by_type"].values())
 
 
 def test_manifest_overview_has_everything_but_scenarios(published):
@@ -168,3 +172,49 @@ def test_concurrent_viewer_requests(published):
     with ThreadPoolExecutor(8) as pool:
         codes = list(pool.map(lambda p: client.get(p).status_code, paths))
     assert codes == [200] * len(paths)
+
+
+def test_rendered_artifacts_can_be_listed_and_opened(published):
+    client, result, store = published
+    listed = client.get(f"/v1/datasets/{result.dataset_id}/artifacts").json()
+    assert {a["artifact_type"] for a in listed} == {"pdf", "email", "chat"}
+    for artifact in listed:
+        response = client.get(artifact["content_uri"])
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith(artifact["mime_type"])
+        assert hashlib.sha256(response.content).hexdigest() == artifact["sha256"]
+        assert client.get(f"/v1/artifacts/{artifact['artifact_id']}").json() == artifact
+    download = client.get(listed[0]["content_uri"], params={"download": True})
+    assert download.headers["content-disposition"].startswith("attachment")
+
+    (store.root / listed[0]["source_locator"]["key"]).write_bytes(b"tampered")
+    assert client.get(listed[0]["content_uri"]).status_code == 502
+    assert client.get("/v1/artifacts/nope/content").status_code == 404
+
+
+def test_artifacts_are_listed_with_their_story_and_previewable(published):
+    client, result, _ = published
+    listed = client.get(f"/v1/datasets/{result.dataset_id}/artifacts").json()
+    assert all(a["headline"] and a["scenario_type"] == "product_return_damage" for a in listed)
+    assert listed == sorted(
+        listed, key=lambda a: (a["headline"], a["artifact_type"], a["artifact_id"])
+    )
+
+    kinds = {}
+    for artifact in listed:
+        preview = client.get(artifact["preview_uri"]).json()
+        assert preview["artifact"] == artifact
+        kinds[preview["kind"]] = preview
+    assert set(kinds) == {"pdf", "email", "chat"}
+
+    mail = kinds["email"]["email"]
+    assert mail["headers"]["To"].endswith("<care@helios-retail.example>")
+    assert {"From", "Subject", "Date", "Message-ID"} <= set(mail["headers"])
+    assert "RMA-" in mail["body"] and "\r" not in mail["body"]
+
+    chat = kinds["chat"]["chat"]
+    assert chat["schema"] == "helios-ds/chat-thread/1.0"
+    assert chat["messages"] and chat["participants"]
+
+    assert kinds["pdf"]["email"] is None and kinds["pdf"]["chat"] is None
+    assert client.get("/v1/artifacts/nope/preview").status_code == 404

@@ -13,6 +13,7 @@ export interface GenerationRequest {
   master_seed: number
   profile: string
   artifact_counts: Record<string, number>
+  scenarios?: Record<string, number> | null
   security_profile: string
   difficulty_profile: string
 }
@@ -45,6 +46,8 @@ export interface DatasetSummary {
   created_at: string | null
   scenario_count: number
   planned_artifact_count: number
+  rendered_artifact_count: number
+  rendered_by_type: Record<string, number>
   manifest_sha256: string
   manifest_uri: string | null
   config_hash: string
@@ -97,6 +100,45 @@ export interface ArtifactPlan {
   template_id: string
   template_version: string
   artifact_seed: string
+}
+
+export interface ArtifactSummary {
+  artifact_id: string
+  scenario_id: string
+  artifact_type: string
+  template_id: string
+  template_version: string
+  mime_type: string
+  size_bytes: number
+  sha256: string
+  semantic_timestamp: string
+  content_uri: string
+  preview_uri: string
+  scenario_type?: string | null
+  headline?: string | null
+}
+
+export interface ChatMessage {
+  message_id: string
+  timestamp: string
+  sender: string
+  sender_name: string
+  text: string
+}
+
+export interface ChatThread {
+  schema: string
+  thread_id: string
+  channel: string
+  participants: { sender: string; name: string; role: string }[]
+  messages: ChatMessage[]
+}
+
+export interface ArtifactPreviewData {
+  artifact: ArtifactSummary
+  kind: 'pdf' | 'email' | 'chat' | 'other'
+  email?: { headers: Record<string, string>; body: string } | null
+  chat?: ChatThread | null
 }
 
 export interface ScenarioDetail {
@@ -171,6 +213,16 @@ export const api = {
     params.append('offset', String(options.offset ?? 0))
     params.append('limit', String(options.limit ?? 25))
     const response = await apiClient.get(`/datasets/${datasetId}/scenarios`, { params, ...SLOW })
+    return response.data
+  },
+
+  async listArtifacts(datasetId: string): Promise<ArtifactSummary[]> {
+    const response = await apiClient.get(`/datasets/${datasetId}/artifacts`, SLOW)
+    return response.data
+  },
+
+  async getArtifactPreview(artifactId: string): Promise<ArtifactPreviewData> {
+    const response = await apiClient.get(`/artifacts/${artifactId}/preview`, SLOW)
     return response.data
   },
 

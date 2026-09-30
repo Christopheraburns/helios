@@ -52,7 +52,8 @@ export function DatasetBrowser({ selectedDatasetId, onSelect }: DatasetBrowserPr
             <span className="mono">{short(d.dataset_id, 13)}</span>
             <span className={`status-badge ${stateClass(d.state)}`}>{d.state ?? 'UNKNOWN'}</span>
             <span className="muted">
-              {d.scenario_count} scenarios · {d.planned_artifact_count} planned assets
+              {d.scenario_count} scenarios · {d.rendered_artifact_count} of{' '}
+              {d.planned_artifact_count} assets rendered
             </span>
             {d.created_at && (
               <span className="muted">{new Date(d.created_at).toLocaleString()}</span>

@@ -9,6 +9,7 @@ from helios_ds.config import (
     ArtifactConfig,
     DatasetConfig,
     DifficultyConfig,
+    ScenarioConfig,
     default_config,
 )
 from helios_ds.jobs import JobState, JobView
@@ -33,6 +34,8 @@ class GenerationRequest(_StrictModel):
     master_seed: int = 42
     profile: str = "developer"
     artifact_counts: Dict[str, int] = Field(default_factory=dict)
+    # Scenario type -> relative weight (0 excludes it). Omit for the defaults.
+    scenarios: Optional[Dict[str, float]] = None
     security_profile: str = "departmental"
     difficulty_profile: str = "mixed"
 
@@ -46,6 +49,8 @@ class GenerationRequest(_StrictModel):
             )
         weights = profile["weights"]
         assert isinstance(weights, DifficultyConfig)
+        if self.scenarios is not None and not any(w > 0 for w in self.scenarios.values()):
+            raise ValueError("select at least one scenario with a weight above 0")
         defaults = default_config()
         artifacts = (
             {
@@ -59,14 +64,21 @@ class GenerationRequest(_StrictModel):
             tpcds_scale_factor=self.source.scale_factor,
             master_seed=self.master_seed,
             artifacts=artifacts,
-            scenarios=defaults.scenarios,
+            scenarios=(
+                {name: ScenarioConfig(weight=w) for name, w in self.scenarios.items() if w > 0}
+                if self.scenarios is not None
+                else defaults.scenarios
+            ),
             difficulty=weights,
         )
 
     @classmethod
     def default(cls) -> "GenerationRequest":
         defaults = default_config()
-        return cls(artifact_counts={t: a.target_count for t, a in defaults.artifacts.items()})
+        return cls(
+            artifact_counts={t: a.target_count for t, a in defaults.artifacts.items()},
+            scenarios={name: s.weight for name, s in defaults.scenarios.items()},
+        )
 
 
 class GenerationAccepted(BaseModel):

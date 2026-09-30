@@ -10,13 +10,13 @@ artifact rendering here, with progress events per batch.
 """
 
 import os
-from typing import Optional
+from typing import Dict, Optional
 
 from ..backends import lakehouse_from_uri, object_store_from_uri, tpcds_from_uri
 from ..config import DatasetConfig
 from ..lakehouse import LakehouseSink
 from ..object_store import ObjectStore
-from ..pipeline import plan_and_publish
+from ..pipeline import PublishResult, plan_and_publish
 from ..templates import TemplateRegistry
 from ..tpcds import TpcdsRepository
 from .store import JobState, JobStore, JobView
@@ -48,8 +48,29 @@ def run_generation_job(
     try:
         config = DatasetConfig.model_validate_json(job.record.config_json)
         _check_cancelled(jobs, job_id)
+        reported = {"quarter": 0}
+
+        def progress(done: int, total: int) -> None:
+            # Lakehouse writes cost ~1-2 s, so report at most once per quarter.
+            quarter = 4 * done // total if total else 4
+            if quarter > reported["quarter"] and done < total:
+                reported["quarter"] = quarter
+                jobs.append_event(
+                    job_id,
+                    JobState.RUNNING,
+                    actor="worker",
+                    progress_percent=10 + 20 * quarter,
+                    message=f"rendered {done} of {total} artifacts",
+                )
+
         result = plan_and_publish(
-            config, tpcds, templates or TemplateRegistry.load(), sink, store, job_id=job_id
+            config,
+            tpcds,
+            templates or TemplateRegistry.load(),
+            sink,
+            store,
+            job_id=job_id,
+            progress=progress,
         )
         _check_cancelled(jobs, job_id)
     except JobCancelled:
@@ -65,12 +86,28 @@ def run_generation_job(
         actor="worker",
         progress_percent=100,
         dataset_id=result.dataset_id,
-        message=(
-            f"dataset {result.dataset_id} is {result.state.value}; "
-            f"{'published' if result.newly_published else 'already published, reproduced'}"
-        ),
+        message=_summary(result),
     )
     return jobs.get(job_id)
+
+
+def _counts(counts: Dict[str, int]) -> str:
+    return ", ".join(f"{n} {kind}" for kind, n in counts.items())
+
+
+def _summary(result: PublishResult) -> str:
+    parts = [
+        f"dataset {result.dataset_id} is {result.state.value}",
+        "published" if result.newly_published else "already published, reproduced",
+        f"{result.total_rendered} artifacts rendered"
+        + (f" ({_counts(result.rendered)})" if result.rendered else ""),
+    ]
+    if result.pending:
+        parts.append(
+            f"{sum(result.pending.values())} planned artifacts have no renderer yet "
+            f"({_counts(result.pending)})"
+        )
+    return "; ".join(parts)
 
 
 def run_from_env(job_id: Optional[str] = None) -> JobView:
