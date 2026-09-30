@@ -14,7 +14,16 @@ from .lakehouse import LakehouseSink
 from .lifecycle import DatasetLifecycle
 from .manifests import GenerationManifest
 from .object_store import read_locator, sha256_hex
-from .schemas import ArtifactRecord, DatasetLifecycleRecord, DatasetRecord
+from .schemas import (
+    ArtifactRecord,
+    DatasetLifecycleRecord,
+    DatasetRecord,
+    TruthClaimRecord,
+    TruthEntityMentionRecord,
+    TruthEntityRecord,
+    TruthEvidenceRecord,
+    TruthRelationshipRecord,
+)
 
 
 class DatasetNotFound(KeyError):
@@ -68,6 +77,7 @@ class DatasetCatalog:
         self.read_object = read_object
         self._manifests: "OrderedDict[str, tuple[bytes, GenerationManifest]]" = OrderedDict()
         self._lock = threading.Lock()  # the API calls this from several threads
+        self._entity_cache: "OrderedDict[str, List[TruthEntityRecord]]" = OrderedDict()
 
     def list(self) -> List[DatasetInfo]:
         """Every published dataset, newest first."""
@@ -75,9 +85,15 @@ class DatasetCatalog:
         for event in self.sink.read(DatasetLifecycle.TABLE):
             assert isinstance(event, DatasetLifecycleRecord)
             events.setdefault(event.dataset_id, []).append(event)
+        rendered: Dict[str, Dict[str, int]] = {}
+        counts = self.sink.count_by("helios_ds.artifacts", ["dataset_id", "artifact_type"])
+        for (dataset_id, artifact_type), count in sorted(counts.items()):
+            rendered.setdefault(dataset_id, {})[artifact_type] = count
         infos = [
             DatasetInfo(
-                record, sorted(events.get(record.dataset_id, []), key=lambda e: e.event_seq)
+                record,
+                sorted(events.get(record.dataset_id, []), key=lambda e: e.event_seq),
+                rendered.get(record.dataset_id, {}),
             )
             for record in self.sink.read("helios_ds.datasets")
             if isinstance(record, DatasetRecord)
@@ -147,3 +163,74 @@ class DatasetCatalog:
             while len(self._manifests) > self.MANIFEST_CACHE_SIZE:
                 self._manifests.popitem(last=False)
         return entry
+
+    # --- ground truth (read side; rows are fixed once a dataset leaves CREATING) ---
+
+    def truth_for_artifact(self, record: ArtifactRecord) -> "ArtifactTruth":
+        """The hidden ground truth that concerns one artifact."""
+        mentions = [
+            m
+            for m in self.sink.read(
+                "helios_ground_truth.entity_mentions", where={"artifact_id": record.artifact_id}
+            )
+            if isinstance(m, TruthEntityMentionRecord)
+        ]
+        evidence = [
+            e
+            for e in self.sink.read(
+                "helios_ground_truth.evidence", where={"artifact_id": record.artifact_id}
+            )
+            if isinstance(e, TruthEvidenceRecord)
+        ]
+        edges = [
+            r
+            for r in self.sink.read(
+                "helios_ground_truth.relationships",
+                where={"dataset_id": record.dataset_id, "scenario_id": record.scenario_id},
+            )
+            if isinstance(r, TruthRelationshipRecord)
+            and (r.artifact_id is None or r.artifact_id == record.artifact_id)
+        ]
+        claims = {
+            c.claim_id: c
+            for c in self.sink.read(
+                "helios_ground_truth.claims",
+                where={"dataset_id": record.dataset_id, "scenario_id": record.scenario_id},
+            )
+            if isinstance(c, TruthClaimRecord)
+        }
+        wanted = (
+            {m.entity_id for m in mentions}
+            | {r.source_entity_id for r in edges}
+            | {r.target_entity_id for r in edges}
+            | {c.subject for c in claims.values()}
+            | {c.obj for c in claims.values()}
+        )
+        entities = {
+            e.entity_id: e for e in self._entities(record.dataset_id) if e.entity_id in wanted
+        }
+        return ArtifactTruth(mentions, evidence, edges, claims, entities)
+
+    def _entities(self, dataset_id: str) -> List[TruthEntityRecord]:
+        with self._lock:
+            cached = self._entity_cache.get(dataset_id)
+        if cached is None:
+            cached = [
+                e
+                for e in self.sink.read_dataset("helios_ground_truth.entities", dataset_id)
+                if isinstance(e, TruthEntityRecord)
+            ]
+            with self._lock:
+                self._entity_cache[dataset_id] = cached
+                while len(self._entity_cache) > self.MANIFEST_CACHE_SIZE:
+                    self._entity_cache.popitem(last=False)
+        return cached
+
+
+@dataclass
+class ArtifactTruth:
+    mentions: List[TruthEntityMentionRecord]
+    evidence: List[TruthEvidenceRecord]
+    relationships: List[TruthRelationshipRecord]
+    claims: Dict[str, TruthClaimRecord]
+    entities: Dict[str, TruthEntityRecord]

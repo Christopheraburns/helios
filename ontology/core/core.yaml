@@ -1,0 +1,321 @@
+id: https://helios.dev/ontology/core
+name: helios_core
+title: Helios Core Ontology
+version: 0.1.0
+description: >-
+  Source-agnostic classes and relationship types that every Helios component
+  (crawler, resolver, graph projector, planner, MCP describe/explain) is written
+  against. Domain packs and customer extensions may only add subclasses,
+  attributes, aliases and mappings under this layer; they never redefine it.
+license: Proprietary
+
+prefixes:
+  linkml: https://w3id.org/linkml/
+  helios: https://helios.dev/ontology/
+  schema: http://schema.org/
+default_prefix: helios
+default_range: string
+
+imports:
+  - linkml:types
+
+# ---------------------------------------------------------------------------
+# Reusable attributes
+# ---------------------------------------------------------------------------
+slots:
+  entity_id:
+    description: Stable Helios-assigned identifier. Never a source-system key.
+    identifier: true
+    range: string
+  name:
+    description: Preferred display name.
+    range: string
+  aliases:
+    description: Alternate names used by the resolver.
+    range: string
+    multivalued: true
+  external_ids:
+    description: Source-system keys, formatted "<source>.<object>:<key>", e.g. "tpcds.customer:12345".
+    range: string
+    multivalued: true
+  valid_from:
+    range: date
+  valid_to:
+    range: date
+  confidence:
+    range: float
+    minimum_value: 0.0
+    maximum_value: 1.0
+  ontology_version:
+    description: Ontology version this instance was linked under.
+    range: string
+
+# ---------------------------------------------------------------------------
+# Classes
+# ---------------------------------------------------------------------------
+classes:
+
+  Thing:
+    abstract: true
+    description: Root of everything Helios can name.
+    slots: [entity_id, name, aliases, external_ids, ontology_version]
+
+  # ---- Real-world entities -------------------------------------------------
+  EnterpriseEntity:
+    is_a: Thing
+    abstract: true
+    description: A real-world entity the enterprise cares about, independent of any source system.
+    slots: [valid_from, valid_to]
+
+  Organization:
+    is_a: EnterpriseEntity
+    attributes:
+      org_type:
+        range: OrganizationType
+      parent:
+        range: Organization
+
+  Person:
+    is_a: EnterpriseEntity
+    attributes:
+      email:
+        range: string
+        multivalued: true
+      affiliated_with:
+        range: Organization
+        multivalued: true
+
+  Location:
+    is_a: EnterpriseEntity
+    attributes:
+      address:
+        range: string
+      geo:
+        description: WKT or "lat,lon".
+        range: string
+
+  Product:
+    is_a: EnterpriseEntity
+    attributes:
+      sku:
+        range: string
+      category:
+        range: string
+
+  Equipment:
+    is_a: EnterpriseEntity
+    attributes:
+      serial_number:
+        range: string
+      located_at:
+        range: Location
+
+  Contract:
+    is_a: EnterpriseEntity
+    attributes:
+      contract_number:
+        range: string
+      parties:
+        range: Organization
+        multivalued: true
+      effective_date:
+        range: date
+      expiry_date:
+        range: date
+
+  Account:
+    is_a: EnterpriseEntity
+    attributes:
+      account_number:
+        range: string
+      owner:
+        range: Organization
+
+  # ---- Events --------------------------------------------------------------
+  Event:
+    is_a: Thing
+    abstract: true
+    attributes:
+      occurred_at:
+        range: datetime
+      involves:
+        range: EnterpriseEntity
+        multivalued: true
+
+  Transaction:
+    is_a: Event
+    attributes:
+      amount:
+        range: float
+      currency:
+        range: string
+
+  Incident:
+    is_a: Event
+    attributes:
+      severity:
+        range: string
+
+  # ---- Information assets (what the crawler indexes) -----------------------
+  InformationAsset:
+    is_a: Thing
+    abstract: true
+    description: Anything the crawler can enumerate, version and segment.
+    attributes:
+      asset_version_id:
+        description: Immutable version identifier; changes when content changes.
+        range: string
+      source_uri:
+        range: uri
+      mime_type:
+        range: string
+      created_at:
+        range: datetime
+
+  Document:
+    is_a: InformationAsset
+  Image:
+    is_a: InformationAsset
+  Video:
+    is_a: InformationAsset
+  Audio:
+    is_a: InformationAsset
+  Message:
+    is_a: InformationAsset
+    description: Email, chat post, ticket comment. Attachments are their own assets.
+  Table:
+    is_a: InformationAsset
+    description: A structured dataset reachable through an Ossie model.
+
+  Segment:
+    description: Addressable region of an asset (page range, time range, bounding box, row range).
+    attributes:
+      segment_id:
+        identifier: true
+        range: string
+      asset:
+        range: InformationAsset
+      locator:
+        description: Modality-specific locator, e.g. "pages=3-5", "t=00:12:04-00:12:31", "bbox=...".
+        range: string
+
+  # ---- Meaning and assertions ---------------------------------------------
+  SemanticConcept:
+    is_a: Thing
+    description: >-
+      Glossary terms and business concepts such as "Net Revenue" or "Churn Risk".
+      Concepts are linked to Ossie measures and to claims; they are never resolved
+      as entities.
+    attributes:
+      definition:
+        range: string
+      broader:
+        range: SemanticConcept
+
+  Claim:
+    description: An assertion extracted from evidence, e.g. "ACME renewal risk is high".
+    attributes:
+      claim_id:
+        identifier: true
+        range: string
+      subject:
+        range: EnterpriseEntity
+      predicate:
+        range: string
+      object:
+        range: string
+      claim_confidence:
+        range: float
+      asserted_at:
+        range: datetime
+
+  OssieModelElement:
+    is_a: Thing
+    description: A dimension, measure, entity or relationship in a published Ossie model.
+    attributes:
+      model_name:
+        range: string
+      element_kind:
+        range: OssieElementKind
+      element_path:
+        description: Path within the Ossie model, e.g. "entities.dim_customer".
+        range: string
+
+  # ---- Relationship vocabulary (graph edge types) --------------------------
+  Relationship:
+    abstract: true
+    description: Base for every edge type materialised in the graph projection.
+    attributes:
+      source:
+        range: Thing
+      target:
+        range: Thing
+      edge_confidence:
+        range: float
+      evidence:
+        description: Segments that support this edge.
+        range: Segment
+        multivalued: true
+      resolved_by:
+        range: ResolutionTier
+
+  SameAs:
+    is_a: Relationship
+    description: Two references denote the same real-world entity.
+  PossiblySameAs:
+    is_a: Relationship
+    description: Candidate match below the auto-accept threshold; awaits review.
+  Mentions:
+    is_a: Relationship
+    description: An asset or segment references an entity.
+  About:
+    is_a: Relationship
+    description: An asset is primarily concerned with an entity (derived from mention density and position).
+  ReferencesRecord:
+    is_a: Relationship
+    description: A mention resolved to a specific structured row.
+    attributes:
+      table_ref:
+        range: string
+      key_value:
+        range: string
+  PartOf:
+    is_a: Relationship
+  LocatedAt:
+    is_a: Relationship
+  PartyTo:
+    is_a: Relationship
+  EvidenceFor:
+    is_a: Relationship
+    description: A segment supports a claim.
+  DerivedFrom:
+    is_a: Relationship
+    description: An entity instance was materialised from an Ossie element.
+
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
+enums:
+  OrganizationType:
+    permissible_values:
+      customer: {}
+      supplier: {}
+      partner: {}
+      internal: {}
+      regulator: {}
+
+  OssieElementKind:
+    permissible_values:
+      dimension: {}
+      measure: {}
+      relationship: {}
+      entity: {}
+
+  ResolutionTier:
+    description: Which resolver tier produced a link. Recorded on every edge.
+    permissible_values:
+      exact_key: {}
+      alias: {}
+      fuzzy: {}
+      model_assisted: {}
+      manual: {}

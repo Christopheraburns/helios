@@ -7,18 +7,27 @@ Source: *Helios-DS Asset Generator — Engineering Development Specification* (t
 
 **Scope:** `apps/helios-ds-generation` (the generator and its review workflow). The Helios crawler, analyzers, LanceDB/Memgraph projections and the evaluator are separate projects; the items this project must hand off to them are listed in [Handoffs](#handoffs-to-other-projects).
 
+**Scope revised 2026-09-30.** Helios is a semantic layer over structured *and* unstructured data, served through MCP to people and agents. Helios-DS-Generation exists to produce one realistic, TPC-DS-consistent corpus with a hidden answer key, so the Helios crawler and new structured-plus-unstructured indexing methods can be developed and measured. It may run only a handful of times. The remaining work is therefore cut to what the crawler needs:
+- **Text first.** The crawler is built and tuned on PDF, email and chat. Images (Phase 5) come only once the text crawler meets its targets; audio and video (Phase 6) after that, if at all.
+- **Kept:** lean aliases (C-05), golden questions (C-08), a frozen development corpus (C-09), ground-truth isolation (S-05) and version pinning (Q-03).
+- **Cut:** curation overlays (stage C), the generator's own MCP interface and roles (S-01 to S-04), the standalone validation Job (C-07) and the Workbench release CI (Q-02). A corpus that is generated once is fixed by editing templates and regenerating.
+- **Deferred:** simulated users and access lists (C-06), until the crawler handles permissions. Generation is deterministic and takes about 30 s, so adding them later just means regenerating.
+
+Cut items stay listed, struck through, with the reason, so the spec's full scope remains traceable.
+
 **Status at creation (2026-09-29):** scaffold only. `helios_ds/config.py` (partial config schema), `ids.py` (UUIDv5 helpers), `scenarios.py` (planner skeleton), `schemas.py` (record models), a FastAPI app whose endpoints return placeholders and keep jobs in an in-memory dict, and a React UI with submit/monitor/results pages. No generators, storage, lakehouse writes or tests exist yet.
 
 ---
 
 ## Design decision: how review, edit and approve fit a deterministic generator
 
-The spec requires that the same source + config + seed + version produce the same corpus, and that anything not produced deterministically be "frozen and versioned" before it enters the benchmark. Review and editing must therefore **never modify artifact bytes in place**. Proposed model (confirm before starting R-tasks):
-
-- **Review** is a dataset lifecycle stage. The spec's `CREATING → VALIDATING → READY` becomes `CREATING → VALIDATING → IN_REVIEW → APPROVED (READY) | REJECTED`. Only `READY` datasets are visible to the crawler.
-- **Edits are curation overlays**: versioned, declarative changes (template field overrides, excluded artifacts, adjusted claim or ACL assignments, pinned replacement bytes for a single artifact) stored in Git or Iceberg. The overlay bundle's hash becomes part of `dataset_id`, so an edited corpus is a *new* reproducible dataset, not a mutated one.
-- **Ground-truth consistency:** every overlay re-derives the affected truth rows (mentions, claims, evidence locators) and re-runs validation, so edits cannot silently break the answer key.
-- **Isolation:** the review UI shows hidden ground truth and therefore runs only in the generation project, never where crawler or query credentials exist.
+**Decided 2026-09-30: see [ADR 0001](adr/0001-helios-ds-review-edit-approve.md).** In short:
+- **Immutable datasets:** a published dataset is never modified; every correction produces a new dataset (a new `dataset_id`).
+- **Stage B now, "reject and regenerate":** review with advisory flags and comments; approve or reject in the UI; fix templates, phrase banks or config in Git; regenerate.
+- ~~**Stage C later, "curation overlays":**~~ *(Cut 2026-09-30; see the scope revision.)* all four kinds (exclude, presentation override, metadata change, pinned replacement), stored in `helios_ds.overlays`. The overlay bundle hash joins the dataset identity, and an edited dataset records its parent.
+- **Superseding:** approving a dataset moves the other `READY` datasets in its **lineage** (same generation config, plus overlay-derived datasets) to `SUPERSEDED`, so one dataset per lineage is live.
+- **Advisory flags:** review flags never block approval; failed validation still does.
+- **Approver:** any authenticated Workbench user approves (S-04 roles are cut). The identity comes from the Application proxy, verified in R-06.
 
 ---
 
@@ -77,60 +86,77 @@ No media generation merges until this phase's exit criterion passes.
 
 First business story: Sale → Return → Complaint email → Return authorisation PDF → Internal support chat.
 
-*Status 2026-09-29 (uncommitted):* **C-01 to C-03 done.** Assets are generated without any ML model. Templates supply the structure, TPC-DS facts supply the content, and seeded phrase banks supply the wording variation. Values shared per case (RMA number, case number, staff, timeline) derive from the scenario seed, so a story's report, email and chat agree. Every placed entity mention is recorded with an exact locator, ready for C-04. Renderers live in the template directories (`renderer.py` + `phrases.yaml`), so the template content hash covers them. Templates are now v1.1.0 and the generator 0.2.0. Rendering runs while the dataset is CREATING, so a dataset reaches IN_REVIEW only with its artifacts. Planned types without a renderer are reported as pending. **Verified in Workbench:** job `job_68177722…` rendered 60 artifacts (20 PDF, 20 email, 20 chat) for dataset `97a4edf9…` in about 30 s. A second job re-rendered all 60 byte-identically on the runtime image, and all 60 are served from `s3a://…/helios-db/source/datasets/…/artifacts/` with matching SHA-256. 164 tests pass. The dashboard previews rendered files in place: a manifest viewer **Artifacts** tab plus **Preview** in each story's detail, with PDFs shown inline, emails as formatted messages (via `GET /v1/artifacts/{id}/preview`) and chats as threads. The submit form takes scenario weights. **Follow-up:** the registered runtime image took `reportlab>=4.0` at build time; the requirements now pin `reportlab==5.0.1` and `pypdf==6.19.0`, so rebuild the runtime (0.1.1) to lock PDF bytes to that version.
+*Status 2026-09-30 (uncommitted):* **C-01 to C-04 done.** Assets are generated without any ML model. Templates supply the structure, TPC-DS facts supply the content, and seeded phrase banks supply the wording variation. Values shared per case (RMA number, case number, staff, timeline) derive from the scenario seed, so a story's report, email and chat agree. Every placed entity mention is recorded with an exact locator, ready for C-04. Renderers live in the template directories (`renderer.py` + `phrases.yaml`), so the template content hash covers them. Templates are now v1.1.0 and the generator 0.2.0. Rendering runs while the dataset is CREATING, so a dataset reaches IN_REVIEW only with its artifacts. Planned types without a renderer are reported as pending. **Verified in Workbench:** job `job_68177722…` rendered 60 artifacts (20 PDF, 20 email, 20 chat) for dataset `97a4edf9…` in about 30 s. A second job re-rendered all 60 byte-identically on the runtime image, and all 60 are served from `s3a://…/helios-db/source/datasets/…/artifacts/` with matching SHA-256. 164 tests pass. The dashboard previews rendered files in place: a manifest viewer **Artifacts** tab plus **Preview** in each story's detail, with PDFs shown inline, emails as formatted messages (via `GET /v1/artifacts/{id}/preview`) and chats as threads. The submit form takes scenario weights. **Follow-up:** the registered runtime image took `reportlab>=4.0` at build time; the requirements now pin `reportlab==5.0.1` and `pypdf==6.19.0`, so rebuild the runtime (0.1.1) to lock PDF bytes to that version.
 
 - [x] **C-01** PDF generator (ReportLab): return report and return-authorisation templates; deterministic or stripped PDF metadata; selectable-text and scanned-style pages. *Done when:* 100% of PDFs parse, truth locators resolve, and hashes are stable in the pinned image.
 - [x] **C-02** Email generator (`EmailMessage`): deterministic Message-IDs, MIME boundaries, dates and attachment names; thread provenance. *Done when:* every `.eml` parses, headers match truth, and hashes are stable.
 - [x] **C-03** Chat generator: the neutral Helios-DS JSON/JSONL schema. *Done when:* output is 100% schema-valid, thread and message references are valid, and hashes are stable.
-- [ ] **C-04** Ground-truth builder for the slice: entities, mentions with precise locators, relationships, claims (including `truth_status`) and evidence. *Done when:* there are zero orphan rows and all evidence locators resolve.
-- [ ] **C-05** Alias and difficulty tiers applied per the config's difficulty weights (direct, alias, contextual). *Done when:* the tier distribution matches the config within tolerance.
-- [ ] **C-06** Security simulation: source principals (alice, bob, carol, dave, erin, public_agent), groups, and `source_acl_bindings` per artifact. *Done when:* every artifact has an ACL policy and the bindings resolve.
-- [ ] **C-07** Validation job (`helios-ds-validate`): count checks, artifact-resolution checks (SHA-256 of retrieved bytes equals the manifest), and truth referential integrity. *Done when:* a deliberately corrupted fixture fails validation.
-- [ ] **C-08** Golden queries v1 in `expected_queries`/`expected_results`, e.g. "How many returns did the item have?" and "What are customers saying about those returns?". *Done when:* the queries exist with required-evidence specs.
+- [x] **C-04** *(Done 2026-09-30. Renderers tag evidence passages as well as mentions. Every mention and evidence locator is verified against the rendered bytes before anything is written, so the job fails otherwise. Rows get deterministic IDs and are written once per dataset, or fully rewritten if a partial set exists. Validation rejects orphans and claims without evidence. The exit gate now requires identical ground truth across fresh environments. Tables gained columns through an additive migration (`init-tables` runs `ALTER TABLE ... ADD COLUMNS`), applied to the Impala lakehouse. **Verified in Workbench:** job `job_ca2f5a5c…` produced dataset `1cd9f258…`: 60 artifacts, 167 entities, 496 mentions, 561 relationships, 80 claims (4 per story) and 157 evidence rows, with all locators, PDFs included, verified on the runtime image.)* Ground-truth builder for the slice: entities, mentions with precise locators, relationships, claims (including `truth_status`) and evidence. *Done when:* there are zero orphan rows and all evidence locators resolve.
+- [x] **C-05** *(Rescoped 2026-09-30: lean. Built 2026-09-30, pending a Workbench run. `helios_ground_truth.entity_mentions` gained a `difficulty` column (direct, alias or contextual). Aliases: item colour and class ("yellow kids item"), city store ("Midway store"), salutation and surname ("Mrs. Beatty"), customer email, "receipt ending in 1892", and the support case number. Contextual: "the item", "the product", "that store", "the customer", "this return". Every email and chat carries all three tiers, and the PDF has alias cells (support case, customer email). The scenario query adds `i_color` and `c_salutation`. Templates are now 1.2.0 and the generator 0.3.0, so this is a new dataset. The review screen shows each mention's tier. The config's difficulty weights and profile are left in place but unused.)* Alias mentions: phrase banks refer to entities indirectly as well as by canonical name (e.g. "the blue kettle", "your Sacramento store", "order ending 4471"), still derived from TPC-DS facts and the scenario seed. Each mention's `surface_form` and a difficulty tier (`direct`, `alias`, `contextual`) are recorded in the ground truth. No config-driven tier weights. *Done when:* every story's artifacts contain alias and contextual mentions whose locators resolve to the canonical entity, and all three tiers appear in the corpus.
+- [ ] **C-06** *(Deferred 2026-09-30, until the crawler handles permissions.)* Security simulation: source principals (alice, bob, carol, dave, erin, public_agent), groups, and `source_acl_bindings` per artifact. *Done when:* every artifact has an ACL policy and the bindings resolve.
+- ~~**C-07** Validation job (`helios-ds-validate`)~~ *(Cut 2026-09-30: validation already runs in every generation and again at approval.)* Kept part: `validate_published` also checks each artifact's stored bytes against its recorded SHA-256. *Done when:* a corrupted artifact blocks approval.
+- [ ] **C-08** Golden questions v1 in `expected_queries`/`expected_results`, derived from the ground truth: structured ("How many returns did the item have?"), unstructured ("What are customers saying about those returns?") and joined ("Which damaged-item refunds were approved, and why?"), each with its expected answer and required evidence (claim and evidence IDs). This is the crawler's evaluation set. *Done when:* every question's expected answer and evidence resolve against the ground truth, and every scenario type has at least one question.
+
+- [ ] **C-09** *(Added 2026-09-30; replaces Q-05.)* Freeze the development corpus: choose text counts (PDF, email, chat), generate with C-05 and C-08, review and approve it in the dashboard, and record its `dataset_id` as the crawler's development corpus. *Done when:* the corpus is `READY` and its ID, counts and golden-question count are recorded here.
 
 ## Phase 4: Review, edit and approve
 
-- [ ] **R-01** Confirm the curation-overlay design above and record it as an ADR in `docs/`. *Done when:* the ADR is merged.
-- [ ] **R-02** Overlay schema and storage: versioned overlay records (field override, artifact exclusion, claim/ACL change, pinned replacement bytes with provenance) plus the overlay-bundle hash in `dataset_id`. *Done when:* applying the same overlay twice produces an identical dataset, and a different overlay produces a different `dataset_id`.
-- [ ] **R-03** Review APIs: list datasets in `IN_REVIEW`; get an artifact with a native preview URL, its manifest, TPC-DS source rows and ground truth; add review comments. *Done when:* the contract tests pass.
-- [ ] **R-04** Review UI: per-artifact viewer (PDF, image, email, chat; audio/video in phase 5) side by side with its ground truth and source rows; per-artifact accept, flag and comment. *Done when:* a reviewer can walk the textual slice end to end.
-- [ ] **R-05** Edit workflow: UI and API to author overlays, regenerate the affected artifacts and truth, and re-run validation automatically. *Done when:* an edited artifact's truth locators still resolve and validation passes.
-- [ ] **R-06** Approval workflow: approve or reject the whole dataset with approver identity and a timestamp in generation-run telemetry; approval moves the dataset to `READY`, rejection to `REJECTED`. *Done when:* only approved datasets are crawler-visible, and approval is blocked while validation errors or unresolved flags exist.
-- [ ] **R-07** Audit trail: every review, edit and approval event is persisted and queryable. *Done when:* the history of an approved dataset can be reconstructed from the events.
-- [ ] **R-08** Diff view: compare two datasets or overlay versions (artifacts added, removed or changed; truth deltas). *Done when:* the diff between the base and an edited dataset is correct on a fixture.
+Delivered in two stages (ADR 0001).
 
-## Phase 5: Create — visual slice
+### Stage B: review, then approve, or reject and regenerate
+
+- [x] **R-01** Decide the review/edit model and record it as an ADR. ✔ [ADR 0001](adr/0001-helios-ds-review-edit-approve.md), accepted 2026-09-30.
+- [x] **R-03** *(Done 2026-09-30. Endpoints: `GET /v1/review/datasets/{id}` (counts and per-artifact status), `GET /v1/review/artifacts/{id}` (preview, story and facts, mentions with canonical entities, claims with evidence, relationships, marks), `POST /v1/review/artifacts/{id}/marks` and `GET /v1/whoami`. Marks are append-only in `helios_ds.review_marks`; the latest ACCEPTED or FLAGGED mark wins. Marks are refused (401) without an authenticated user. Verified read-only on dataset `1cd9f258…`, about 3 s per artifact bundle.)* Review APIs: list datasets `IN_REVIEW`; get an artifact with its native preview, manifest context, TPC-DS source rows and ground truth; record per-artifact review marks (accepted, flagged, comment) in the lakehouse. *Done when:* the contract tests pass. (The manifest viewer and artifact previews already cover part of this.)
+- [x] **R-04** *(Done 2026-09-30: the dashboard **Review** tab. It has a dataset picker, progress bar, filterable artifact list and the artifact beside its ground truth. Mentions are highlighted and evidence is underlined in email and chat text; clicking an entity finds all its mentions. Accept, flag and comment, with the keyboard shortcuts a, n and p; Accept moves to the next unreviewed artifact. Confirmed in the Application: `/v1/whoami` shows the signed-in Workbench user.)* Review UI: per-artifact viewer side by side with its ground truth and source rows; accept, flag and comment; a dataset review summary (reviewed, flagged, accepted counts). Flags are advisory. *Done when:* a reviewer can walk the textual slice end to end.
+- [x] **R-06** *(Done 2026-09-30, pending a Workbench run. `approve()` re-validates, records the approver and an optional note, then supersedes every other `READY` dataset with the same `config_hash`; each `SUPERSEDED` event names the approving dataset in the new `dataset_lifecycle.related_dataset_id` column. `reject()` needs a reason and is terminal. Endpoints: `POST /v1/review/datasets/{id}:approve` and `:reject`, 401 without an authenticated user, 409 with the validation problems when re-validation fails; flags never block. Review marks close (409) once a dataset is decided. The approval re-validates against the store the dataset was written to (from its manifest locator), so the Application doesn't need `HELIOS_DS_OBJECT_STORE`. The Review tab has a Decision panel showing the lineage and what approval will supersede.)* Approve and reject in the UI: first verify how the Workbench Application proxy passes the authenticated user, and refuse approval if it doesn't. Record the approver on the lifecycle event. Add a `reject()` operation and the `SUPERSEDED` state; approval supersedes other `READY` datasets in the lineage (same `config_hash`). *Done when:* only one dataset per lineage is `READY`, approval is blocked while validation fails (not by flags), and the approver is recorded.
+- [x] **R-07** *(Done 2026-09-30, pending a Workbench run. Reconstructed from the two append-only logs, with no new table: `GET /v1/review/datasets/{id}/history` returns lifecycle events, review marks and the superseding events this dataset's approval caused, oldest first. Approval and rejection events carry the review counts as they stood at that moment. Shown under **History** on the Review tab and in the manifest viewer.)* Audit trail: every review mark, approval, rejection and superseding event is persisted and queryable. *Done when:* the history of an approved dataset can be reconstructed from the events.
+
+- [x] **R-09** *(Added on request, done 2026-09-30, pending a Workbench run.)* Delete datasets that are no longer needed: `POST /v1/datasets/{id}:delete` and **Delete dataset** in Datasets & Manifests, with a type-to-confirm dialog. It removes the objects and every dataset-keyed row except the lifecycle log, run history and job history, then records a `DELETED` event (actor and reason). `DELETED → CREATING` lets the same config regenerate. It is refused while `CREATING` or `VALIDATING` and retryable if interrupted. *Done when:* the objects and rows are gone and the history is kept.
+
+### Stage C: curation overlays *(cut 2026-09-30)*
+
+For a corpus generated once or twice, fixing a template and regenerating replaces per-artifact edits.
+
+- ~~**R-02** Overlay schema and storage~~ *(Cut.)*
+- ~~**R-05** Edit workflow~~ *(Cut.)*
+- ~~**R-08** Diff view~~ *(Cut.)*
+
+## Phase 5: Create — visual slice *(deferred: starts once the text crawler meets its targets)*
 
 - [ ] **V-01** Image generator (Pillow, pinned fonts): product packaging, labels, receipts, shelves, synthetic damage. *Done when:* dimensions and format are correct and pixel/file hashes are stable.
 - [ ] **V-02** Region-level ground truth (bounding boxes) and the difficulty classes easy, alias, OCR-only, region and context. *Done when:* all regions lie within image bounds and each class is represented.
-- [ ] **V-03** Extend review/edit (R-04, R-05) to images, with bounding-box overlays in the viewer. *Done when:* a reviewer can inspect and flag regions.
+- [ ] **V-03** Extend the review screen (R-04) to images, with bounding-box overlays in the viewer. *Done when:* a reviewer can inspect and flag regions.
 
-## Phase 6: Create — audio and video slice
+## Phase 6: Create — audio and video slice *(deferred, possibly indefinitely; after images)*
 
 - [ ] **A-01** Audio generator: eSpeak NG → deterministic WAV, scripted speaker turns, time-span truth. *Done when:* audio decodes, spans fit the duration, hashes are stable, and reference ASR recovers the required facts above threshold.
 - [ ] **A-02** Video generator: procedural frames + TTS track + FFmpeg with pinned codec, frame rate, pixel format, threads and metadata; scene/keyframe/timecode truth (e.g. the warehouse-inspection storyboard). *Done when:* ffprobe validation passes, spans fit the duration, and hashes are stable on the reference platform.
-- [ ] **A-03** Extend review/edit to audio and video, with a timeline scrubber showing truth intervals and transcript. *Done when:* a reviewer can jump to cited intervals.
-- [ ] **A-04** Contradictory-evidence scenario (e.g. "resolved Aug 12" vs. later damaged-package evidence) using the full `truth_status` set. *Done when:* the conflict set and expected conclusion are stored as a golden query.
+- [ ] **A-03** Extend the review screen to audio and video, with a timeline scrubber showing truth intervals and transcript. *Done when:* a reviewer can jump to cited intervals.
+- [ ] **A-04** Contradictory-evidence scenario (e.g. "resolved Aug 12" vs. later damaged-package evidence) using the full `truth_status` set. A text-only version (conflicting email and chat) can be pulled into Phase 3 if the crawler's methods need contradiction handling. *Done when:* the conflict set and expected conclusion are stored as a golden query.
 
 ## Phase 7: Agent interface and security
 
-- [ ] **S-01** MCP facade over the same job service: tools `helios_ds_generate`, `_job_get`, `_job_cancel`, `_dataset_validate`, `_trigger_crawl`, `_evaluate`, `_compare_runs`; resources for manifest, status, evaluation and artifact metadata. *Done when:* MCP Inspector/SDK tests pass.
-- [ ] **S-02** MCP Tasks for long-running generation, with a job-handle fallback for clients without Tasks. *Done when:* both paths are tested.
-- [ ] **S-03** Review/approve MCP tools (list pending, get artifact review bundle, submit overlay, approve or reject), restricted to reviewer principals. *Done when:* an unauthorised principal is refused.
-- [ ] **S-04** Keycloak/OIDC integration profile; reviewer and approver roles enforced on REST, MCP and UI. *Done when:* role tests pass.
-- [ ] **S-05** Ground-truth isolation: a Ranger policy on `helios_ground_truth`, and crawler and query credentials verified to lack access. *Done when:* a negative access test from the crawler project fails as expected.
+The generator is driven from its dashboard; agents query Helios, not the generator. Only ground-truth isolation remains.
 
-## Phase 8: Reproducibility and release gates
+- ~~**S-01** MCP facade over the job service~~ *(Cut.)*
+- ~~**S-02** MCP Tasks for long-running generation~~ *(Cut.)*
+- ~~**S-03** Review/approve MCP tools~~ *(Cut.)*
+- ~~**S-04** Keycloak/OIDC roles~~ *(Cut: any authenticated Workbench user of the generation project may review and approve.)*
+- [ ] **S-05** Ground-truth isolation: a Ranger policy on `helios_ground_truth`, and crawler and query credentials verified to lack access. Needed before the crawler's first evaluation. *Done when:* a negative access test from the crawler project fails as expected.
 
-- [ ] **Q-01** PR CI: static checks, unit, schema-compatibility, seed/ID, tiny-corpus generation, golden manifest/hash comparison, REST/MCP contract tests.
-- [ ] **Q-02** Merge-to-main CI: runtime image build/push/registration; clean-state Workbench Jobs via the Cloudera AI API; generate the tiny corpus twice and compare.
-- [ ] **Q-03** Pin and record everything the spec lists (Python, lockfile, base and custom image digests, FFmpeg, eSpeak NG, fonts, template bundle, manifest schema, source fingerprint, generator version, architecture) in every dataset record.
-- [ ] **Q-04** Clean-room reproducibility test: two fresh environments produce equal `dataset_id`, artifact IDs, manifests, truth records and artifact hashes. *Done when:* the test is a release-blocking CI gate.
-- [ ] **Q-05** Scale-up: developer/integration corpus at configured counts (default PDF 500, image 300, email 500, chat 300, audio 100, video 50) with 50–100 golden questions. *Done when:* a full SF1 run reaches `READY` through review and approval.
+## Phase 8: Reproducibility
+
+- [x] **Q-01** *(Covered 2026-09-30 by the P0-05 workflow: ruff, mypy, the unit and deterministic suites (tiny-corpus generation, pinned IDs and golden hashes, the F-12 exit gate) and the UI build. Schema-compatibility and MCP contract tests are dropped with S-01.)* PR CI.
+- ~~**Q-02** Merge-to-main CI with clean-state Workbench Jobs~~ *(Cut: runtime images are built by hand with `build.sh` when dependencies change.)*
+- [ ] **Q-03** Pin and record what the text corpus depends on (Python, lockfile, runtime image digest, ReportLab and pypdf versions, fonts, template bundle, manifest schema, source fingerprint, generator version, architecture) in every dataset record. Includes rebuilding the runtime as 0.1.1 with the pinned `reportlab` and `pypdf`. FFmpeg and eSpeak NG join when Phase 6 does. *Done when:* the frozen corpus (C-09) records all of them.
+- [x] **Q-04** *(Covered: `tests/deterministic/test_foundation_exit_gate.py` generates in two fresh environments and compares `dataset_id`, artifact IDs, manifests, ground truth and artifact hashes on every PR. Not a separate release gate.)* Clean-room reproducibility test.
+- ~~**Q-05** Scale-up corpus~~ *(Replaced by C-09, text only.)*
 
 ---
 
 ## Handoffs to other projects
+
+**Next project: the crawler.** After C-09 and S-05, work moves to the Helios crawler and text analyzers (the planned `POST /v1/datasets/{id}:crawl` hook, `helios_index.*`, and the LanceDB and Memgraph projections), with its own burn-down.
 
 Items the generator must support but does not own:
 

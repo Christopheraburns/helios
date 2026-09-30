@@ -1,15 +1,20 @@
 """Dataset lifecycle and publish validation (spec: "publish protocol").
 
-States: CREATING -> VALIDATING -> IN_REVIEW -> READY, with FAILED and REJECTED
-as exits. State is an append-only event log in helios_ds.dataset_lifecycle;
-the current state is the event with the highest event_seq. Only READY datasets
-are crawler-visible, and READY is reachable only through ``approve()``, which
-re-validates the published dataset first.
+States: CREATING -> VALIDATING -> IN_REVIEW -> READY -> SUPERSEDED, with FAILED
+and REJECTED as exits. State is an append-only event log in
+helios_ds.dataset_lifecycle; the current state is the event with the highest
+event_seq. Only READY datasets are crawler-visible, and READY is reachable only
+through ``approve()``, which re-validates the published dataset first.
+
+A lineage is the set of datasets generated from the same config (same
+``config_hash``). Approving a dataset supersedes every other READY dataset in
+its lineage (ADR 0001, decision 4), so at most one per lineage is READY.
 """
 
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Callable, Dict, FrozenSet, List, Optional, Set
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from .lakehouse import LakehouseSink
 from .manifests import GenerationManifest, manifest_key
@@ -20,6 +25,11 @@ from .schemas import (
     DatasetRecord,
     ScenarioPlanRecord,
     TemplateVersionRecord,
+    TruthClaimRecord,
+    TruthEntityMentionRecord,
+    TruthEntityRecord,
+    TruthEvidenceRecord,
+    TruthRelationshipRecord,
 )
 
 
@@ -28,6 +38,8 @@ class DatasetState(str, Enum):
     VALIDATING = "VALIDATING"
     IN_REVIEW = "IN_REVIEW"
     READY = "READY"
+    SUPERSEDED = "SUPERSEDED"
+    DELETED = "DELETED"
     FAILED = "FAILED"
     REJECTED = "REJECTED"
 
@@ -37,12 +49,20 @@ TRANSITIONS: Dict[Optional[DatasetState], FrozenSet[DatasetState]] = {
     DatasetState.CREATING: frozenset({DatasetState.VALIDATING, DatasetState.FAILED}),
     DatasetState.VALIDATING: frozenset({DatasetState.IN_REVIEW, DatasetState.FAILED}),
     DatasetState.IN_REVIEW: frozenset(
-        {DatasetState.READY, DatasetState.REJECTED, DatasetState.FAILED}
+        {DatasetState.READY, DatasetState.REJECTED, DatasetState.FAILED, DatasetState.DELETED}
     ),
-    DatasetState.FAILED: frozenset({DatasetState.CREATING}),  # retry the same dataset
-    DatasetState.READY: frozenset(),
-    DatasetState.REJECTED: frozenset(),
+    # FAILED -> CREATING retries the same dataset.
+    DatasetState.FAILED: frozenset({DatasetState.CREATING, DatasetState.DELETED}),
+    DatasetState.READY: frozenset({DatasetState.SUPERSEDED, DatasetState.DELETED}),
+    DatasetState.SUPERSEDED: frozenset({DatasetState.DELETED}),
+    DatasetState.REJECTED: frozenset({DatasetState.DELETED}),
+    # A deleted dataset's data is gone; generating the same config again recreates it.
+    DatasetState.DELETED: frozenset({DatasetState.CREATING}),
 }
+
+# States a dataset can be deleted from. CREATING and VALIDATING are excluded:
+# a generation job may still be writing the dataset.
+DELETABLE = frozenset(s for s, targets in TRANSITIONS.items() if DatasetState.DELETED in targets)
 
 
 class InvalidTransition(RuntimeError):
@@ -53,6 +73,12 @@ class ValidationFailed(RuntimeError):
     def __init__(self, dataset_id: str, problems: List[str]):
         super().__init__(f"dataset {dataset_id} failed validation: " + "; ".join(problems))
         self.problems = problems
+
+
+@dataclass
+class Approval:
+    record: DatasetLifecycleRecord
+    superseded: List[str] = field(default_factory=list)
 
 
 def utc_now() -> str:
@@ -123,7 +149,76 @@ def validate_published(
     if expected_artifact_ids is not None and set(ids) != expected_artifact_ids:
         missing = len(expected_artifact_ids - set(ids))
         problems.append(f"{missing} renderable planned artifacts were not recorded")
+    problems += _ground_truth_problems(
+        sink, dataset_id, set(ids), {s.scenario_id for s in manifest.scenarios}
+    )
     return problems
+
+
+def _ground_truth_problems(
+    sink: LakehouseSink, dataset_id: str, artifact_ids: Set[str], scenario_ids: Set[str]
+) -> List[str]:
+    """Referential integrity of helios_ground_truth for one dataset (no orphans)."""
+    entities = {
+        e.entity_id
+        for e in sink.read_dataset("helios_ground_truth.entities", dataset_id)
+        if isinstance(e, TruthEntityRecord)
+    }
+    mentions = [
+        m
+        for m in sink.read_dataset("helios_ground_truth.entity_mentions", dataset_id)
+        if isinstance(m, TruthEntityMentionRecord)
+    ]
+    edges = [
+        r
+        for r in sink.read_dataset("helios_ground_truth.relationships", dataset_id)
+        if isinstance(r, TruthRelationshipRecord)
+    ]
+    claims = {
+        c.claim_id: c
+        for c in sink.read_dataset("helios_ground_truth.claims", dataset_id)
+        if isinstance(c, TruthClaimRecord)
+    }
+    evidence = [
+        e
+        for e in sink.read_dataset("helios_ground_truth.evidence", dataset_id)
+        if isinstance(e, TruthEvidenceRecord)
+    ]
+    checks: List[Tuple[str, List[Any]]] = [
+        ("mentions of unknown entities", [m for m in mentions if m.entity_id not in entities]),
+        (
+            "mentions in unrecorded artifacts",
+            [m for m in mentions if m.artifact_id not in artifact_ids],
+        ),
+        (
+            "relationships with unknown endpoints",
+            [
+                r
+                for r in edges
+                if r.source_entity_id not in entities or r.target_entity_id not in entities
+            ],
+        ),
+        (
+            "claims outside the plan or about unknown entities",
+            [
+                c
+                for c in claims.values()
+                if c.scenario_id not in scenario_ids
+                or c.subject not in entities
+                or c.obj not in entities
+            ],
+        ),
+        ("evidence for unknown claims", [e for e in evidence if e.claim_id not in claims]),
+        (
+            "evidence in unrecorded artifacts",
+            [e for e in evidence if e.artifact_id not in artifact_ids],
+        ),
+        (
+            "claims without evidence",
+            [c for c in claims.values() if c.claim_id not in {e.claim_id for e in evidence}],
+        ),
+    ]
+    return [f"ground truth: {len(rows)} {label}" for label, rows in checks if rows]
 
 
 class DatasetLifecycle:
@@ -152,6 +247,7 @@ class DatasetLifecycle:
         actor: str,
         run_id: Optional[str],
         reason: Optional[str],
+        related_dataset_id: Optional[str] = None,
     ) -> DatasetLifecycleRecord:
         events = self.history(dataset_id)
         current = DatasetState(events[-1].state) if events else None
@@ -167,6 +263,7 @@ class DatasetLifecycle:
             actor=actor,
             occurred_at=self.clock(),
             reason=reason,
+            related_dataset_id=related_dataset_id,
         )
         self.sink.append(self.TABLE, [record])
         return record
@@ -179,20 +276,84 @@ class DatasetLifecycle:
         run_id: Optional[str] = None,
         reason: Optional[str] = None,
     ) -> DatasetLifecycleRecord:
-        if to is DatasetState.READY:
-            raise InvalidTransition("READY is reachable only through approve()")
+        if to in (DatasetState.READY, DatasetState.SUPERSEDED, DatasetState.REJECTED):
+            raise InvalidTransition(f"{to.value} is reachable only through approve() or reject()")
         return self._append(dataset_id, to, actor, run_id, reason)
 
     def approve(
         self, dataset_id: str, store: ObjectStore, approver: str, reason: Optional[str] = None
-    ) -> DatasetLifecycleRecord:
-        """IN_REVIEW -> READY, only if the published dataset still validates."""
+    ) -> Approval:
+        """IN_REVIEW -> READY, only if the published dataset still validates, then
+        supersede the other READY datasets in its lineage. Review flags don't block."""
+        _require_actor(approver)
         if self.state(dataset_id) is not DatasetState.IN_REVIEW:
             raise InvalidTransition(f"{dataset_id} is not IN_REVIEW")
         problems = validate_published(self.sink, store, dataset_id)
         if problems:
             raise ValidationFailed(dataset_id, problems)
-        return self._append(dataset_id, DatasetState.READY, approver, None, reason)
+        record = self._append(dataset_id, DatasetState.READY, approver, None, reason)
+        return Approval(record, self.supersede_lineage(dataset_id, approver))
+
+    def supersede_lineage(self, dataset_id: str, actor: str) -> List[str]:
+        """READY -> SUPERSEDED for every other READY dataset in ``dataset_id``'s
+        lineage. Idempotent, so an interrupted approval can be completed by
+        calling it again."""
+        if self.state(dataset_id) is not DatasetState.READY:
+            raise InvalidTransition(f"{dataset_id} is not READY")
+        superseded = []
+        for other in self.lineage(dataset_id):
+            if other != dataset_id and self.state(other) is DatasetState.READY:
+                self._append(
+                    other,
+                    DatasetState.SUPERSEDED,
+                    actor,
+                    None,
+                    f"superseded by {dataset_id}",
+                    related_dataset_id=dataset_id,
+                )
+                superseded.append(other)
+        return superseded
+
+    def reject(self, dataset_id: str, actor: str, reason: str) -> DatasetLifecycleRecord:
+        """IN_REVIEW -> REJECTED (terminal). The reason is required: it is the
+        record of what to fix in the config or templates before regenerating."""
+        _require_actor(actor)
+        reason = (reason or "").strip()
+        if not reason:
+            raise InvalidTransition("a rejection needs a reason")
+        if self.state(dataset_id) is not DatasetState.IN_REVIEW:
+            raise InvalidTransition(f"{dataset_id} is not IN_REVIEW")
+        return self._append(dataset_id, DatasetState.REJECTED, actor, None, reason[:4000])
+
+    def mark_deleted(
+        self, dataset_id: str, actor: str, reason: Optional[str] = None
+    ) -> Optional[DatasetLifecycleRecord]:
+        """Record that a dataset is being deleted (hiding it from the crawler at
+        once). Returns None if it is already DELETED, so an interrupted deletion
+        can be completed by deleting again."""
+        _require_actor(actor)
+        state = self.state(dataset_id)
+        if state is DatasetState.DELETED:
+            return None
+        if state not in DELETABLE:
+            raise InvalidTransition(
+                f"{dataset_id} is {state and state.value}; only a dataset that is not being "
+                "generated can be deleted"
+            )
+        return self._append(dataset_id, DatasetState.DELETED, actor, None, reason)
+
+    def lineage(self, dataset_id: str) -> List[str]:
+        """Dataset IDs generated from the same config as ``dataset_id`` (itself included)."""
+        records = self.sink.read_dataset("helios_ds.datasets", dataset_id)
+        if not records:
+            return []
+        record = records[0]
+        assert isinstance(record, DatasetRecord)
+        return sorted(
+            r.dataset_id
+            for r in self.sink.read("helios_ds.datasets", where={"config_hash": record.config_hash})
+            if isinstance(r, DatasetRecord)
+        )
 
     def visible_datasets(self) -> List[str]:
         """Dataset IDs whose current state is READY (what the crawler may see)."""
@@ -205,3 +366,8 @@ class DatasetLifecycle:
             ):
                 latest[event.dataset_id] = event
         return sorted(d for d, e in latest.items() if e.state == DatasetState.READY.value)
+
+
+def _require_actor(actor: str) -> None:
+    if not (actor or "").strip():
+        raise InvalidTransition("approval, rejection and deletion need an authenticated actor")

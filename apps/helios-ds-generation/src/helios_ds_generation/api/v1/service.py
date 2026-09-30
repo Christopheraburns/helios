@@ -10,13 +10,15 @@ HELIOS_DS_API_KEY, plus the Impala settings.
 
 import threading
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Callable, Dict, Optional
 
 from fastapi import HTTPException
 
 from helios_ds.backends import lakehouse_from_uri
 from helios_ds.catalog import DatasetCatalog
 from helios_ds.jobs import Dispatcher, JobStore, dispatcher_from_env
+from helios_ds.object_store import ObjectStore, store_from_locator
+from helios_ds.review import ReviewStore
 
 
 @dataclass
@@ -24,10 +26,16 @@ class GenerationService:
     jobs: JobStore
     dispatcher: Dispatcher
     datasets: DatasetCatalog = field(default=None)  # type: ignore[assignment]
+    reviews: ReviewStore = field(default=None)  # type: ignore[assignment]
+    # (locator, logical key) -> the object store that wrote it; approvals
+    # re-validate a dataset against the store it was published to.
+    open_store: Callable[[Dict[str, Any], str], ObjectStore] = store_from_locator
 
     def __post_init__(self) -> None:
         if self.datasets is None:
             self.datasets = DatasetCatalog(self.jobs.sink)
+        if self.reviews is None:
+            self.reviews = ReviewStore(self.jobs.sink)
 
 
 _service: Optional[GenerationService] = None

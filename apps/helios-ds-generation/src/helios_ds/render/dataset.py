@@ -13,21 +13,29 @@ guaranteed thread-safe); uploads, which are I/O-bound, run in a thread pool.
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Set
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
+from ..ground_truth import TRUTH_TABLES, GroundTruth, GroundTruthBuilder, verify_locators
 from ..lakehouse import LakehouseSink
 from ..manifests import GenerationManifest
 from ..object_store import ObjectStore, PutResult
+from ..scenarios import ArtifactPlan
 from ..schemas import ArtifactRecord, ArtifactSourceRecord
 from ..templates import TemplateRegistry
-from .registry import has_renderer, render_artifact
+from .base import RenderedArtifact
+from .registry import has_renderer, render_artifact, story_for
 
 UPLOAD_WORKERS = 8
 
 
+def dataset_objects_prefix(dataset_id: str) -> str:
+    """Where a dataset's artifacts (and any later per-dataset objects) live."""
+    return f"datasets/{dataset_id}"
+
+
 def artifact_key(dataset_id: str, artifact_id: str, extension: str) -> str:
     """Neutral object keys: nothing in the path hints at the scenario or its answers."""
-    return f"datasets/{dataset_id}/artifacts/{artifact_id}.{extension}"
+    return f"{dataset_objects_prefix(dataset_id)}/artifacts/{artifact_id}.{extension}"
 
 
 @dataclass
@@ -35,6 +43,9 @@ class RenderSummary:
     rendered: Dict[str, int] = field(default_factory=dict)  # artifact_type -> count
     pending: Dict[str, int] = field(default_factory=dict)  # planned, but no renderer yet
     newly_recorded: int = 0
+    ground_truth: Dict[str, int] = field(default_factory=dict)  # table -> rows
+    locators_checked: int = 0
+    locators_unchecked: int = 0  # e.g. PDF locators when pypdf is not installed
 
     @property
     def total_rendered(self) -> int:
@@ -76,31 +87,40 @@ def render_dataset(
     records: List[ArtifactRecord] = []
     sources: List[ArtifactSourceRecord] = []
     rendered: Counter[str] = Counter()
+    by_scenario: Dict[str, List[Tuple[ArtifactPlan, RenderedArtifact, ArtifactRecord, str]]] = {}
     with ThreadPoolExecutor(UPLOAD_WORKERS) as uploads:
         futures = []
         for scenario, artifact in work:
             out = render_artifact(templates, scenario, artifact)
             assert out is not None
+            # Ground-truth locators must resolve against the real bytes before
+            # anything is written (task C-04).
+            verification = verify_locators(artifact.artifact_id, out)
+            summary.locators_checked += verification.checked
+            summary.locators_unchecked += verification.unchecked
             key = artifact_key(dataset_id, artifact.artifact_id, out.extension)
             futures.append((scenario, artifact, out, uploads.submit(store.put, key, out.data)))
         for done, (scenario, artifact, out, future) in enumerate(futures, start=1):
             put: PutResult = future.result()  # raises on any integrity problem
             rendered[artifact.artifact_type] += 1
-            records.append(
-                ArtifactRecord(
-                    dataset_id=dataset_id,
-                    artifact_id=artifact.artifact_id,
-                    scenario_id=scenario.scenario_id,
-                    artifact_type=artifact.artifact_type,
-                    mime_type=out.mime_type,
-                    source_locator=put.locator,
-                    sha256=put.sha256,
-                    size_bytes=put.size_bytes,
-                    semantic_timestamp=out.semantic_timestamp,
-                    template_id=artifact.template_id,
-                    template_version=artifact.template_version,
-                    acl_policy_id=None,  # simulated ACLs arrive with task C-06
-                )
+            record = ArtifactRecord(
+                dataset_id=dataset_id,
+                artifact_id=artifact.artifact_id,
+                scenario_id=scenario.scenario_id,
+                artifact_type=artifact.artifact_type,
+                mime_type=out.mime_type,
+                source_locator=put.locator,
+                sha256=put.sha256,
+                size_bytes=put.size_bytes,
+                semantic_timestamp=out.semantic_timestamp,
+                template_id=artifact.template_id,
+                template_version=artifact.template_version,
+                acl_policy_id=None,  # simulated ACLs arrive with task C-06
+            )
+            records.append(record)
+            strategy = templates.get(artifact.template_id).spec.ground_truth_locator_strategy
+            by_scenario.setdefault(scenario.scenario_id, []).append(
+                (artifact, out, record, strategy)
             )
             sources += [
                 ArtifactSourceRecord(
@@ -131,4 +151,40 @@ def render_dataset(
     sink.append("helios_ds.artifact_sources", new_sources)
     sink.append("helios_ds.artifacts", new_records)
     summary.newly_recorded = len(new_records)
+
+    builder = GroundTruthBuilder(dataset_id)
+    for scenario in manifest.scenarios:
+        story = story_for(scenario)
+        if story is not None:
+            builder.add_scenario(scenario, story, by_scenario.get(scenario.scenario_id, []))
+    write_ground_truth(sink, dataset_id, builder.truth)
+    summary.ground_truth = builder.truth.counts()
     return summary
+
+
+_ID_FIELDS = {
+    "helios_ground_truth.entities": "entity_id",
+    "helios_ground_truth.entity_mentions": "mention_id",
+    "helios_ground_truth.relationships": "relationship_id",
+    "helios_ground_truth.claims": "claim_id",
+    "helios_ground_truth.evidence": "evidence_id",
+}
+
+
+def write_ground_truth(sink: LakehouseSink, dataset_id: str, truth: GroundTruth) -> bool:
+    """Write a dataset's ground truth once. If rows exist but differ (a partial
+    earlier attempt), replace them all. Returns True if anything was written."""
+    rows = truth.rows()
+    existing = {
+        table: sorted(getattr(r, _ID_FIELDS[table]) for r in sink.read_dataset(table, dataset_id))
+        for table in TRUTH_TABLES
+    }
+    wanted = {table: [getattr(r, _ID_FIELDS[table]) for r in rows[table]] for table in TRUTH_TABLES}
+    if existing == wanted:
+        return False
+    for table in TRUTH_TABLES:
+        if existing[table]:
+            sink.delete_dataset_rows(table, dataset_id)
+    for table in TRUTH_TABLES:
+        sink.append(table, rows[table])
+    return True

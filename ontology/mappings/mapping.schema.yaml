@@ -1,0 +1,132 @@
+id: https://helios.dev/ontology/mappings
+name: helios_mapping
+title: Helios Source Mapping Schema
+version: 0.1.0
+description: >-
+  Schema for source-to-ontology mapping files (ossie/*.yaml, and later
+  sharepoint/*.yaml, email/*.yaml). A mapping file binds elements of one source
+  to ontology classes and declares which attributes identify instances. The
+  crawler's resolver reads only the identifiers and resolution sections.
+
+prefixes:
+  linkml: https://w3id.org/linkml/
+  helios: https://helios.dev/ontology/
+default_prefix: helios
+default_range: string
+
+imports:
+  - linkml:types
+
+classes:
+  SourceMapping:
+    tree_root: true
+    attributes:
+      model:
+        description: Source model this mapping applies to, e.g. an Ossie model file name.
+        required: true
+      ontology_version:
+        description: "<pack or customer schema name>@<version> this mapping targets."
+        required: true
+      entities:
+        range: EntityMapping
+        multivalued: true
+        inlined_as_list: true
+      relationships:
+        range: RelationshipMapping
+        multivalued: true
+        inlined_as_list: true
+      concepts:
+        range: ConceptMapping
+        multivalued: true
+        inlined_as_list: true
+      resolution:
+        range: ResolutionConfig
+        inlined: true
+
+  EntityMapping:
+    attributes:
+      ossie_element:
+        description: Ossie entity/dimension name.
+        required: true
+      class:
+        description: Ontology class the element maps to.
+        required: true
+      identifiers:
+        range: Identifiers
+        inlined: true
+        required: true
+      attributes:
+        description: "Ontology attribute to source column(s); multiple columns are concatenated."
+        range: AttributeBinding
+        multivalued: true
+        inlined_as_list: true
+
+  Identifiers:
+    attributes:
+      primary:
+        description: Columns that uniquely identify a row (surrogate or natural key).
+        multivalued: true
+        required: true
+      secondary:
+        description: Other unique-ish keys a document may cite (business IDs, emails, SKUs).
+        multivalued: true
+      display:
+        description: Columns that form the display name.
+        multivalued: true
+      aliases:
+        description: Columns whose values are alternate names for resolution.
+        multivalued: true
+
+  AttributeBinding:
+    attributes:
+      attribute:
+        required: true
+      columns:
+        multivalued: true
+        required: true
+
+  RelationshipMapping:
+    attributes:
+      ossie_relationship:
+        description: "Join expression as written in the Ossie model, e.g. 'fact.column -> dim'."
+        required: true
+      edge:
+        description: Relationship class in the ontology.
+        required: true
+
+  ConceptMapping:
+    attributes:
+      glossary_term:
+        required: true
+      class:
+        required: true
+      ossie_element:
+        description: Ossie measure or dimension the term describes.
+
+  ResolutionConfig:
+    attributes:
+      scope:
+        range: ResolutionScope
+        multivalued: true
+        inlined_as_list: true
+      thresholds:
+        range: ResolutionThresholds
+        inlined: true
+
+  ResolutionScope:
+    description: Restricts which classes are candidates for assets matching a source pattern.
+    attributes:
+      source_pattern:
+        required: true
+      candidate_classes:
+        multivalued: true
+        required: true
+
+  ResolutionThresholds:
+    attributes:
+      alias_min_score:
+        range: float
+      fuzzy_min_score:
+        range: float
+      model_assisted_min_confidence:
+        range: float

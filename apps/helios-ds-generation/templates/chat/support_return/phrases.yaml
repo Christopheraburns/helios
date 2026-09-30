@@ -1,28 +1,33 @@
 # Phrase bank for the internal support chat about a damaged-item return.
 # Speakers: agent (customer care), supervisor, inspector (returns desk).
 # A flow is an ordered conversation; fillers are optional extra turns.
-# {name} fills a value; {@name} places a tracked entity mention.
+# Each turn is [speaker, text] or [speaker, text, CLAIM_TYPE] when the message
+# states one of the story's claims (ground-truth evidence).
+# {name} fills a value; {@name} places a tracked entity mention. Staff talk
+# the way colleagues do: every flow refers to the case by alias (case number,
+# customer email, "the Midway store") and by context ("the customer", "the
+# item"), so each chat has all three mention tiers (task C-05).
 
 flows:
-  - - [agent, "Got an email from {@customer} about return {@rma}, the {@item} from {@store}."]
-    - [inspector, "Yep, I logged that one. Box was crushed, item has dents on the side."]
-    - [agent, "Customer wants the {refund} refund. Anything blocking it?"]
-    - [supervisor, "Damage is on the carrier, not the customer. Approve it."]
-    - [agent, "Done, refund queued under case {case_number}."]
-  - - [supervisor, "Who's handling {@rma}? The customer emailed twice."]
+  - - [agent, "Got an email from {@customer_email} about return {@rma}, the {@item} from the {@store_city}."]
+    - [inspector, "Yep, I logged that one. Box was crushed, {@item_ref} has dents on the side.", PACKAGING_DAMAGED]
+    - [agent, "{@customer} wants the {refund} refund. Anything blocking it?", REFUND_REQUESTED]
+    - [supervisor, "Damage is on the carrier, not {@customer_ref}. Approve it.", REFUND_APPROVED]
+    - [agent, "Done, refund queued under case {@case}."]
+  - - [supervisor, "Who's handling {@rma}? {@customer_formal} emailed twice."]
     - [agent, "Me. It's {@first_name}'s {@item} ({@item_id}), returned {return_date_long} at {@store}."]
-    - [inspector, "Inspection notes: outer carton torn, product scuffed. Reason on the slip is \"{@reason}\"."]
-    - [supervisor, "OK, full refund of {refund} please."]
+    - [inspector, "Inspection notes: outer carton torn, {@product_ref} scuffed. Reason on the slip is \"{@reason}\".", PACKAGING_DAMAGED]
+    - [supervisor, "OK, full refund of {refund} on {@return_ref} please.", REFUND_APPROVED]
     - [agent, "Processing now. Original receipt ticket was {@ticket}."]
-  - - [agent, "Quick check on {@rma}: did the {@item} actually come back damaged?"]
-    - [inspector, "It did. Packaging damage, looks like it was dropped."]
-    - [agent, "Great, then I'll tell {@customer} the refund is approved."]
-    - [supervisor, "Tag it as a carrier damage claim too, we're seeing more of these from {@store}."]
-  - - [inspector, "Heads up: {@item_id} came back from {@store} with a crushed box again."]
-    - [agent, "That's the {@rma} return for {@customer}."]
+  - - [agent, "Quick check on case {@case}: did the {@item_desc} actually come back damaged?"]
+    - [inspector, "It did. Packaging damage, looks like {@item_ref} was dropped.", PACKAGING_DAMAGED]
+    - [agent, "Great, then I'll tell {@customer} the refund for {@rma} is approved.", REFUND_APPROVED]
+    - [supervisor, "Tag it as a carrier damage claim too, we're seeing more of these from {@store_ref}."]
+  - - [inspector, "Heads up: {@item_id} came back from the {@store_city} with a crushed box again.", PACKAGING_DAMAGED]
+    - [agent, "That's the {@rma} return for {@customer}, {@receipt_tail}."]
     - [supervisor, "How many of those this month?"]
-    - [inspector, "A few. Same brand, {@brand}."]
-    - [agent, "I'll refund {refund} and note the pattern on case {case_number}."]
+    - [inspector, "A few. Same brand, {@brand}. And {@customer_ref} says the last one was damaged too."]
+    - [agent, "I'll refund {refund} and note the pattern on case {@case}.", REFUND_APPROVED]
 
 fillers:
   - [agent, "Sorry, stepping away for a minute."]

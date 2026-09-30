@@ -2,9 +2,10 @@ import { useCallback, useState } from 'react'
 import { JobSubmission } from './pages/JobSubmission'
 import { JobMonitor } from './pages/JobMonitor'
 import { DatasetBrowser } from './pages/DatasetBrowser'
+import { ReviewPage } from './pages/ReviewPage'
 import './styles/App.css'
 
-type Tab = 'submit' | 'monitor' | 'datasets'
+type Tab = 'submit' | 'monitor' | 'datasets' | 'review'
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('submit')
@@ -47,6 +48,12 @@ function App() {
         >
           Datasets &amp; Manifests
         </button>
+        <button
+          className={`nav-button ${activeTab === 'review' ? 'active' : ''}`}
+          onClick={() => setActiveTab('review')}
+        >
+          Review
+        </button>
       </nav>
 
       <main className="app-content">
@@ -54,6 +61,7 @@ function App() {
         {activeTab === 'monitor' && (
           <JobMonitor refreshTrigger={refreshJobs} onViewManifest={viewManifest} />
         )}
+        {activeTab === 'review' && <ReviewPage />}
         {activeTab === 'datasets' && (
           <DatasetBrowser selectedDatasetId={selectedDatasetId} onSelect={setSelectedDatasetId} />
         )}

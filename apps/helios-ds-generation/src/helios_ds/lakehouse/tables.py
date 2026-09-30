@@ -61,6 +61,7 @@ TABLES: Dict[str, TableSpec] = {
         TableSpec(HELIOS_DS, "template_versions", schemas.TemplateVersionRecord),
         TableSpec(HELIOS_DS, "generation_jobs", schemas.GenerationJobRecord),
         TableSpec(HELIOS_DS, "job_events", schemas.JobEventRecord),
+        TableSpec(HELIOS_DS, "review_marks", schemas.ReviewMarkRecord),
         TableSpec(HELIOS_DS, "artifacts", schemas.ArtifactRecord),
         TableSpec(HELIOS_DS, "artifact_sources", schemas.ArtifactSourceRecord),
         TableSpec(HELIOS_DS, "source_principals", schemas.SourcePrincipalRecord),
@@ -123,19 +124,35 @@ class SqlDialect:
     name: str
     create_namespace: str  # format string with {namespace}
     table_suffix: str  # appended after the column list
+    add_column: str  # format string with {table}, {column}, {type}
 
 
 IMPALA = SqlDialect(
     "impala",
     "CREATE DATABASE IF NOT EXISTS {namespace}",
     "STORED AS ICEBERG TBLPROPERTIES ('format-version'='2')",
+    "ALTER TABLE {table} ADD COLUMNS ({column} {type})",
 )
 # Stand-in engine for offline tests of the SQL sink.
-DUCKDB = SqlDialect("duckdb", "CREATE SCHEMA IF NOT EXISTS {namespace}", "")
+DUCKDB = SqlDialect(
+    "duckdb",
+    "CREATE SCHEMA IF NOT EXISTS {namespace}",
+    "",
+    "ALTER TABLE {table} ADD COLUMN {column} {type}",
+)
 
 
 def column_names(spec: TableSpec) -> Tuple[str, ...]:
     return tuple(spec.model.model_fields)
+
+
+def column_sql_types(spec: TableSpec) -> List[Tuple[str, str]]:
+    """(column, SQL type) pairs, in model order."""
+    return [(name, _column_types(f.annotation)[1]) for name, f in spec.model.model_fields.items()]
+
+
+def column_iceberg_types(spec: TableSpec) -> List[Tuple[str, IcebergType]]:
+    return [(name, _column_types(f.annotation)[0]) for name, f in spec.model.model_fields.items()]
 
 
 def ddl_statements(dialect: SqlDialect = IMPALA) -> List[str]:

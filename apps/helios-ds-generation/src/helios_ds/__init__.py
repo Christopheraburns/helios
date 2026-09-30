@@ -11,4 +11,4 @@ Key modules:
 - scenarios: Scenario planning and selection
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

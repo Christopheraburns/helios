@@ -10,6 +10,7 @@ intro:
   - "The item below was returned at {@store} ({store_location}) on {return_date_long} and inspected at the returns desk."
   - "Return {@rma} was received at store {@store_id} on {return_date_long}."
   - "Customer {@customer} returned the following merchandise to {@store} on {return_date_long}."
+  - "{@customer_formal} brought the {@item_desc} back to the {@store_city} on {return_date_long}; details below."
 
 inspection:
   - "Outer packaging crushed on two corners; product shows impact marks consistent with a drop in transit."

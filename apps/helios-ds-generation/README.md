@@ -89,6 +89,23 @@ A template can be rendered once its directory has a `renderer.py` (`render(ctx) 
 
 Shared helpers are in `src/helios_ds/render/`. Changing a template directory changes the dataset ID; changing shared render code needs a generator version bump. Currently rendered: `return_report` (PDF), `damaged_item` (email) and `support_return` (chat), all for damaged product returns. Files are stored at `datasets/<dataset_id>/artifacts/<artifact_id>.<ext>`.
 
+### Ground truth and review
+
+Each render also writes the hidden answer key to `helios_ground_truth`. It covers:
+- **Entities:** customers, items, stores, returns, sales, reasons, brands and the artifacts themselves.
+- **Mentions:** with exact locators.
+- **Relationships:** business edges such as `REFERS_TO_SALE`, and artifact edges such as `MENTIONS` and `DISCUSSES`.
+- **Claims:** for example `PACKAGING_DAMAGED`, with a plain-language statement.
+- **Evidence:** the exact passage supporting each claim.
+
+Each mention records how hard it is to resolve (C-05): `direct` (canonical name or official ID), `alias` (another identifying name, such as "Midway store", "receipt ending in 1892", the customer's email or "Mrs. Beatty"), or `contextual` ("the item", "this return"). Every locator is checked against the rendered bytes before it's written. `init-tables` also migrates existing tables additively (`ALTER TABLE ... ADD COLUMNS`).
+
+The dashboard's **Review** tab (ADR 0001, stage B) walks a dataset in `IN_REVIEW`. Each artifact sits beside its ground truth, with mentions highlighted and evidence underlined. Reviewers mark it accepted, flagged or commented (advisory). Marks need the authenticated Workbench user, taken from the Application proxy's identity header: `GET /v1/whoami` shows what the API receives. Review screens show hidden ground truth, so this Application must stay in the generation project.
+
+The Review tab's **Decision** panel approves or rejects the dataset (R-06). Approval re-validates the published dataset (flags never block it), records the approver, and moves every other `READY` dataset generated from the same config to `SUPERSEDED`, so one dataset per lineage is crawler-visible. Rejection needs a reason and is final: fix the config or templates, then regenerate. Once a dataset is decided, review marks close. **History** shows the audit trail (R-07): every lifecycle event, decision and review mark, rebuilt from `helios_ds.dataset_lifecycle` and `helios_ds.review_marks`. After upgrading, run `python -m helios_ds init-tables --lakehouse impala` once to add `dataset_lifecycle.related_dataset_id`.
+
+**Deleting datasets.** In **Datasets & Manifests**, **Delete dataset** (type the first 8 characters of the ID to confirm) removes a dataset you no longer need. It deletes the manifest and artifacts from the object store, and the dataset's rows from every `helios_ds` and `helios_ground_truth` table. It keeps `dataset_lifecycle` (with a `DELETED` event recording who, when and why), `generation_runs` and job history, so the audit trail survives. Datasets that are still `CREATING` or `VALIDATING` can't be deleted. Generating the same config again recreates the dataset under the same ID. If deletion stops part-way (for example, the S3 connection is denied `DeleteObject`), the dataset is already `DELETED` and hidden from the crawler, and deleting it again finishes the job. It needs `DeleteObject` on the S3 prefix and Ranger `DELETE` on the tables.
+
 ### Datasets & Manifests (dashboard)
 
 The **Datasets & Manifests** tab (or **View manifest** on a finished job) shows each published dataset. It has these tabs: a summary (target vs planned assets, eligible vs chosen TPC-DS records, lifecycle), a searchable, paginated scenario browser with one-line stories and per-scenario facts, source rows and planned assets, the TPC-DS source fingerprint, templates, config, and a download of the exact manifest file. It's backed by `GET /v1/datasets`, `/v1/datasets/{id}`, `/v1/datasets/{id}/manifest`, `/manifest/raw`, `/scenarios` and `/scenarios/{scenario_id}`. Manifests are read by their recorded location, checked against their SHA-256, and cached.

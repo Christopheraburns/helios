@@ -1,0 +1,63 @@
+id: https://helios.dev/ontology/packs/retail
+name: helios_retail
+title: Helios Retail Domain Pack
+version: 0.1.0
+description: >-
+  Retail subclasses under the Helios core ontology. Derived from TPC-DS and
+  reusable for any retail customer. Adds leaves only; never redefines core.
+
+prefixes:
+  linkml: https://w3id.org/linkml/
+  helios: https://helios.dev/ontology/
+default_prefix: helios
+default_range: string
+
+imports:
+  - linkml:types
+  - ../../core/core
+
+classes:
+  Customer:
+    is_a: Person
+    description: A retail customer. TPC-DS customers are individuals; B2B customers would subclass Organization instead.
+    attributes:
+      customer_id:
+        range: string
+      loyalty_tier:
+        range: string
+
+  Store:
+    is_a: Location
+    attributes:
+      store_id:
+        range: string
+      market:
+        range: string
+
+  Warehouse:
+    is_a: Location
+    attributes:
+      warehouse_id:
+        range: string
+
+  Item:
+    is_a: Product
+    attributes:
+      item_id:
+        range: string
+      brand:
+        range: string
+
+  Promotion:
+    is_a: Event
+    attributes:
+      promo_id:
+        range: string
+      channel:
+        range: string
+
+  Return:
+    is_a: Transaction
+    attributes:
+      reason:
+        range: string

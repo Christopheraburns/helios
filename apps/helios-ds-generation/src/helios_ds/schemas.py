@@ -55,11 +55,16 @@ class DatasetLifecycleRecord(BaseModel):
 
     dataset_id: str = Field(...)
     event_seq: int = Field(..., description="1-based, per dataset")
-    state: str = Field(..., description="CREATING, VALIDATING, IN_REVIEW, READY, FAILED, REJECTED")
+    state: str = Field(
+        ..., description="CREATING, VALIDATING, IN_REVIEW, READY, SUPERSEDED, FAILED, REJECTED"
+    )
     run_id: Optional[str] = Field(None)
     actor: str = Field(..., description="Principal or service that made the transition")
     occurred_at: str = Field(..., description="ISO 8601 timestamp")
     reason: Optional[str] = Field(None)
+    related_dataset_id: Optional[str] = Field(
+        None, description="SUPERSEDED: the dataset whose approval superseded this one"
+    )
 
 
 class ScenarioPlanRecord(BaseModel):
@@ -113,6 +118,20 @@ class JobEventRecord(BaseModel):
     dataset_id: Optional[str] = Field(None)
     workbench_run_id: Optional[str] = Field(None)
     message: Optional[str] = Field(None)
+
+
+class ReviewMarkRecord(BaseModel):
+    """A reviewer's mark on one artifact (advisory; ADR 0001). Append-only: an
+    artifact's review status is its latest ACCEPTED or FLAGGED mark."""
+
+    dataset_id: str = Field(...)
+    mark_id: str = Field(...)
+    artifact_id: str = Field(...)
+    status: str = Field(..., description="ACCEPTED, FLAGGED or COMMENT")
+    # "note", not "comment": COMMENT is a reserved word in Impala.
+    note: Optional[str] = Field(None, description="The reviewer's comment")
+    reviewer: str = Field(..., description="Authenticated Workbench user")
+    created_at: str = Field(..., description="ISO 8601 timestamp")
 
 
 class ArtifactRecord(BaseModel):
@@ -188,8 +207,20 @@ class TruthEntityMentionRecord(BaseModel):
     artifact_id: str = Field(...)
     surface_form: str = Field(..., description="Text/audio as it appears")
     modality: str = Field(..., description="visual, text, speech, etc.")
-    start_offset: int = Field(..., description="Byte or character offset")
-    end_offset: int = Field(...)
+    start_offset: Optional[int] = Field(
+        None, description="Character offset, when the locator has one"
+    )
+    end_offset: Optional[int] = Field(None)
+    # Added in phase 3 (C-04); appended so existing tables migrate additively.
+    scenario_id: Optional[str] = Field(None)
+    entity_type: Optional[str] = Field(None)
+    locator: Dict[str, Any] = Field(
+        default_factory=dict, description="Exact location (page/part/message + offsets)"
+    )
+    # Added in C-05; appended so the table migrates additively.
+    difficulty: Optional[str] = Field(
+        None, description="direct, alias or contextual: how the mention names its entity"
+    )
 
 
 class TruthRelationshipRecord(BaseModel):
@@ -201,6 +232,8 @@ class TruthRelationshipRecord(BaseModel):
     predicate: str = Field(..., description="MENTIONS, SUPPORTS, RETURNS, etc.")
     target_entity_id: str = Field(...)
     confidence: float = Field(default=1.0)
+    scenario_id: Optional[str] = Field(None)
+    artifact_id: Optional[str] = Field(None, description="Set for artifact-derived edges")
 
 
 class TruthClaimRecord(BaseModel):
@@ -219,6 +252,7 @@ class TruthClaimRecord(BaseModel):
             "CONTRADICTS_STRUCTURED_EVIDENCE"
         ),
     )
+    statement: Optional[str] = Field(None, description="The claim in plain language")
 
 
 class TruthEvidenceRecord(BaseModel):
@@ -232,6 +266,9 @@ class TruthEvidenceRecord(BaseModel):
     start_offset: Optional[int] = Field(None)
     end_offset: Optional[int] = Field(None)
     locator_type: str = Field(..., description="page_number, image_region, time_range, etc.")
+    scenario_id: Optional[str] = Field(None)
+    locator: Dict[str, Any] = Field(default_factory=dict, description="Exact location")
+    excerpt: Optional[str] = Field(None, description="The evidence text as it appears")
 
 
 class ExpectedQueryRecord(BaseModel):

@@ -11,7 +11,7 @@ the exact text placed on that page.
 
 import datetime as dt
 import io
-from typing import List
+from typing import List, Optional
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
@@ -22,6 +22,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from helios_ds.render.base import (
     COMPANY,
+    Evidence,
     Mention,
     RenderContext,
     RenderedArtifact,
@@ -42,18 +43,29 @@ def render(ctx: RenderContext) -> RenderedArtifact:
     rng = ctx.rng
     accent = colors.HexColor(pick(rng, ACCENTS))
     mentions: List[Mention] = []
+    evidence: List[Evidence] = []
 
     def placed(slot: str) -> str:
         """Place a mention's surface form in a table cell and record it."""
-        surface, entity_type, key = specs[slot]
-        if surface and key is not None:
-            mentions.append(Mention(entity_type, key, surface, {"page": 1, "text": surface}))
-        return surface
+        spec = specs[slot]
+        if spec.surface and spec.source_key is not None:
+            mentions.append(
+                Mention(
+                    spec.entity_type,
+                    spec.source_key,
+                    spec.surface,
+                    {"page": 1, "text": spec.surface},
+                    spec.tier,
+                )
+            )
+        return spec.surface
 
-    def paragraph(text: str, style: ParagraphStyle) -> Paragraph:
+    def paragraph(text: str, style: ParagraphStyle, claim: Optional[str] = None) -> Paragraph:
         builder = compose(TextBuilder(), text, values, specs)
-        for _, _, surface, entity_type, key in builder.spans:
-            mentions.append(Mention(entity_type, key, surface, {"page": 1, "text": surface}))
+        for _, _, surface, entity_type, key, tier in builder.spans:
+            mentions.append(Mention(entity_type, key, surface, {"page": 1, "text": surface}, tier))
+        if claim:
+            evidence.append(Evidence(claim, builder.text(), {"page": 1, "text": builder.text()}))
         return Paragraph(escape(builder.text()), style)
 
     styles = getSampleStyleSheet()
@@ -89,6 +101,7 @@ def render(ctx: RenderContext) -> RenderedArtifact:
         grid(
             [
                 ["RMA number", placed("rma")],
+                ["Support case", placed("case")],
                 ["Store", f"{placed('store')} (#{placed('store_id')}), {values['store_location']}"],
                 ["Return date", values["return_date_long"]],
                 ["Original receipt ticket", placed("ticket")],
@@ -103,7 +116,7 @@ def render(ctx: RenderContext) -> RenderedArtifact:
             [
                 ["Name", placed("customer")],
                 ["Customer ID", placed("customer_id")],
-                ["Email", values["customer_email"]],
+                ["Email", placed("customer_email")],
             ],
             [1.8 * inch, 4.9 * inch],
         ),
@@ -134,9 +147,9 @@ def render(ctx: RenderContext) -> RenderedArtifact:
         story_flow += section
     story_flow += [
         Paragraph("Inspection", h2),
-        paragraph(pick(rng, ctx.phrases["inspection"]), body),
-        paragraph(pick(rng, ctx.phrases["reason_line"]), body),
-        paragraph(pick(rng, ctx.phrases["disposition"]), body),
+        paragraph(pick(rng, ctx.phrases["inspection"]), body, "PACKAGING_DAMAGED"),
+        paragraph(pick(rng, ctx.phrases["reason_line"]), body, "RETURN_REASON"),
+        paragraph(pick(rng, ctx.phrases["disposition"]), body, "REFUND_APPROVED"),
         Spacer(1, 16),
         Paragraph(
             escape(
@@ -173,4 +186,5 @@ def render(ctx: RenderContext) -> RenderedArtifact:
             dt.datetime.combine(return_day, dt.time(17, 0), tzinfo=dt.timezone.utc)
         ),
         mentions=mentions,
+        evidence=evidence,
     )

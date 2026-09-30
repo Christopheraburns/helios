@@ -17,7 +17,7 @@ import datetime as dt
 import random
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, TypeVar
+from typing import Any, Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple, TypeVar
 
 from ..ids import hash_parts, rng_for
 from ..scenarios import ArtifactPlan, ScenarioPlan
@@ -36,6 +36,24 @@ class Mention:
     source_key: Dict[str, Any]  # TPC-DS table + key, e.g. {"table": "item", "i_item_sk": 939}
     surface_form: str
     locator: Dict[str, Any]  # page / message / char offsets, per template strategy
+    tier: str = "direct"  # one of TIERS
+
+
+# How hard a mention is to resolve to its entity (task C-05):
+# - direct: the canonical name or an official identifier ("Returned Widget", "RMA-0012345")
+# - alias: another name that identifies it with structured data ("your Midway store",
+#   "receipt ending in 4471", "Dr. Ortiz", the customer's email address)
+# - contextual: resolvable only from the surrounding text ("the item", "this return")
+TIERS = ("direct", "alias", "contextual")
+
+
+@dataclass(frozen=True)
+class Evidence:
+    """A passage that states one of the story's claims (ground truth for C-04)."""
+
+    claim_type: str  # e.g. PACKAGING_DAMAGED
+    excerpt: str  # the passage as it appears in the artifact
+    locator: Dict[str, Any]
 
 
 @dataclass
@@ -45,6 +63,7 @@ class RenderedArtifact:
     extension: str
     semantic_timestamp: str  # ISO 8601, derived from TPC-DS dates
     mentions: List[Mention] = field(default_factory=list)
+    evidence: List[Evidence] = field(default_factory=list)
 
 
 def pick(rng: random.Random, options: Sequence[T]) -> T:
@@ -167,17 +186,33 @@ class TextBuilder:
     def __init__(self) -> None:
         self._parts: List[str] = []
         self._length = 0
-        self.spans: List[Tuple[int, int, str, str, Dict[str, Any]]] = []
+        # (start, end, surface, entity_type, source_key, tier)
+        self.spans: List[Tuple[int, int, str, str, Dict[str, Any], str]] = []
+        self.claims: List[Tuple[int, int, str]] = []
+
+    @property
+    def position(self) -> int:
+        return self._length
+
+    def claim(self, claim_type: str, start: int) -> "TextBuilder":
+        """Mark text from ``start`` to the current position as evidence of a claim."""
+        if self._length > start:
+            self.claims.append((start, self._length, claim_type))
+        return self
 
     def add(self, text: str) -> "TextBuilder":
         self._parts.append(text)
         self._length += len(text)
         return self
 
-    def mention(self, text: str, entity_type: str, source_key: Dict[str, Any]) -> "TextBuilder":
+    def mention(
+        self, text: str, entity_type: str, source_key: Dict[str, Any], tier: str = "direct"
+    ) -> "TextBuilder":
+        if tier not in TIERS:
+            raise ValueError(f"unknown mention tier {tier!r}")
         start = self._length
         self.add(text)
-        self.spans.append((start, self._length, text, entity_type, source_key))
+        self.spans.append((start, self._length, text, entity_type, source_key, tier))
         return self
 
     def text(self) -> str:
@@ -185,12 +220,27 @@ class TextBuilder:
 
     def mentions(self, **locator: Any) -> List[Mention]:
         return [
-            Mention(entity_type, key, surface, {**locator, "start": start, "end": end})
-            for start, end, surface, entity_type, key in self.spans
+            Mention(entity_type, key, surface, {**locator, "start": start, "end": end}, tier)
+            for start, end, surface, entity_type, key, tier in self.spans
+        ]
+
+    def evidence(self, **locator: Any) -> List[Evidence]:
+        text = self.text()
+        return [
+            Evidence(claim_type, text[start:end], {**locator, "start": start, "end": end})
+            for start, end, claim_type in self.claims
         ]
 
 
-MentionSpec = Tuple[str, str, Optional[Dict[str, Any]]]  # (surface, entity_type, source_key)
+class MentionSpec(NamedTuple):
+    """What a ``{@slot}`` places: a surface form tied to a TPC-DS entity (or plain
+    text when ``source_key`` is None), with its resolution tier."""
+
+    surface: str
+    entity_type: str
+    source_key: Optional[Dict[str, Any]]
+    tier: str = "direct"
+
 
 _SLOT = re.compile(r"\{@([a-z_]+)\}")
 
@@ -206,14 +256,29 @@ def compose(
     position = 0
     for match in _SLOT.finditer(text):
         builder.add(fill(text[position : match.start()], values))
-        surface, entity_type, key = mentions[match.group(1)]
-        if surface:
-            if key is None:
-                builder.add(surface)
+        spec = mentions[match.group(1)]
+        if spec.surface:
+            if spec.source_key is None:
+                builder.add(spec.surface)
             else:
-                builder.mention(surface, entity_type, key)
+                builder.mention(spec.surface, spec.entity_type, spec.source_key, spec.tier)
         position = match.end()
     builder.add(fill(text[position:], values))
+    return builder
+
+
+def compose_claim(
+    builder: "TextBuilder",
+    claim_type: Optional[str],
+    text: str,
+    values: Mapping[str, Any],
+    mentions: Mapping[str, MentionSpec],
+) -> "TextBuilder":
+    """``compose`` a phrase and, if ``claim_type`` is set, mark it as evidence."""
+    start = builder.position
+    compose(builder, text, values, mentions)
+    if claim_type:
+        builder.claim(claim_type, start)
     return builder
 
 

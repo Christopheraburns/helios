@@ -1,7 +1,12 @@
 # Phrase bank for customer emails about a damaged product return.
 # {name} fills a display value; {@name} places a tracked entity mention.
-# Every variant must stay consistent with the TPC-DS facts.
-# {a_item} is "a" or "an" to match the item name that follows.
+# Mention tiers (task C-05): direct slots name the entity ({@item}, {@rma});
+# alias slots identify it another way ({@item_desc}, {@store_city},
+# {@receipt_tail}, {@case}); contextual slots need the surrounding text
+# ({@item_ref}, {@product_ref}, {@store_ref}, {@return_ref}).
+# Every damage line carries a contextual mention and every opening an alias,
+# so each email has all three tiers. Every variant must stay consistent with
+# the TPC-DS facts. {a_item} is "a" or "an" to match the item name that follows.
 
 subject:
   - "Damaged {@item} - return {@rma}"
@@ -10,6 +15,8 @@ subject:
   - "Damaged package - {@item}"
   - "Re: return of {@item_id}"
   - "Still waiting on refund for {@rma}"
+  - "Damaged {@item_desc} from your {@store_city}"
+  - "Refund for my {@receipt_tail}"
 
 greeting:
   - "Hello {company} Customer Care,"
@@ -21,16 +28,16 @@ greeting:
 tones:
   polite:
     opening:
-      - "I bought {a_item} {@item} ({@item_id}) at your {@store} store on {sale_date_long}, and I brought it back on {return_date_long}."
-      - "I'm writing about {a_item} {@item} I purchased at the {@store} store in {store_location}. I returned it on {return_date_long}."
-      - "Earlier this month I returned {a_item} {@item} to your {@store} location (receipt ticket {@ticket})."
+      - "I bought {a_item} {@item} ({@item_id}) at your {@store_city} on {sale_date_long}, and I brought it back on {return_date_long}."
+      - "I'm writing about the {@item_desc} I purchased at the {@store} store in {store_location}, on my {@receipt_tail}. I returned it on {return_date_long}."
+      - "Earlier this month I returned {a_item} {@item} to your {@store_city} ({@receipt_tail})."
     damage:
-      - "Unfortunately the packaging was badly damaged when I opened it, and the item inside was scuffed."
-      - "When I got it home, the box was crushed on one corner and the contents had shifted."
-      - "The outer carton was torn open and the product itself had visible dents."
-      - "The package arrived damaged; it looked like it had been dropped in transit."
+      - "Unfortunately the packaging was badly damaged when I opened it, and {@item_ref} inside was scuffed."
+      - "When I got it home, the box was crushed on one corner and {@product_ref} had shifted around inside."
+      - "The outer carton was torn open and {@product_ref} itself had visible dents."
+      - "The package arrived damaged; it looked like {@item_ref} had been dropped in transit."
     request:
-      - "The store gave me return authorization {@rma}. Could you let me know when to expect the refund of {refund}?"
+      - "The store gave me return authorization {@rma}. Could you let me know when to expect the refund of {refund} for {@return_ref}?"
       - "Could you please confirm that return {@rma} has been processed and that I'll receive {refund}?"
       - "I'd appreciate a replacement if one is available; otherwise a refund to my card is fine. The return number is {@rma}."
     closing:
@@ -39,28 +46,28 @@ tones:
       - "Many thanks,"
   frustrated:
     opening:
-      - "This is the second time I'm writing about the {@item} I bought at {@store}."
-      - "I am very disappointed with the {@item} ({@item_id}) I purchased at your {@store} store."
-      - "I returned {a_item} {@item} on {return_date_long} and I still haven't heard anything."
+      - "This is the second time I'm writing about the {@item_desc} I bought at your {@store_city}."
+      - "I am very disappointed with the {@item} ({@item_id}) I purchased at your {@store} store, {@receipt_tail}."
+      - "I returned the {@item_desc} ({@item}) on {return_date_long} and I still haven't heard anything."
     damage:
-      - "The box was completely crushed and the product is unusable. This is not acceptable."
-      - "It came in a package that had clearly been damaged, and the item was broken as a result."
-      - "Whoever packed this did not care: the carton was ripped and the item was cracked."
+      - "The box was completely crushed and {@product_ref} is unusable. This is not acceptable."
+      - "It came in a package that had clearly been damaged, and {@item_ref} was broken as a result."
+      - "Whoever packed this did not care: the carton was ripped and {@item_ref} was cracked. I won't be shopping at {@store_ref} again."
     request:
       - "I want my {refund} back for return {@rma}, please process it immediately."
       - "Please refund me for return {@rma} without further delay."
-      - "I expect a full refund of {refund}. My return authorization is {@rma}."
+      - "I expect a full refund of {refund} for {@return_ref}. My return authorization is {@rma}."
     closing:
       - "I'd like a response today."
       - "Please do not make me call again."
       - "Regards,"
   brief:
     opening:
-      - "Returned {a_item} {@item} at {@store} on {return_date_long}."
-      - "Re: {@item} ({@item_id}), returned {return_date_long}."
+      - "Returned {a_item} {@item} at the {@store_city} on {return_date_long}."
+      - "Re: {@item_desc} ({@item_id}), {@receipt_tail}, returned {return_date_long}."
     damage:
-      - "Package was crushed, item damaged."
-      - "Box arrived torn; product scratched."
+      - "Package was crushed, {@item_ref} damaged."
+      - "Box arrived torn; {@product_ref} scratched."
     request:
       - "Return # {@rma}. When will the refund post?"
       - "Please confirm refund for {@rma}."

@@ -1,6 +1,6 @@
 # Rendered by renderer.py with the phrase bank in phrases.yaml (phase 3).
 template_id: support_return
-template_version: 1.1.0
+template_version: 1.2.0
 template_schema_version: '1.0'
 artifact_type: chat
 supported_scenario_types:
