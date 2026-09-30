@@ -27,6 +27,7 @@ from .api import api_router, principal_from_request
 from .mcp_settings import DEFAULT_SESSION_MCP_SETTINGS_STORE
 from .model_provider import DEFAULT_SESSION_MODEL_PROVIDER_STORE
 from .review import review_router
+from .ontology import ontology_router
 
 HERE = Path(__file__).parent
 LOGGER = logging.getLogger(__name__)
@@ -194,6 +195,7 @@ app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 tpl = Jinja2Templates(directory=HERE / "templates")
 app.include_router(api_router)
 app.include_router(review_router)
+app.include_router(ontology_router)
 
 
 def atlas() -> AtlasClient:
