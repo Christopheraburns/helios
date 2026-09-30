@@ -29,11 +29,14 @@ ENV OSSIE_HOME=/opt/ossie
 USER cdsw
 
 # ---- Cloudera ML Runtime metadata (required for registration) ----
+# Keep these in step with the version passed to build.sh: the tag comes from the
+# argument, these labels are what the Runtime Catalog displays, and nothing
+# stops them diverging.
 ENV ML_RUNTIME_EDITION="helios" \
     ML_RUNTIME_SHORT_VERSION="0.1" \
-    ML_RUNTIME_MAINTENANCE_VERSION="2" \
-    ML_RUNTIME_FULL_VERSION="0.1.2" \
-    ML_RUNTIME_DESCRIPTION="helios: semantic layer engine (Impala/Hive clients, SQLGlot, Ossie, MCP, FastAPI)"
+    ML_RUNTIME_MAINTENANCE_VERSION="3" \
+    ML_RUNTIME_FULL_VERSION="0.1.3" \
+    ML_RUNTIME_DESCRIPTION="helios: semantic layer engine (Impala/Hive clients, SQLGlot, Ossie, MCP, FastAPI, LinkML)"
 
 LABEL com.cloudera.ml.runtime.edition=$ML_RUNTIME_EDITION \
       com.cloudera.ml.runtime.short-version=$ML_RUNTIME_SHORT_VERSION \
