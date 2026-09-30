@@ -13,6 +13,7 @@ import socket
 import subprocess
 import time
 from pathlib import Path
+from typing import IO
 
 BOLT_HOST = "127.0.0.1"
 BOLT_PORT = int(os.environ.get("HELIOS_GRAPH_BOLT_PORT", "7687"))
@@ -97,6 +98,32 @@ def data_directory() -> Path:
     return base
 
 
+def log_directory() -> Path:
+    """Writable home for Memgraph's own log and its captured stderr.
+
+    The Debian package's /etc/memgraph/memgraph.conf points --log-file at
+    /var/log/memgraph, which is root-owned; the Application runs as cdsw and
+    Memgraph exits 13 (EACCES) before it can report why.
+    """
+    directory = data_directory().parent / "logs"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def isolated_config_path() -> Path:
+    """An empty config file, so /etc/memgraph/memgraph.conf cannot apply.
+
+    That file is written for a root-run systemd service and points at
+    root-owned paths under /var. Memgraph reads it unless MEMGRAPH_CONFIG says
+    otherwise, so the Application supplies an empty one and relies on explicit
+    command-line flags plus Memgraph's own defaults.
+    """
+    path = log_directory().parent / "memgraph.conf"
+    if not path.exists():
+        path.write_text("# Intentionally empty: Helios Graph passes flags on the command line.\n")
+    return path
+
+
 def bolt_is_listening(host: str = BOLT_HOST, port: int = BOLT_PORT) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
         probe.settimeout(0.5)
@@ -108,7 +135,10 @@ class MemgraphProcess:
 
     def __init__(self) -> None:
         self._process: subprocess.Popen[bytes] | None = None
+        self._stderr: IO[bytes] | None = None
         self.command: list[str] = []
+        self.stderr_path: Path | None = None
+        self.log_path: Path | None = None
 
     @property
     def running(self) -> bool:
@@ -121,31 +151,64 @@ class MemgraphProcess:
     def start(self) -> None:
         if self.running:
             return
+        logs = log_directory()
+        self.log_path = logs / "memgraph.log"
+        self.stderr_path = logs / "memgraph.stderr.log"
         self.command = [
             binary_path(),
             f"--bolt-address={BOLT_HOST}",
             f"--bolt-port={BOLT_PORT}",
             f"--data-directory={data_directory()}",
+            f"--log-file={self.log_path}",
             f"--memory-limit={memgraph_memory_limit_mib()}",
             "--log-level=WARNING",
             "--also-log-to-stderr",
             "--telemetry-enabled=false",
         ]
         print("starting memgraph:", " ".join(self.command), flush=True)
-        self._process = subprocess.Popen(self.command)
+        environment = dict(os.environ, MEMGRAPH_CONFIG=str(isolated_config_path()))
+        self._stderr = self.stderr_path.open("wb")
+        self._process = subprocess.Popen(
+            self.command, stderr=self._stderr, stdout=self._stderr, env=environment
+        )
+
+    def diagnostic_output(self, lines: int = 20) -> str:
+        """Tail of whatever Memgraph managed to say before giving up."""
+        chunks: list[str] = []
+        for label, path in (("stderr", self.stderr_path), ("log", self.log_path)):
+            if path is None:
+                continue
+            try:
+                text = path.read_text(errors="replace").strip()
+            except OSError:
+                continue
+            if text:
+                tail = "\n".join(text.splitlines()[-lines:])
+                chunks.append(f"--- memgraph {label} ({path}) ---\n{tail}")
+        return "\n".join(chunks) or "(memgraph produced no output)"
 
     def wait_until_listening(self, timeout: float = 60.0) -> None:
         """Block until Bolt accepts connections, or raise."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self._process is not None and self._process.poll() is not None:
+                self._flush_stderr()
                 raise RuntimeError(
-                    f"memgraph exited during startup with code {self._process.returncode}"
+                    f"memgraph exited during startup with code {self._process.returncode}\n"
+                    f"{self.diagnostic_output()}"
                 )
             if bolt_is_listening():
                 return
             time.sleep(0.25)
-        raise TimeoutError(f"memgraph did not accept Bolt connections within {timeout:.0f}s")
+        self._flush_stderr()
+        raise TimeoutError(
+            f"memgraph did not accept Bolt connections within {timeout:.0f}s\n"
+            f"{self.diagnostic_output()}"
+        )
+
+    def _flush_stderr(self) -> None:
+        if self._stderr is not None:
+            self._stderr.flush()
 
     def stop(self, timeout: float = 15.0) -> None:
         if not self.running:
@@ -159,3 +222,6 @@ class MemgraphProcess:
             self._process.kill()
             self._process.wait(timeout=timeout)
         self._process = None
+        if self._stderr is not None:
+            self._stderr.close()
+            self._stderr = None
