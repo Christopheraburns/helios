@@ -33,6 +33,7 @@ const TalkPage = lazy(() => import("./pages/TalkPage"));
 const ActivityLogsPage = lazy(() => import("./pages/ActivityLogsPage"));
 const ModelProviderPage = lazy(() => import("./pages/ModelProviderPage"));
 const MCPManagementPage = lazy(() => import("./pages/MCPManagementPage"));
+const OntologyPage = lazy(() => import("./pages/OntologyPage"));
 const GlossaryTermPage = lazy(() =>
   import("./pages/GlossaryPage").then((module) => ({
     default: module.GlossaryTermPage,
@@ -220,6 +221,10 @@ function ApplicationShell({ client }: AppProps) {
                     description="Review the governed data sources available to Helios."
                   />
                 }
+              />
+              <Route
+                path="/ontology"
+                element={<OntologyPage />}
               />
               <Route
                 path="/governance"
