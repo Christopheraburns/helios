@@ -95,6 +95,11 @@ class ImpalaEngine(Engine):
             conn.close()
             return result
 
+    def connect(self):
+        """A DB-API connection as the configured workload user (no delegation), for
+        Helios's own tables such as helios_index."""
+        return self._connect(None)
+
     def ping(self) -> bool:
         return self.query("SELECT 1").rows == [(1,)]
 

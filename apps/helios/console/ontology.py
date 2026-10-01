@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
 
 import yaml
 from apps.helios.graph import store
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from helios_core.index import IndexStore, impala_index_store
+from helios_core.index import ontology_versions as lakehouse_versions
 from helios_core.ontology.graph import OntologyGraph, OntologyGraphError
 from helios_core.ontology.mapping import load_mappings
 from helios_core.ontology.parser import ParseResult, parse
@@ -16,6 +19,60 @@ from pydantic import BaseModel
 
 LOGGER = logging.getLogger(__name__)
 ontology_router = APIRouter(prefix="/api/v1/ontology", tags=["ontology"])
+
+# Published versions live in helios_index (CR-0c); the on-disk store is a cache
+# the Helios Graph gateway reads. Without Impala settings (local development)
+# the cache is used on its own.
+_index_lock = threading.Lock()
+_index: dict[str, IndexStore | None] = {}
+
+
+def index_store() -> IndexStore | None:
+    with _index_lock:
+        if "store" not in _index:
+            store_ = impala_index_store()
+            if store_ is not None:
+                store_.ensure_tables()
+            _index["store"] = store_
+        return _index["store"]
+
+
+def _actor(request: Request) -> str:
+    from apps.helios.console.api import principal_from_request
+
+    principal = principal_from_request(request)
+    return principal.id if principal is not None else "unknown"
+
+
+def restore_cache_from_lakehouse() -> int:
+    """Write published versions the on-disk cache lacks, and the active pointer if
+    it has none. Returns how many versions were restored."""
+    index = index_store()
+    if index is None:
+        return 0
+    cached = {(e["version"], e["content_hash"]) for e in store.list_cached()}
+    restored = 0
+    for record in lakehouse_versions.missing_from_cache(index, cached):
+        store.save(lakehouse_versions.graph_of(record))
+        restored += 1
+    active = lakehouse_versions.active(index)
+    if active is not None and store.active_pointer() is None:
+        store.set_active(active.version, active.content_hash)
+    return restored
+
+
+def start_cache_restore() -> None:
+    """Restore the cache in the background at API start (Impala may be slow to reach)."""
+
+    def run() -> None:
+        try:
+            count = restore_cache_from_lakehouse()
+            if count:
+                LOGGER.info("restored %d ontology version(s) from helios_index", count)
+        except Exception:
+            LOGGER.exception("could not restore the ontology cache from helios_index")
+
+    threading.Thread(target=run, name="ontology-cache-restore", daemon=True).start()
 
 
 class PublishRequest(BaseModel):
@@ -34,10 +91,11 @@ class OntologyVersionResponse(BaseModel):
     edge_count: int
     enum_count: int
     broken_mappings: list[dict[str, str]]
+    recorded_in_lakehouse: bool = False
 
 
 @ontology_router.post(":publish", response_model=OntologyVersionResponse)
-async def publish_ontology(request: PublishRequest) -> OntologyVersionResponse:
+def publish_ontology(request: PublishRequest, http_request: Request) -> OntologyVersionResponse:
     """Publish a LinkML schema as an ontology version.
 
     The schema file path must be relative to the repository root, e.g.
@@ -79,6 +137,18 @@ async def publish_ontology(request: PublishRequest) -> OntologyVersionResponse:
             detail=f"schema parse failed: {type(e).__name__}: {e}",
         )
 
+    # Record the version in helios_index first: it is the record, the cache is not.
+    recorded = False
+    index = index_store()
+    if index is not None:
+        try:
+            lakehouse_versions.publish(
+                index, result.graph, request.schema_path, _actor(http_request)
+            )
+            recorded = True
+        except lakehouse_versions.VersionConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     # Save the version to the content-addressed cache.
     try:
         store.save(result.graph)
@@ -100,7 +170,36 @@ async def publish_ontology(request: PublishRequest) -> OntologyVersionResponse:
         edge_count=len(result.graph.edges),
         enum_count=enum_count,
         broken_mappings=result.broken_mappings,
+        recorded_in_lakehouse=recorded,
     )
+
+
+class ActivationResponse(BaseModel):
+    version: str
+    content_hash: str
+    activated_at: str
+    activated_by: str
+
+
+@ontology_router.post("/{version}:activate", response_model=ActivationResponse)
+def activate_ontology(version: str, request: Request) -> ActivationResponse:
+    """Make a published version the active one: recorded in helios_index, then
+    pointed to in the cache. The Helios Graph gateway loads the active version
+    when it starts, or on its own :activate."""
+    index = index_store()
+    if index is None:
+        raise HTTPException(
+            status_code=503, detail="helios_index is not configured (no Impala settings)"
+        )
+    try:
+        record = lakehouse_versions.activate(index, version, _actor(request))
+    except lakehouse_versions.UnknownVersion:
+        raise HTTPException(status_code=404, detail=f"ontology version {version} is not published")
+    cached = {(e["version"], e["content_hash"]) for e in store.list_cached()}
+    if (record.version, record.content_hash) not in cached:
+        restore_cache_from_lakehouse()
+    store.set_active(record.version, record.content_hash)
+    return ActivationResponse(**record.model_dump())
 
 
 @ontology_router.get("/versions")

@@ -3,6 +3,8 @@
 Plan for hosting Memgraph in the Helios project and building an ontology visualizer in the Helios UI. It comes before the first Helios crawler.
 Source: `ontology/README.md` and the LinkML files under `ontology/`, plus a survey of the Helios UI, API and deployment (`apps/helios`, `docs/ui-deployment.md`, `docs/ui-api-networking.md`, `docs/ui-backend-contract.md`).
 
+**Status (2026-10-01):** O-0, O-2, O-3, O-4 (with O-4b's graph view) and O-5 are done, each in its own commit (O-2 `4c27153` + `a08f8c0`; O-3 `3673366`; O-4 `07eeb24`, `1015f48`, `a2d16f7`; O-5 `6f5cb83`). O-1 is open only for the runtime image's build files, which are not in the repo. Published versions are now recorded in the lakehouse (`helios_index.ontology_versions`, crawler task CR-0c), and the on-disk store is a cache rebuilt from it. The status below is the earlier one.
+
 **Status (2026-09-30):** O-0 done — the Helios Graph Application runs Memgraph in the Workbench and answers `RETURN 1` through the gateway. O-1 items 1–4 landed with it; the materialise and read endpoints plus startup rebuild remain. No ontology parser yet, and `linkml` is not installed.
 
 **How to use:** work top to bottom. A task is done only when its **Done when** check passes. Check the box and add the commit hash.
@@ -99,21 +101,21 @@ Browser ──► Helios UI (new Ontology page)
   - Versions coexist: every node carries `version` and `key`, and `IN_VERSION` links it to its `OntologyVersion` node. The blue/green swap is therefore a pointer change — `:materialise` with `activate: false`, then `:activate`.
   - A version node is marked `complete: false` while loading, so a crash mid-load is visible and gets reloaded rather than trusted.
   - **Decision 2 moved to O-2**, where the lakehouse snapshot actually happens. For O-1 the gateway keeps its own content-addressed payload cache on project storage (`$CDSW_PROJECT_DIR/.helios-graph/ontology/`) and rebuilds from it. That cache is explicitly *not* a system of record: a miss just means the publisher must materialise again.
-- [ ] **O-2** Parser and publish:
+- [x] **O-2** *(Done: `4c27153`, `a08f8c0`; mapping files are read since CR-0b, and versions are recorded in `helios_index` since CR-0c.)* Parser and publish:
   - LinkML → normalised graph in `helios_core.ontology`;
   - validation in CI: `linkml-lint` on core, pack and extension, and `linkml-validate` of mapping files against `mappings/mapping.schema.yaml`;
   - a mapping check against the published Ossie model;
   - publish means validate, content-hash, snapshot to the lakehouse, then materialise.
 
   *Done when:* publishing the same files twice gives the same version, and a version with a broken import or unknown mapping target is rejected.
-- [ ] **O-3** Helios API router, audited like the rest of `/api/v1`:
+- [x] **O-3** *(Done: `3673366`. `POST /api/v1/ontology/{version}:activate` added with CR-0c.)* Helios API router, audited like the rest of `/api/v1`:
   - `GET /api/v1/ontology/versions`
   - `GET /api/v1/ontology/{version}/graph` (filters: layer, kind, focus, depth)
   - `GET /api/v1/ontology/{version}/classes/{name}`
   - `POST /api/v1/ontology:publish` (`ontology.edit`)
 
   *Done when:* contract tests pass, and requests without `ontology.read` get 403.
-- [ ] **O-4** Ontology page in the Helios UI, as described under Viewer. *Done when:* a user can browse core → retail → tenant, open any class in the inspector, and see every Ossie mapping, with broken mappings highlighted.
+- [x] **O-4** *(Done: `07eeb24`, `1015f48`, `a2d16f7`, then O-4b's graph view and CR-0b's mapping display.)* Ontology page in the Helios UI, as described under Viewer. *Done when:* a user can browse core → retail → tenant, open any class in the inspector, and see every Ossie mapping, with broken mappings highlighted.
 - [x] **O-4b** *(Added and built 2026-10-01; graph view, uncommitted.)* The first O-4 page was a class list plus a detail panel; it drew no graph. The page now draws the ontology as a graph with React Flow (`features/ontology/`):
   - the `is_a` forest laid out left to right (arrowhead at the parent, as in UML);
   - attribute ranges drawn as dashed orange edges between classes, each attribute once, from the class that declares it;
@@ -122,7 +124,7 @@ Browser ──► Helios UI (new Ontology page)
   - clicking a class focuses its neighbourhood and opens an inspector with description, parents, subclasses, relationships and attributes (inherited ones marked "from X").
 
   The parser now records each class's `layer`, `kind`, `abstract` and `description`, and each attribute's `declared_by` and `inherited`. That changes the content hash, so **republish the ontology** to see layers and kinds. Broken-mapping highlighting arrived with CR-0b (2026-10-01): the parser reads `ontology/mappings/`, the inspector lists each class's Ossie mappings, and classes with a missing element are outlined in red. *Done when:* the hierarchy and relationships are visible without selecting anything, and selecting a class shows its connections.
-- [ ] **O-5** Docs: deployment steps for the Helios Graph Application (runtime, entry point, environment variables, token, resources) in `docs/ui-deployment.md` and the in-app documentation. *Done when:* someone else can deploy it from the docs alone.
+- [x] **O-5** *(Done: `6f5cb83`, `docs/ontology-deployment.md`.)* Docs: deployment steps for the Helios Graph Application (runtime, entry point, environment variables, token, resources) in `docs/ui-deployment.md` and the in-app documentation. *Done when:* someone else can deploy it from the docs alone.
 
 ## Problems in the ontology files to fix before the crawler depends on them
 
@@ -133,7 +135,7 @@ Browser ──► Helios UI (new Ontology page)
 ## Decisions needed
 
 1. ~~**How to install Memgraph.**~~ **Settled (O-0):** a custom runtime image on PBJ Workbench, Python 3.11, with the Memgraph binary and a Bolt driver baked in. The `.deb`-into-project-storage route was not needed. The runtime is registered in the Runtime Catalog; its build files are not yet in the repo (see O-1).
-2. **Where published ontology versions are stored:** a lakehouse table such as `helios_index.ontology_versions` (next to the crawler's index, matching the README's "the active version is part of the index generation"), or Helios's own metadata store. **Deferred to O-2**, which owns the snapshot step; O-1 needs no answer because the gateway rebuilds from its own payload cache. Two things to weigh when it comes up: the Workbench reaches the lakehouse through Impala, not PyIceberg (`helios_ds.lakehouse.impala`), so the lakehouse route adds Impala config to whichever component publishes; and nothing creates `helios_index.*` today — the Helios-DS generator deliberately never does, and there is a test enforcing that.
+2. *(Decided 2026-10-01: `helios_index.ontology_versions` plus `ontology_activations`; see CR-0c.)* **Where published ontology versions are stored:** a lakehouse table such as `helios_index.ontology_versions` (next to the crawler's index, matching the README's "the active version is part of the index generation"), or Helios's own metadata store. **Deferred to O-2**, which owns the snapshot step; O-1 needs no answer because the gateway rebuilds from its own payload cache. Two things to weigh when it comes up: the Workbench reaches the lakehouse through Impala, not PyIceberg (`helios_ds.lakehouse.impala`), so the lakehouse route adds Impala config to whichever component publishes; and nothing creates `helios_index.*` today — the Helios-DS generator deliberately never does, and there is a test enforcing that.
 3. **Memgraph licence:** Memgraph Community is under the Business Source Licence. That's fine for internal use; confirm it's acceptable for how Helios will be distributed.
 
 ## After this

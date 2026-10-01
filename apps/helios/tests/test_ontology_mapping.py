@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helios_core.ontology.mapping import load_mappings, resolution_config
+from helios_core.ontology.mapping import load_mappings, resolution_config, template_columns
 from helios_core.ontology.parser import parse
 from linkml_runtime.utils.schemaview import SchemaView
 
@@ -23,7 +23,9 @@ def mapping():
 def ossie():
     model = yaml.safe_load(OSSIE.read_text())
     return {
-        "datasets": {d["name"]: {f["name"] for f in d.get("fields", [])} for d in model["datasets"]},
+        "datasets": {
+            d["name"]: {f["name"] for f in d.get("fields", [])} for d in model["datasets"]
+        },
         "relationships": {r["name"] for r in model["relationships"]},
         "metrics": {m["name"] for m in model["metrics"]},
     }
@@ -39,8 +41,13 @@ def test_every_entity_maps_an_existing_dataset_and_columns(mapping, ossie):
         fields = ossie["datasets"].get(entity["ossie_element"])
         assert fields is not None, entity["ossie_element"]
         ids = entity["identifiers"]
-        columns = [c for part in ("primary", "secondary", "display", "aliases") for c in ids.get(part) or []]
+        columns = [
+            c
+            for part in ("primary", "secondary", "display", "aliases")
+            for c in ids.get(part) or []
+        ]
         columns += [c for a in entity.get("attributes", []) for c in a["columns"]]
+        columns += [c for t in ids.get("alias_templates") or [] for c in template_columns(t)]
         assert ids["primary"], entity["class"]
         missing = [c for c in columns if c not in fields]
         assert not missing, (entity["class"], missing)
@@ -83,7 +90,12 @@ def test_ground_truth_entity_types_all_have_a_class(mapping):
 
 def test_retail_claim_vocabulary_is_declared(view):
     predicates = set(view.get_enum("RetailClaimPredicate").permissible_values)
-    assert predicates == {"PACKAGING_DAMAGED", "RETURN_REASON", "REFUND_REQUESTED", "REFUND_APPROVED"}
+    assert predicates == {
+        "PACKAGING_DAMAGED",
+        "RETURN_REASON",
+        "REFUND_REQUESTED",
+        "REFUND_APPROVED",
+    }
 
 
 def test_mapping_targets_the_current_pack_version(mapping, view):
@@ -121,7 +133,8 @@ def test_published_graph_carries_the_mapping_and_nothing_is_broken():
     assert maps_to[("item", "Brand")]["primary"] == ["i_brand_id"]
     assert ("store_returns", "Return") in maps_to
     materialises = {
-        (e.from_key, e.to_key) for e in result.graph.edges
+        (e.from_key, e.to_key)
+        for e in result.graph.edges
         if e.type == "MATERIALISES_AS" and e.from_label == "OssieElement"
     }
     assert ("store_returns__sr_reason_sk__reason", "HasReason") in materialises
@@ -144,3 +157,18 @@ def test_a_mapping_only_applies_to_ontologies_that_import_its_pack():
     result = parse(str(CORE), mappings=mappings)
     assert not [n for n in result.graph.nodes if n.label == "OssieElement"]
     assert result.broken_mappings == []
+
+
+def test_alias_templates_reach_the_resolver_and_the_graph():
+    [mapping] = load_mappings(REPO_ROOT / "ontology/mappings/ossie")
+    config = resolution_config(mapping)
+    assert "{c_salutation} {c_last_name}" in config.classes["Customer"].alias_templates
+    assert config.classes["Store"].alias_templates == ["{s_city} store"]
+    assert template_columns("{i_color} {i_class} item") == ["i_color", "i_class"]
+    result = parse(str(EXTENSION), mappings=[mapping])
+    store_map = next(
+        e
+        for e in result.graph.edges
+        if e.type == "MAPS_TO" and e.from_key == "store" and e.to_key == "Store"
+    )
+    assert store_map.properties["alias_templates"] == ["{s_city} store"]

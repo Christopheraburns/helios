@@ -9,7 +9,6 @@ from .graph import (
     OntologyGraph,
     OntologyGraphError,
 )
-
 from .mapping import (
     ClassIdentifiers,
     ResolutionConfig,
@@ -20,17 +19,17 @@ from .mapping import (
 )
 
 __all__ = [
+    "EDGE_TYPES",
+    "LAYERS",
+    "NODE_LABELS",
     "ClassIdentifiers",
+    "GraphEdge",
+    "GraphNode",
+    "OntologyGraph",
+    "OntologyGraphError",
     "ResolutionConfig",
     "SourceMapping",
     "load_mapping",
     "load_mappings",
     "resolution_config",
-    "EDGE_TYPES",
-    "LAYERS",
-    "NODE_LABELS",
-    "GraphEdge",
-    "GraphNode",
-    "OntologyGraph",
-    "OntologyGraphError",
 ]

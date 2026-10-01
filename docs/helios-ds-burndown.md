@@ -121,6 +121,12 @@ First business story: Sale → Return → Complaint email → Return authorisati
 
   Original text: Freeze the development corpus: choose text counts (PDF, email, chat), generate with C-05 and C-08, review and curate the questions (C-11), approve it in the dashboard, and record its `dataset_id` and question-set hash as the crawler's development corpus. *Done when:* the corpus is `READY` and its ID, counts and golden-question count are recorded here.
 
+- [ ] **C-12** *(Added 2026-10-01, for the crawler's overfitting checks; crawler-analysis.md decision 4.)* Held-out corpus:
+  - **Now:** a second, smaller dataset (e.g. 30 stories) generated with a different master seed, so it has different customers, items, stores and phrase choices. Review and approve it, then record its ID next to the development corpus.
+  - **Then:** a variant with alternate phrase banks (new template versions with different wording), so the crawler's claim cue lexicons are tested against wording they were not written from.
+
+  *Done when:* the held-out dataset is READY and recorded, and the crawler is scored on both.
+
 ## Phase 4: Review, edit and approve
 
 Delivered in two stages (ADR 0001).
@@ -164,7 +170,7 @@ The generator is driven from its dashboard; agents query Helios, not the generat
 - ~~**S-02** MCP Tasks for long-running generation~~ *(Cut.)*
 - ~~**S-03** Review/approve MCP tools~~ *(Cut.)*
 - ~~**S-04** Keycloak/OIDC roles~~ *(Cut: any authenticated Workbench user of the generation project may review and approve.)*
-- [ ] **S-05** Ground-truth isolation: a Ranger policy on `helios_ground_truth`, and crawler and query credentials verified to lack access. Needed before the crawler's first evaluation. *Done when:* a negative access test from the crawler project fails as expected.
+- [x] **S-05** *(Done 2026-10-01 as crawler task CR-0d. The crawler's identity `srv_helios_crawler` is denied `helios_ground_truth` and the `helios_ds` base tables, and can read only the `helios_ds.crawlable_artifacts` view (READY datasets, neutral columns). Verified by `python -m apps.helios.crawler.access_check`. S3 manifests are not yet RAZ-isolated, because data connections run as the session user; see CR-0d.)* Ground-truth isolation: a Ranger policy on `helios_ground_truth`, and crawler and query credentials verified to lack access. Needed before the crawler's first evaluation. *Done when:* a negative access test from the crawler project fails as expected.
 
 ## Phase 8: Reproducibility
 

@@ -236,3 +236,15 @@ CREATE TABLE IF NOT EXISTS helios_ground_truth.expected_results (
   result_data STRING
 )
 STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
+
+CREATE VIEW IF NOT EXISTS helios_ds.crawlable_artifacts AS
+SELECT a.artifact_id, a.dataset_id, a.artifact_type, a.mime_type, a.source_locator, a.sha256, a.size_bytes, a.semantic_timestamp
+FROM helios_ds.artifacts a
+JOIN (
+  SELECT dataset_id, state FROM (
+    SELECT dataset_id, state,
+           ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY event_seq DESC) AS rn
+    FROM helios_ds.dataset_lifecycle
+  ) latest WHERE rn = 1
+) lifecycle ON lifecycle.dataset_id = a.dataset_id
+WHERE lifecycle.state = 'READY';
