@@ -169,7 +169,39 @@ def ddl_statements(dialect: SqlDialect = IMPALA) -> List[str]:
             statements.append(
                 f"CREATE TABLE IF NOT EXISTS {spec.full_name} (\n{columns}\n){suffix}"
             )
+    statements.append(CRAWLABLE_ARTIFACTS_VIEW)
     return statements
+
+
+# What the Helios crawler may read (crawler task CR-0d): artifacts of READY
+# datasets only, with neutral columns. scenario_id and template IDs are left out
+# because they reveal which documents belong to one story; the crawler must
+# discover that. Ranger grants the crawler SELECT on this view, nothing else in
+# helios_ds and nothing in helios_ground_truth.
+CRAWLABLE_ARTIFACTS = "helios_ds.crawlable_artifacts"
+CRAWLABLE_COLUMNS = (
+    "artifact_id",
+    "dataset_id",
+    "artifact_type",
+    "mime_type",
+    "source_locator",
+    "sha256",
+    "size_bytes",
+    "semantic_timestamp",
+)
+CRAWLABLE_ARTIFACTS_VIEW = (
+    f"CREATE VIEW IF NOT EXISTS {CRAWLABLE_ARTIFACTS} AS\n"
+    "SELECT " + ", ".join(f"a.{c}" for c in CRAWLABLE_COLUMNS) + "\n"
+    "FROM helios_ds.artifacts a\n"
+    "JOIN (\n"
+    "  SELECT dataset_id, state FROM (\n"
+    "    SELECT dataset_id, state,\n"
+    "           ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY event_seq DESC) AS rn\n"
+    "    FROM helios_ds.dataset_lifecycle\n"
+    "  ) latest WHERE rn = 1\n"
+    ") lifecycle ON lifecycle.dataset_id = a.dataset_id\n"
+    "WHERE lifecycle.state = 'READY'"
+)
 
 
 def impala_ddl() -> str:

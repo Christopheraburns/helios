@@ -15,6 +15,9 @@ entities:
       secondary: [c_customer_id, c_email_address]
       display: [c_first_name, c_last_name]
       aliases: []
+      alias_templates:
+        - "{c_salutation} {c_last_name}"
+        - "{c_first_name} {c_last_name}"
     attributes:
       - attribute: email
         columns: [c_email_address]
@@ -28,6 +31,8 @@ entities:
       secondary: [s_store_id]
       display: [s_store_name]
       aliases: []
+      alias_templates:
+        - "{s_city} store"
     attributes:
       - attribute: store_id
         columns: [s_store_id]
@@ -55,6 +60,9 @@ entities:
       secondary: [i_item_id]
       display: [i_product_name]
       aliases: []
+      alias_templates:
+        - "{i_color} {i_class} item"
+        - "{i_color} {i_class}"
     attributes:
       - attribute: item_id
         columns: [i_item_id]

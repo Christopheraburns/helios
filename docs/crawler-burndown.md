@@ -1,6 +1,6 @@
 # Helios Crawler Burn-Down (v1: text)
 
-Plan for the first Helios crawler. It indexes the Helios-DS development corpus (PDF, email, chat), resolves what the documents mention to TPC-DS entities through the ontology, extracts claims, writes `helios_index` in the lakehouse, and projects the result into Memgraph. Its output is scored against the hidden ground truth and the golden questions.
+Plan for the first Helios crawler. **How it analyzes an asset, step by step, and what is configurable: [crawler-analysis.md](crawler-analysis.md).** It indexes the Helios-DS development corpus (PDF, email, chat), resolves what the documents mention to TPC-DS entities through the ontology, extracts claims, writes `helios_index` in the lakehouse, and projects the result into Memgraph. Its output is scored against the hidden ground truth and the golden questions.
 
 **Status (2026-10-01):** plan only. No crawler, resolver, embedding or `helios_index` code exists. Inputs are ready:
 - **Development corpus:** `1ca99f86-e6a0-57fc-8311-cadcac4c8302`, READY. It has 101 return stories and 301 artifacts.
@@ -91,17 +91,94 @@ The crawler runs as a **Workbench Job in the Helios project** (`apps/helios/`). 
   - expose the mapping to the crawler as a typed `ResolutionConfig` (per class: primary, secondary, display and alias columns; per tier: threshold).
 
   *Done when:* a unit test loads `tpcds.yaml` into a `ResolutionConfig` for Customer, Store, Item, Sale, Return and Reason.
-- [ ] **CR-0c** Store ontology versions in `helios_index.ontology_versions` (decision 1). Publishing writes the version there, and the gateway rebuilds from it. Bring `docs/ontology-burndown.md` up to date at the same time: O-2 to O-5 are committed but unchecked.
-- [ ] **CR-0d** Access for the Helios project:
+- [x] **CR-0c** *(Done 2026-10-01, uncommitted; not yet run against Impala.)*
+  - **New package `shared/helios_core/index`:** record models, Impala Iceberg DDL with additive column migration, and a small `IndexStore` (impyla in Workbench, DuckDB in tests). This is the start of CR-1.
+  - **Tables:** `helios_index.ontology_versions` holds each (version, hash) once, with publisher, time, counts and the canonical graph JSON. `helios_index.ontology_activations` is an append-only log; its latest row is the active version.
+  - **Publishing** records in the lakehouse first, then the disk cache. Different content under an existing version is refused (409: publish under a new version); identical content is a no-op.
+  - **`POST /api/v1/ontology/{version}:activate`** records an activation and points the cache at it.
+  - **On API start,** a background thread restores any published versions the disk cache lacks, plus the active pointer, so the gateway's startup rebuild keeps working without Impala of its own.
+  - **Without Impala settings** (local development) the cache is used on its own.
+  - **Tables are created on first use;** the Helios workload user needs Ranger rights to create the `helios_index` database and to write its tables.
+  - **Tests:** 8, in `apps/helios/tests/test_index_ontology_versions.py`.
+  - The ontology burn-down is brought up to date.
+
+  Original task: Store ontology versions in `helios_index.ontology_versions` (decision 1). Publishing writes the version there, and the gateway rebuilds from it. Bring `docs/ontology-burndown.md` up to date at the same time: O-2 to O-5 are committed but unchecked.
+- [x] **CR-0d** *(Done 2026-10-01.)* Crawler identity: machine user `srv_helios_crawler` (EnvironmentUser role; Ranger policies on `tpcds`, the `crawlable_artifacts` view only in `helios_ds`, nothing on `helios_ground_truth`, and table rights in `helios_index`, which was created by an admin). The access check, run as that user, passes every SQL check:
+  - **readable:** the view, `tpcds`, and `helios_index` (create, write, read);
+  - **denied:** three `helios_ground_truth` tables, plus the `helios_ds.artifacts` and `scenario_plans` base tables.
+
+  Through the view the crawler sees the READY datasets, including the development corpus `1ca99f86…` (301 artifacts), so the crawler takes the dataset to crawl as a setting.
+
+  **Known gap (S3):** Workbench data connections authenticate as the person running the session, not the machine user. So RAZ cannot yet stop the crawler reading `_manifests/` (story facts); the check's manifest read shows *allowed*. Mitigation: the crawler reads objects only through the locators the view returns and never lists the bucket. Closing it needs the machine user's own IDBroker mapping and S3 credentials for the crawler Job.
+
+  **Lessons from setup:**
+  - A new machine user needs EnvironmentUser, a workload password and a completed user sync before Impala accepts it (401 until then; one transient 503 on first login).
+  - The `helios_ds` policy must name the view, not `*`.
+
+  Rotate the workload password: it appeared in chat during setup.
+
+  Earlier note (prepared, needs an admin): Built so far:
+  - **`helios_ds.crawlable_artifacts`**, a view created by Helios-DS `init-tables`. It shows the 8 neutral columns, for READY datasets only (latest lifecycle state), and never `scenario_id` or template IDs. Tested.
+  - **`python -m apps.helios.crawler.access_check`,** run in the Helios project as the crawler. It prints the effective user and checks that the view and artifact objects are readable, and that ground-truth tables, `helios_ds` base tables and `_manifests/` objects are denied.
+
+  **Isolation needs a separate identity.** Ranger and RAZ grant per user, so if the crawler connects as the same workload user that owns `helios_ds` and `helios_ground_truth`, nothing can be hidden from it. Use a dedicated machine user (e.g. `srv_helios_crawler`) as the crawler's `WORKLOAD_USER` and S3 connection identity.
+
+  **Admin steps:**
+  1. Run Helios-DS `init-tables` (creates the view).
+  2. Create the crawler user.
+  3. Create the output database once, as an admin: `CREATE DATABASE IF NOT EXISTS helios_index;`. It lives in the same metastore and warehouse as `tpcds`; the code creates the tables in it on first use.
+  4. Ranger (Hadoop SQL) for the crawler user:
+     - `tpcds`: SELECT on all tables (resolution builds its dictionaries and joins from TPC-DS);
+     - `helios_ds`: SELECT on the `crawlable_artifacts` view only;
+     - `helios_ground_truth`: nothing (explicit deny if broader policies would grant it);
+     - `helios_index`: CREATE, SELECT, Update (Impala INSERT) and ALTER on its tables.
+  5. The Helios API's own `WORKLOAD_USER` also writes `helios_index` (ontology versions, CR-0c): SELECT, Update, CREATE and ALTER there.
+  6. RAZ/S3: allow read on `helios-db/source/datasets/*`; deny `helios-db/source/_manifests/*`.
+  7. Give the Helios project an S3 data connection usable by that identity.
+  8. Run the access check.
+
+  Original task: Access for the Helios project:
   - read `helios_ds.datasets` and `helios_ds.artifacts` through a **view** that exposes only the neutral columns (`artifact_id`, `dataset_id`, `artifact_type`, `mime_type`, `source_locator`, `sha256`, `size_bytes`, `semantic_timestamp`), and only for READY datasets;
   - an S3 data connection reading `helios-db/source/datasets/`;
   - no access to `helios_ground_truth` or `_manifests/`. This is S-05 from the Helios-DS burn-down, done here.
 
   *Done when:* from the Helios project, the view is readable, and reading `helios_ground_truth.claims` or a manifest object is denied.
 
+- [x] **CR-0e** *(Done 2026-10-01, uncommitted; tables migrated in Impala.)*
+  - **`helios_core.crawler.settings.CrawlerSettings`:** typed and strict (unknown keys rejected).
+    - **Sections:** analyzers (pdf, email, chat, each with options), identifier patterns, PDF field labels, contextual phrases, case-linking rules, and claim cues with negation and hedge words.
+    - **Checks:** regexes must compile; capture groups must exist; `key` patterns need columns; case-linking must name existing patterns.
+    - **Built-in defaults,** written from general retail language. Tests run them against real corpus text.
+  - **`helios_index.crawler_settings`** holds versions 1, 2, 3… Identical content returns the existing version, and versions never change. `crawler_settings_activations` is the activation log. With nothing activated, the defaults apply.
+  - **`crawl_runs`** gained `settings_version` and `settings_hash`.
+  - **API (`apps/helios/console/crawler.py`):**
+    - `GET /api/v1/crawler/settings` (active settings plus every version), `GET …/defaults`, `GET …/versions/{n}`;
+    - `POST …/settings`: validates the structure, then checks every class and claim predicate against the **active ontology version**. It answers 422 with a list of problems, or saves a new version with a warning if no ontology is active;
+    - `POST …/settings/{n}:activate`.
+  - **Tests:** 14, in `test_crawler_settings.py`.
+  - **Follow-up:** like the ontology endpoints, these record who acted but have no RBAC permission yet. Add one (e.g. reuse `datasource.manage`, or add `crawler.manage`) before wider use.
+
+  Original task: crawler settings in the lakehouse Crawler settings in the lakehouse:
+  - a typed settings schema with defaults: analyzers per asset type, identifier patterns, PDF label lexicon, contextual phrases, case-linking rules, claim cue lexicons and negation words;
+  - versions stored in `helios_index.crawler_settings` with an activation log;
+  - API: `GET /api/v1/crawler/settings` (active and versions), `POST …/settings` (validate and save a new version), `POST …/settings/{version}:activate`;
+  - every crawl records the settings version and hash.
+
+  The settings editor in the Helios UI is part of CR-9. Identity rules stay in the published ontology mapping.
+
+  *Done when:* an invalid settings document is rejected with a clear message, a saved version is immutable, and a crawl run's recorded settings hash matches the version it used.
+
 ### Index and connector
 
-- [ ] **CR-1** `helios_index` schema, in a shared module (`shared/helios_core/index/`) that replaces the documentation-only copy in `helios_ds/schemas.py`, with the same pydantic → Impala DDL generation as Helios-DS. Tables:
+- [x] **CR-1** *(Done 2026-10-01, uncommitted. Tables created in Impala as `srv_helios_crawler`; the crawler and API users can both read them.)*
+  - **`shared/helios_core/index`** is the single definition; the documentation-only copies in Helios-DS are removed.
+  - **Tables:** 11 Iceberg tables. `crawl_runs` is append-only, and a run's final state is its latest row. `assets`, `segments`, `mentions`, `entities`, `entity_links` (SameAs / PossiblySameAs with `resolved_by`, score and evidence segments), `relationships` (asset or entity at either end, typed by an ontology relationship class), `claims` and `claim_evidence`, plus the two ontology tables from CR-0c. Every run table carries `crawl_run_id` and `ontology_version`.
+  - **Stable IDs** (`index.ids`) are derived from content, not the run, so runs compare row by row and unchanged assets can be carried forward. Entities are keyed by class plus source key (`tpcds.customer:c_customer_sk=…`).
+  - **The store** batches inserts (500 rows or about 2 MB per statement), so each Iceberg commit isn't one row. It stores lists and dicts as canonical JSON and decodes them on read. A failed run's partial rows are deleted.
+  - **CLI:** `python -m helios_core.index ddl | init-tables`. `schema_impala.sql` is checked for drift.
+  - **Tests:** 6 in `test_index_schema.py`.
+
+  Original task: `helios_index` schema, in a shared module (`shared/helios_core/index/`) that replaces the documentation-only copy in `helios_ds/schemas.py`, with the same pydantic → Impala DDL generation as Helios-DS. Tables:
   - `crawl_runs`;
   - `assets` (asset version = SHA-256), `segments`;
   - `mentions` (surface form, locator, proposed type);
@@ -111,7 +188,29 @@ The crawler runs as a **Workbench Job in the Helios project** (`apps/helios/`). 
   - `ontology_versions`.
 
   Every row carries `crawl_run_id` and `ontology_version`. *Done when:* `init-tables` creates them in Impala and DDL drift is tested.
-- [ ] **CR-2** `helios_ds_s3` connector: enumerate READY datasets and their artifacts through the CR-0d view, fetch bytes by locator, verify SHA-256, and skip unchanged assets (incremental by asset version). *Done when:* it lists the 301 assets of the development corpus and a second crawl fetches nothing.
+- [x] **CR-2** *(Done 2026-10-01, uncommitted; run for real on the development corpus.)*
+  - **`apps/helios/crawler/connector.py`:**
+    - lists one dataset through `helios_ds.crawlable_artifacts`, with neutral columns only;
+    - fetches by recorded locator and never lists the bucket;
+    - verifies SHA-256 and size;
+    - retries transient storage errors up to 3 times with back-off, and fetches the first asset alone before going parallel (8 workers), so RAZ authentication is established.
+  - **Statuses:** `fetched`, `carried_forward`, `integrity_failed`, `missing` (no object) and `fetch_failed` (storage error after retries). New `status` and `status_detail` columns on `helios_index.assets`.
+  - **`apps/helios/crawler/crawl.py`:**
+    - records the run, with the active settings version and hash and the ontology version;
+    - plans incrementally against the last successful run (only reusable statuses carry forward, so failed assets are retried next time);
+    - hands each verified asset's bytes to the analyzers (CR-3 onward);
+    - removes a failed run's rows.
+  - **Job command:** `python -m apps.helios.crawler crawl --dataset <id> [--full]`.
+  - **Real runs as `srv_helios_crawler` on `1ca99f86…`:**
+    1. 301 listed, 293 fetched, 8 failed (concurrent first requests hit RAZ authentication errors; this led to the retry and warm-up);
+    2. 293 carried forward, 8 fetched;
+    3. **all 301 carried forward, nothing fetched;**
+    4. `--full` from cold: 301 fetched in 22 s, no failures.
+  - **Tests:** 6, in `test_crawler_connector.py`.
+  - **Note:** S3 reads run as the Workbench user who runs the Job (see CR-0d's S3 gap).
+  - **Carrying forward derived rows** (segments, mentions…) for unchanged assets arrives with CR-3.
+
+  Original task: `helios_ds_s3` connector: enumerate READY datasets and their artifacts through the CR-0d view, fetch bytes by locator, verify SHA-256, and skip unchanged assets (incremental by asset version). *Done when:* it lists the 301 assets of the development corpus and a second crawl fetches nothing.
 
 ### Understanding the text
 
@@ -147,7 +246,7 @@ The crawler runs as a **Workbench Job in the Helios project** (`apps/helios/`). 
   - golden questions at the retrieval level: for each question, are its required entities linked and its required evidence segments indexed? No-answer questions must have no linked documents.
 
   Results are written to a scores table and shown as a report. *Done when:* a scored report for crawl run × development corpus exists and is reproducible.
-- [ ] **CR-9** Visibility in the Helios UI: a crawl-runs page (run, counts, scores) and instance browsing on the Ontology page (from a class to its entities, then their mentions and evidence). *Done when:* you can go from `Customer` to a customer's linked documents and the passages that mention them.
+- [ ] **CR-9** Visibility in the Helios UI, **including the crawler settings editor** (CR-0e: view versions, edit as a validated form or JSON, save as a new version, activate): a crawl-runs page (run, counts, scores) and instance browsing on the Ontology page (from a class to its entities, then their mentions and evidence). *Done when:* you can go from `Customer` to a customer's linked documents and the passages that mention them.
 
 ### Later
 
@@ -156,6 +255,34 @@ The crawler runs as a **Workbench Job in the Helios project** (`apps/helios/`). 
 - [ ] **CR-12** Images (after the text crawler meets its targets; Helios-DS Phase 5).
 
 ---
+
+### Handover: rebuild the environment from nothing (after the first end-to-end crawl)
+
+*Added 2026-10-01.* Today, a newcomer with a different data lake could not easily rebuild the system:
+- **Scattered steps:** each database has its own script or command, and nothing gives the order.
+- **Hard-coded values:** several scripts hard-code this environment's bucket and paths.
+- **Undocumented manual work:** users, Ranger and RAZ policies, and data connections are described only inside task notes.
+
+- [ ] **HO-1** Runbook, `docs/environment-setup.md`: from an empty environment to a working system, in order, each step with a verification command:
+  - TPC-DS;
+  - the `helios_ds` and `helios_ground_truth` tables and the crawler view;
+  - `helios_index`;
+  - machine users, Ranger and RAZ grants, and data connections (exact grants, as tables);
+  - Workbench projects, runtimes, Jobs and Applications, with every environment variable;
+  - generating, reviewing and approving a corpus (and how to confirm it matches a recorded one, by manifest and question-set hashes; dataset IDs differ per lakehouse because the source fingerprint uses Iceberg snapshot IDs);
+  - publishing and activating the ontology;
+  - crawler settings.
+
+  *Done when:* someone with a fresh environment can follow it end to end without help.
+- [ ] **HO-2** One parameterised bootstrap command (e.g. `python -m setup.bootstrap`):
+  - creates every database and table from the existing DDL modules (Helios-DS, `helios_index`) in the right order;
+  - reads the bucket, prefix, data-connection and database names from settings, not code;
+  - is safe to rerun;
+  - `--check` reports what exists, what's missing, and which manual steps remain.
+
+  *Done when:* it builds an empty lakehouse to the same schema as this one, and `--check` passes.
+- [ ] **HO-3** Script the TPC-DS load end to end: generate (DuckDB `dsdgen`), upload to any bucket, stage, convert to Iceberg, compute stats. Generate `stage.sql` and `iceberg.sql` for any bucket instead of hard-coding `applied-ai-buk-d5eff1ab`. *Done when:* the load runs against a different bucket with no edits.
+- [ ] **HO-4** Export the Ranger policies (crawler, Helios API and generator identities) and RAZ rules as importable JSON, with the machine-user steps learned in CR-0d. *Done when:* an admin can import them and the access check passes.
 
 ## Decisions (made 2026-10-01)
 

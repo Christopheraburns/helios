@@ -3,7 +3,7 @@
 This module defines the Iceberg table schemas for:
 - helios_ds.*: Generation artifacts and metadata
 - helios_ground_truth.*: Hidden answer key
-- helios_index.*: What Helios crawler discovers (written by crawler, not generator)
+- helios_index.*: what the Helios crawler discovers (helios_core.index; never written here)
 """
 
 from typing import Any, Dict, List, Optional
@@ -302,67 +302,8 @@ class ExpectedResultRecord(BaseModel):
 
 
 # ============================================================================
-# helios_index.* schemas (Crawler-discovered knowledge)
+# helios_index.* (crawler-discovered knowledge)
 # ============================================================================
-# NOTE: These are written ONLY by the crawler, not the generator. They are
-# kept here as documentation of the contract; the generator never creates
-# or writes helios_index tables.
-# The generator creates ground truth; the crawler reads artifacts and
-# discovers what it can. The gap is measurable.
-
-
-class DiscoveredAssetRecord(BaseModel):
-    """Asset discovered by crawler."""
-
-    asset_id: str = Field(..., description="Stable identity for this logical artifact")
-    asset_type: str = Field(...)
-    source_locator: Dict[str, Any] = Field(...)
-    sha256: str = Field(..., description="Actual content hash from source")
-
-
-class DiscoveredSegmentRecord(BaseModel):
-    """Page, image region, time range, or message."""
-
-    segment_id: str = Field(...)
-    asset_id: str = Field(...)
-    segment_type: str = Field(..., description="page, image_region, time_range, message")
-    locator: Dict[str, Any] = Field(..., description="Segment-specific locator")
-
-
-class DiscoveredEntityMentionRecord(BaseModel):
-    """Extracted reference before resolution."""
-
-    mention_id: str = Field(...)
-    segment_id: str = Field(...)
-    surface_form: str = Field(...)
-    entity_type_proposed: Optional[str] = Field(None)
-
-
-class DiscoveredEntityRecord(BaseModel):
-    """Resolved enterprise entity."""
-
-    entity_id: str = Field(..., description="Discovered or inferred ID")
-    entity_type: str = Field(...)
-    canonical_name: str = Field(...)
-    confidence: float = Field(default=0.0)
-
-
-class DiscoveredRelationshipRecord(BaseModel):
-    """Discovered edge."""
-
-    relationship_id: str = Field(...)
-    source_entity_id: str = Field(...)
-    predicate: str = Field(...)
-    target_entity_id: str = Field(...)
-    evidence_segment_id: Optional[str] = Field(None)
-    confidence: float = Field(default=0.0)
-
-
-class DiscoveredClaimRecord(BaseModel):
-    """Extracted assertion."""
-
-    claim_id: str = Field(...)
-    claim_type: str = Field(...)
-    subject: str = Field(...)
-    obj: str = Field(...)
-    confidence: float = Field(default=0.0)
+# Written only by the Helios crawler, never by the generator. The record models
+# live in shared/helios_core/index/records.py; the generator creates the ground
+# truth, the crawler discovers what it can, and the gap is measured.

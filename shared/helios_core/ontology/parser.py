@@ -21,7 +21,7 @@ from typing import Any
 
 from linkml_runtime.utils.schemaview import SchemaView
 
-from helios_core.ontology.graph import OntologyGraph, GraphNode, GraphEdge
+from helios_core.ontology.graph import GraphEdge, GraphNode, OntologyGraph
 from helios_core.ontology.mapping import SourceMapping, ossie_elements
 
 
@@ -283,6 +283,7 @@ def _add_mappings(
                         "secondary": list(ids.secondary),
                         "display": list(ids.display),
                         "aliases": list(ids.aliases),
+                        "alias_templates": list(ids.alias_templates),
                         "attributes": [
                             f"{a.attribute}={','.join(a.columns)}" for a in entity.attributes
                         ],

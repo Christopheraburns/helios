@@ -14,6 +14,7 @@ Shape follows ontology/mappings/mapping.schema.yaml (class SourceMapping).
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,16 @@ class Identifiers(_Model):
     secondary: list[str] = Field(default_factory=list)
     display: list[str] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
+    # Composite names, e.g. "{c_salutation} {c_last_name}" (see template_columns).
+    alias_templates: list[str] = Field(default_factory=list)
+
+
+_TEMPLATE_FIELD = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def template_columns(template: str) -> list[str]:
+    """Columns referenced by an alias template, in order."""
+    return _TEMPLATE_FIELD.findall(template)
 
 
 class AttributeBinding(_Model):
@@ -98,6 +109,7 @@ class ClassIdentifiers(_Model):
     secondary: list[str]
     display: list[str]
     aliases: list[str]
+    alias_templates: list[str]
 
 
 class ResolutionConfig(_Model):
@@ -132,6 +144,7 @@ def resolution_config(mapping: SourceMapping) -> ResolutionConfig:
             secondary=list(ids.secondary),
             display=list(ids.display),
             aliases=list(ids.aliases),
+            alias_templates=list(ids.alias_templates),
         )
     return ResolutionConfig(
         model=mapping.model,

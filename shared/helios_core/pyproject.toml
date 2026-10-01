@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.0",
     "pyarrow>=14.0",
     "sqlalchemy>=2.0",
+    "pyyaml>=6.0",  # ontology mappings (helios_core.ontology.mapping)
 ]
 
 [project.optional-dependencies]
