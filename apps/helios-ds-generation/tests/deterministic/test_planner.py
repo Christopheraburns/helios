@@ -29,7 +29,11 @@ def _config(**overrides) -> DatasetConfig:
 
 
 def _plan(repo, templates, config=None):
-    return ScenarioPlanner(config or _config(), templates).plan(repo, DATASET)
+    # Plans every supported template, rendered or not: these tests cover the
+    # allocation algorithm across all story types.
+    return ScenarioPlanner(config or _config(), templates, renderable_only=False).plan(
+        repo, DATASET
+    )
 
 
 def test_planner_and_config_agree_on_scenario_types():
@@ -122,3 +126,28 @@ def test_duplicate_business_keys_are_rejected(tiny_store_returns):
         rank_candidates(
             tiny_store_returns + tiny_store_returns[:1], 42, "x", lambda r: r["business_key"]
         )
+
+
+def test_by_default_only_renderable_artifacts_are_planned(small_repo, templates):
+    # Only the return story has renderers today: every requested pdf, email and
+    # chat goes to it, and nothing is planned that can't be rendered.
+    config = _config(
+        artifacts={
+            "pdf": ArtifactConfig(target_count=7),
+            "email": ArtifactConfig(target_count=7),
+            "chat": ArtifactConfig(target_count=7),
+            "image": ArtifactConfig(target_count=4),
+        }
+    )
+    plan = ScenarioPlanner(config, templates).plan(small_repo, DATASET)
+    assert {s.scenario_type for s in plan.scenarios} == {"product_return_damage"}
+    assert all(len(s.artifacts) == 3 for s in plan.scenarios)
+    assert {t: c["planned"] for t, c in plan.artifact_counts.items()} == {
+        "pdf": 7,
+        "email": 7,
+        "chat": 7,
+        "image": 0,
+    }
+    for s in plan.scenarios:
+        for a in s.artifacts:
+            assert templates.get(a.template_id).has_renderer

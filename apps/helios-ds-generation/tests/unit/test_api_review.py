@@ -227,3 +227,25 @@ def test_delete_dataset_endpoint(review):
     assert client.get("/v1/datasets").json() == []
     assert client.get(f"/v1/datasets/{result.dataset_id}").status_code == 404
     assert client.post(url, json={}, headers=ALICE).status_code == 404
+
+
+def test_golden_questions_endpoint(review):
+    client, result = review
+    questions = client.get(f"/v1/datasets/{result.dataset_id}/golden-questions").json()
+    assert questions and {"structured", "unstructured", "no_answer"} <= {
+        q["kind"] for q in questions
+    }
+    assert all(q["answer"] and q["question"] for q in questions)
+    kinds = [q["kind"] for q in questions]
+    assert kinds == sorted(
+        kinds,
+        key=[
+            "structured",
+            "unstructured",
+            "resolution",
+            "joined",
+            "cross_document",
+            "no_answer",
+        ].index,
+    )
+    assert client.get("/v1/datasets/nope/golden-questions").status_code == 404

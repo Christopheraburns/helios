@@ -9,19 +9,20 @@ SchemaView resolves:
   - Inherited slots (is_a chains crossed layer boundaries)
   - Enum permissible values
 
-The parser records mappings from classes to Ossie elements (via the
-description tag), validates they exist, and flags broken_mappings.
+Mappings (ontology/mappings/*) are added as OssieElement and GlossaryTerm
+nodes with MAPS_TO / MATERIALISES_AS edges; elements missing from the Ossie
+model, unknown classes and version mismatches are reported as broken_mappings.
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Any
 
 from linkml_runtime.utils.schemaview import SchemaView
 
 from helios_core.ontology.graph import OntologyGraph, GraphNode, GraphEdge
+from helios_core.ontology.mapping import SourceMapping, ossie_elements
 
 
 @dataclass
@@ -32,15 +33,25 @@ class ParseResult:
     broken_mappings: list[dict[str, str]]
 
 
-def parse(schema_yaml_path: str, version: str = "0.1.0", ossie_model: dict[str, Any] | None = None) -> ParseResult:
+def parse(
+    schema_yaml_path: str,
+    version: str = "0.1.0",
+    ossie_model: dict[str, Any] | None = None,
+    mappings: list[SourceMapping] | None = None,
+) -> ParseResult:
     """Parse a LinkML schema into an OntologyGraph.
 
     Args:
         schema_yaml_path: Path to the root LinkML schema (e.g., extension.yaml).
                          SchemaView will resolve all imports.
         version: Ontology version string (e.g., "0.1.0"). Included in the graph.
-        ossie_model: Optional Ossie model spec (dict of {"entities.element_name": {...}, ...}).
-                    If provided, mappings are validated and broken ones recorded.
+        ossie_model: Optional Ossie model (the published model YAML as a dict).
+                    If provided, mapped elements are checked against it and
+                    missing ones recorded as broken.
+        mappings: Source mappings (ontology/mappings/*). Each one whose
+                  ontology_version is in the schema's import chain is added to
+                  the graph as OssieElement / GlossaryTerm nodes with MAPS_TO and
+                  MATERIALISES_AS edges.
 
     Returns:
         ParseResult with graph and broken_mappings list.
@@ -57,38 +68,18 @@ def parse(schema_yaml_path: str, version: str = "0.1.0", ossie_model: dict[str, 
         if cls is None:
             continue
 
-        # Extract ossie_element mapping from description.
-        # Format: "description: <text> [Ossie: entities.dim_customer]"
-        ossie_element = None
-        if cls.description:
-            match = re.search(r"\[Ossie:\s*([a-zA-Z0-9_.]+)\]", cls.description)
-            if match:
-                ossie_element = match.group(1)
-
-        nodes.append(GraphNode(label="Class", key=class_name))
-
-        # Record the mapping (even if broken).
-        if ossie_element:
-            is_broken = ossie_model and ossie_element not in ossie_model
-            if is_broken:
-                broken.append(
-                    {
-                        "class": class_name,
-                        "mapped_to": ossie_element,
-                        "status": "not_found",
-                    }
-                )
-
-            # MAPS_TO edge for the mapping.
-            edges.append(
-                GraphEdge(
-                    type="MAPS_TO",
-                    from_label="Class",
-                    from_key=class_name,
-                    to_label="OssieElement",
-                    to_key=ossie_element,
-                )
+        nodes.append(
+            GraphNode(
+                label="Class",
+                key=class_name,
+                properties={
+                    "layer": _layer(cls.from_schema),
+                    "kind": _kind(view, class_name),
+                    "abstract": bool(cls.abstract),
+                    "description": (cls.description or "").strip(),
+                },
             )
+        )
 
         # is_a parent.
         if cls.is_a:
@@ -128,6 +119,12 @@ def parse(schema_yaml_path: str, version: str = "0.1.0", ossie_model: dict[str, 
                         "slot_name": slot.name,
                         "multivalued": slot.multivalued or False,
                         "identifier": slot.identifier or False,
+                        "range": slot.range or "",
+                        # The class that declares the slot; induced copies on
+                        # subclasses are marked inherited, so viewers draw each
+                        # attribute once.
+                        "declared_by": _declared_by(view, class_name, slot.domain_of),
+                        "inherited": class_name not in (slot.domain_of or []),
                     },
                 )
             )
@@ -176,6 +173,8 @@ def parse(schema_yaml_path: str, version: str = "0.1.0", ossie_model: dict[str, 
                 )
             )
 
+    _add_mappings(view, mappings or [], ossie_model, nodes, edges, broken)
+
     graph = OntologyGraph(
         version=version,
         nodes=tuple(nodes),
@@ -183,3 +182,149 @@ def parse(schema_yaml_path: str, version: str = "0.1.0", ossie_model: dict[str, 
     )
 
     return ParseResult(graph=graph, broken_mappings=broken)
+
+
+# Ontology layer by the schema a class is defined in (core / packs/<domain> /
+# customers/<tenant>), matching the layout in ontology/README.md.
+def _layer(from_schema: str | None) -> str:
+    uri = from_schema or ""
+    if "/customers/" in uri:
+        return "customer"
+    if "/packs/" in uri:
+        return "pack"
+    return "core"
+
+
+# The core branch a class belongs to, most specific first.
+_KINDS = (
+    ("Relationship", "relationship"),
+    ("InformationAsset", "asset"),
+    ("Segment", "asset"),
+    ("Event", "event"),
+    ("EnterpriseEntity", "entity"),
+    ("SemanticConcept", "concept"),
+    ("Claim", "claim"),
+    ("OssieModelElement", "model"),
+)
+
+
+def _kind(view: SchemaView, class_name: str) -> str:
+    ancestors = set(view.class_ancestors(class_name))
+    for root, kind in _KINDS:
+        if root in ancestors:
+            return kind
+    return "other"
+
+
+def _declared_by(view: SchemaView, class_name: str, domain_of: list[str] | None) -> str:
+    """The nearest ancestor (or the class itself) that declares the slot."""
+    owners = set(domain_of or [])
+    for ancestor in view.class_ancestors(class_name):  # self first, then up the chain
+        if ancestor in owners:
+            return ancestor
+    return class_name
+
+
+
+def _add_mappings(
+    view: SchemaView,
+    mappings: list[SourceMapping],
+    ossie_model: dict[str, Any] | None,
+    nodes: list[GraphNode],
+    edges: list[GraphEdge],
+    broken: list[dict[str, str]],
+) -> None:
+    """Add each applicable mapping: Ossie elements, glossary terms and their edges."""
+    in_chain = {f"{s.name}@{s.version}" for s in view.schema_map.values()}
+    names_in_chain = {s.name for s in view.schema_map.values()}
+    classes = set(view.all_classes())
+    known = ossie_elements(ossie_model) if ossie_model else None
+    added: set[tuple[str, str]] = set()
+
+    def node(label: str, key: str, properties: dict[str, Any]) -> None:
+        if (label, key) not in added:
+            added.add((label, key))
+            nodes.append(GraphNode(label=label, key=key, properties=properties))
+
+    def element(name: str, kind: str, mapping: SourceMapping) -> None:
+        missing = known is not None and name not in known
+        if missing:
+            broken.append({"class": "", "mapped_to": name, "status": "not_found"})
+        node(
+            "OssieElement",
+            name,
+            {"model": mapping.model, "kind": kind, "status": "not_found" if missing else "ok"},
+        )
+
+    for mapping in mappings:
+        target = mapping.ontology_version
+        if target not in in_chain:
+            if target.split("@")[0] in names_in_chain:
+                broken.append({"class": "", "mapped_to": target, "status": "version_mismatch"})
+            continue
+        for entity in mapping.entities:
+            if entity.class_name not in classes:
+                broken.append(
+                    {"class": entity.class_name, "mapped_to": entity.ossie_element,
+                     "status": "unknown_class"}
+                )
+                continue
+            element(entity.ossie_element, "dataset", mapping)
+            ids = entity.identifiers
+            edges.append(
+                GraphEdge(
+                    type="MAPS_TO",
+                    from_label="OssieElement",
+                    from_key=entity.ossie_element,
+                    to_label="Class",
+                    to_key=entity.class_name,
+                    properties={
+                        "primary": list(ids.primary),
+                        "secondary": list(ids.secondary),
+                        "display": list(ids.display),
+                        "aliases": list(ids.aliases),
+                        "attributes": [
+                            f"{a.attribute}={','.join(a.columns)}" for a in entity.attributes
+                        ],
+                    },
+                )
+            )
+        for rel in mapping.relationships:
+            if rel.edge not in classes:
+                broken.append(
+                    {"class": rel.edge, "mapped_to": rel.ossie_relationship, "status": "unknown_class"}
+                )
+                continue
+            element(rel.ossie_relationship, "relationship", mapping)
+            edges.append(
+                GraphEdge(
+                    type="MATERIALISES_AS",
+                    from_label="OssieElement",
+                    from_key=rel.ossie_relationship,
+                    to_label="Class",
+                    to_key=rel.edge,
+                )
+            )
+        for concept in mapping.concepts:
+            if concept.class_name not in classes:
+                continue
+            node("GlossaryTerm", concept.glossary_term, {"model": mapping.model})
+            edges.append(
+                GraphEdge(
+                    type="MAPS_TO",
+                    from_label="GlossaryTerm",
+                    from_key=concept.glossary_term,
+                    to_label="Class",
+                    to_key=concept.class_name,
+                )
+            )
+            element(concept.ossie_element, "metric", mapping)
+            edges.append(
+                GraphEdge(
+                    type="MAPS_TO",
+                    from_label="OssieElement",
+                    from_key=concept.ossie_element,
+                    to_label="GlossaryTerm",
+                    to_key=concept.glossary_term,
+                )
+            )

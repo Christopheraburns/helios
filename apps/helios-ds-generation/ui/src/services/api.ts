@@ -177,6 +177,31 @@ export interface DecisionResult {
   superseded: string[]
 }
 
+export interface GoldenQuestion {
+  query_id: string
+  kind: string | null
+  difficulty: string | null
+  question: string
+  principal_id: string
+  result_type: string | null
+  answer: string | null
+  result: {
+    abstain?: boolean
+    claims?: { claim_id: string; claim_type: string; statement: string | null }[]
+    evidence?: { evidence_id: string; artifact_id: string; excerpt: string | null }[]
+    evidence_mention_tiers?: string[]
+    alias?: string
+    canonical_name?: string | null
+    items?: { item: string; store: string; rma: string }[]
+    [key: string]: unknown
+  }
+  required_structured: { table: string; sql: string; rows: unknown[][]; rows_sha256: string } | null
+  required_entities: string[]
+  required_artifacts: string[]
+  required_claims: string[]
+  required_evidence: string[]
+}
+
 export interface DeleteResult {
   dataset_id: string
   objects_deleted: number
@@ -381,6 +406,11 @@ export const api = {
     params.append('offset', String(options.offset ?? 0))
     params.append('limit', String(options.limit ?? 25))
     const response = await apiClient.get(`/datasets/${datasetId}/scenarios`, { params, ...SLOW })
+    return response.data
+  },
+
+  async listGoldenQuestions(datasetId: string): Promise<GoldenQuestion[]> {
+    const response = await apiClient.get(`/datasets/${datasetId}/golden-questions`, SLOW)
     return response.data
   },
 

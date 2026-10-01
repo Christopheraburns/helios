@@ -176,3 +176,27 @@ class TestContentHash:
         assert len(result.graph.content_hash) == 64
         # All hex digits.
         assert all(c in "0123456789abcdef" for c in result.graph.content_hash)
+
+
+class TestViewerProperties:
+    """O-4b: what the graph view needs from each node."""
+
+    def test_classes_carry_layer_kind_abstract_and_description(self):
+        result = parse(EXTENSION)
+        classes = {n.key: n.properties for n in result.graph.nodes if n.label == "Class"}
+        assert classes["Thing"]["layer"] == "core" and classes["Thing"]["abstract"] is True
+        assert classes["Customer"]["layer"] == "pack" and classes["Customer"]["kind"] == "entity"
+        assert classes["FranchisePartner"]["layer"] == "customer"
+        assert classes["Mentions"]["kind"] == "relationship"
+        assert classes["Document"]["kind"] == "asset"
+        assert classes["Return"]["kind"] == "event"
+        assert classes["Customer"]["description"].startswith("A retail customer")
+
+    def test_attributes_record_their_declaring_class(self):
+        result = parse(RETAIL)
+        attrs = {n.key: n.properties for n in result.graph.nodes if n.label == "Attribute"}
+        assert attrs["Customer#customer_id"]["declared_by"] == "Customer"
+        assert attrs["Customer#customer_id"]["inherited"] is False
+        assert attrs["Customer#affiliated_with"]["declared_by"] == "Person"
+        assert attrs["Customer#affiliated_with"]["inherited"] is True
+        assert attrs["Customer#entity_id"]["declared_by"] == "Thing"

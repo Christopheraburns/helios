@@ -12,17 +12,18 @@ dataset only reaches VALIDATING and IN_REVIEW once its artifacts exist.
 
 import platform
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Dict, Optional
 
 from .config import DatasetConfig
+from .golden import build_golden, check_golden, write_golden
 from .lakehouse import LakehouseSink
 from .lakehouse.sink import canonical_json
 from .lifecycle import DatasetLifecycle, DatasetState, ValidationFailed, utc_now, validate_published
 from .manifests import GenerationIdentity, GenerationManifest, manifest_key
 from .object_store import DeterminismIntegrityError, ObjectStore
 from .render.dataset import RenderSummary, render_dataset, renderable_artifact_ids
-from .scenarios import ScenarioPlanner, tables_for
+from .scenarios import ScenarioPlanner, renderable, tables_for
 from .schemas import DatasetRecord, GenerationRunRecord, ScenarioPlanRecord, TemplateVersionRecord
 from .templates import TemplateRegistry
 from .tpcds import TpcdsRepository, fingerprint_hash
@@ -49,6 +50,7 @@ class PublishResult:
     pending: Dict[str, int]  # artifact_type -> planned artifacts with no renderer yet
     ground_truth: Dict[str, int]  # helios_ground_truth table -> rows
     locators_unchecked: int  # locators not verifiable here (e.g. PDFs without pypdf)
+    golden: Dict[str, int] = field(default_factory=dict)  # golden questions per kind
 
     @property
     def total_rendered(self) -> int:
@@ -58,7 +60,7 @@ class PublishResult:
 def build_manifest(
     config: DatasetConfig, repository: TpcdsRepository, templates: TemplateRegistry
 ) -> GenerationManifest:
-    fingerprint = repository.fingerprint(tables_for(config))
+    fingerprint = repository.fingerprint(tables_for(config, renderable(templates)))
     identity = GenerationIdentity(
         config_hash=config.config_hash(),
         template_bundle_hash=templates.bundle_hash(),
@@ -165,24 +167,35 @@ def plan_and_publish(
         data = manifest.to_bytes()
         state = lifecycle.state(dataset_id)
 
-        def render_all() -> RenderSummary:
+        def render_all(new: bool) -> RenderSummary:
             if not render:
                 return RenderSummary()
-            return render_dataset(manifest, templates, store, sink, progress)
+            summary = render_dataset(manifest, templates, store, sink, progress)
+            if summary.truth is not None:
+                # Golden questions (C-08) are generated with the dataset, from its
+                # truth. A published dataset's questions are only compared: they
+                # never change (or appear) after the dataset leaves CREATING.
+                golden = build_golden(manifest, summary.truth, repository)
+                if new:
+                    write_golden(sink, dataset_id, golden)
+                else:
+                    check_golden(sink, dataset_id, golden)
+                summary.golden = golden.counts()
+            return summary
 
         if state in PUBLISHED_STATES:
             # Already published: this run is a reproducibility check only
             # (re-rendered artifacts must match the stored bytes exactly).
             put = store.put(manifest_key(dataset_id), data)
             _publish_rows(sink, manifest, put.sha256, put.locator)
-            summary = render_all()
+            summary = render_all(new=False)
             newly_published = False
         else:
             if state in (None, DatasetState.FAILED, DatasetState.DELETED):
                 lifecycle.transition(dataset_id, DatasetState.CREATING, ACTOR, run_id)
             put = store.put(manifest_key(dataset_id), data)
             newly_published = _publish_rows(sink, manifest, put.sha256, put.locator)
-            summary = render_all()
+            summary = render_all(new=True)
             if lifecycle.state(dataset_id) is DatasetState.CREATING:
                 lifecycle.transition(dataset_id, DatasetState.VALIDATING, ACTOR, run_id)
             expected = renderable_artifact_ids(manifest, templates) if render else None
@@ -206,6 +219,7 @@ def plan_and_publish(
             pending=summary.pending,
             ground_truth=summary.ground_truth,
             locators_unchecked=summary.locators_unchecked,
+            golden=summary.golden,
         )
     except Exception as exc:
         if dataset_id != "unknown" and lifecycle.state(dataset_id) in (

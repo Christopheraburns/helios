@@ -72,6 +72,11 @@ class Template:
     def template_version(self) -> str:
         return self.spec.template_version
 
+    @property
+    def has_renderer(self) -> bool:
+        """Whether the template directory has a ``renderer.py`` yet."""
+        return (self.path / "renderer.py").is_file()
+
 
 def content_hash(directory: Path) -> str:
     """SHA-256 over (relative path, file SHA-256) for every file, sorted by path."""

@@ -43,7 +43,7 @@ def _load_module(template: Template) -> ModuleType:
 
 
 def has_renderer(template: Template) -> bool:
-    return (template.path / "renderer.py").is_file()
+    return template.has_renderer
 
 
 def renderer_for(template: Template) -> Optional[Renderer]:

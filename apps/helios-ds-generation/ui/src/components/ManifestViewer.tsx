@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArtifactPreview } from './ArtifactPreview'
 import { AuditTrail } from './AuditTrail'
+import { GoldenQuestions } from './GoldenQuestions'
 import {
   api,
   ArtifactSummary,
@@ -19,7 +20,7 @@ const SCENARIO_LABELS: Record<string, string> = {
 
 const PAGE_SIZE = 25
 
-type Tab = 'summary' | 'scenarios' | 'artifacts' | 'source' | 'templates' | 'config'
+type Tab = 'summary' | 'scenarios' | 'artifacts' | 'questions' | 'source' | 'templates' | 'config'
 
 export const scenarioLabel = (type: string) => SCENARIO_LABELS[type] ?? type
 
@@ -107,13 +108,15 @@ export function ManifestViewer({ datasetId }: ManifestViewerProps) {
       </div>
 
       <div className="tabs">
-        {(['summary', 'scenarios', 'artifacts', 'source', 'templates', 'config'] as Tab[]).map(t => (
+        {(['summary', 'scenarios', 'artifacts', 'questions', 'source', 'templates', 'config'] as Tab[]).map(t => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
             {t === 'scenarios'
               ? `Scenarios (${dataset.scenario_count})`
               : t === 'artifacts'
                 ? `Artifacts (${dataset.rendered_artifact_count})`
-                : t[0].toUpperCase() + t.slice(1)}
+                : t === 'questions'
+                  ? 'Golden questions'
+                  : t[0].toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
@@ -123,6 +126,7 @@ export function ManifestViewer({ datasetId }: ManifestViewerProps) {
         <ScenariosTab datasetId={datasetId} manifest={manifest} artifacts={artifacts} />
       )}
       {tab === 'artifacts' && <ArtifactsTab artifacts={Object.values(artifacts)} />}
+      {tab === 'questions' && <GoldenQuestions datasetId={datasetId} />}
       {tab === 'source' && <SourceTab manifest={manifest} />}
       {tab === 'templates' && <TemplatesTab manifest={manifest} />}
       {tab === 'config' && <pre className="json">{JSON.stringify(manifest.config, null, 2)}</pre>}

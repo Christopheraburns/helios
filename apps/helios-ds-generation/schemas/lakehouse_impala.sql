@@ -221,7 +221,10 @@ CREATE TABLE IF NOT EXISTS helios_ground_truth.expected_queries (
   required_structured STRING,
   required_entities STRING,
   required_artifacts STRING,
-  required_claims STRING
+  required_claims STRING,
+  kind STRING,
+  difficulty STRING,
+  required_evidence STRING
 )
 STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
 

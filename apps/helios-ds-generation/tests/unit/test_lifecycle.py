@@ -149,3 +149,23 @@ def test_regenerating_a_superseded_dataset_is_a_reproducibility_check(
     again = plan_and_publish(tiny_config, small_repo, templates, sink, store)
     assert again.dataset_id == first.dataset_id and not again.newly_published
     assert lifecycle.state(first.dataset_id) is S.SUPERSEDED
+
+
+# --- C-07 (kept part): approval re-reads every artifact ------------------------
+
+
+@pytest.mark.parametrize("damage", ["tamper", "delete"])
+def test_a_corrupted_artifact_blocks_approval(damage, make_env, tiny_config, small_repo, templates):
+    sink, store = make_env("a")
+    result = plan_and_publish(tiny_config, small_repo, templates, sink, store)
+    artifact = sink.read_dataset("helios_ds.artifacts", result.dataset_id)[0]
+    path = store.root / artifact.source_locator["key"]
+    path.chmod(0o644)
+    if damage == "tamper":
+        path.write_bytes(b"not the artifact")
+    else:
+        path.unlink()
+    expected = "do not match their recorded SHA-256" if damage == "tamper" else "missing"
+    with pytest.raises(ValidationFailed, match=expected):
+        DatasetLifecycle(sink).approve(result.dataset_id, store, "user:erin")
+    assert DatasetLifecycle(sink).state(result.dataset_id) is S.IN_REVIEW

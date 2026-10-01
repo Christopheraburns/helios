@@ -114,6 +114,14 @@ Browser ──► Helios UI (new Ontology page)
 
   *Done when:* contract tests pass, and requests without `ontology.read` get 403.
 - [ ] **O-4** Ontology page in the Helios UI, as described under Viewer. *Done when:* a user can browse core → retail → tenant, open any class in the inspector, and see every Ossie mapping, with broken mappings highlighted.
+- [x] **O-4b** *(Added and built 2026-10-01; graph view, uncommitted.)* The first O-4 page was a class list plus a detail panel; it drew no graph. The page now draws the ontology as a graph with React Flow (`features/ontology/`):
+  - the `is_a` forest laid out left to right (arrowhead at the parent, as in UML);
+  - attribute ranges drawn as dashed orange edges between classes, each attribute once, from the class that declares it;
+  - classes coloured by layer, with abstract classes dashed;
+  - layer filters, a toggle for the relationship edges, and search highlighting;
+  - clicking a class focuses its neighbourhood and opens an inspector with description, parents, subclasses, relationships and attributes (inherited ones marked "from X").
+
+  The parser now records each class's `layer`, `kind`, `abstract` and `description`, and each attribute's `declared_by` and `inherited`. That changes the content hash, so **republish the ontology** to see layers and kinds. Broken-mapping highlighting arrived with CR-0b (2026-10-01): the parser reads `ontology/mappings/`, the inspector lists each class's Ossie mappings, and classes with a missing element are outlined in red. *Done when:* the hierarchy and relationships are visible without selecting anything, and selecting a class shows its connections.
 - [ ] **O-5** Docs: deployment steps for the Helios Graph Application (runtime, entry point, environment variables, token, resources) in `docs/ui-deployment.md` and the in-app documentation. *Done when:* someone else can deploy it from the docs alone.
 
 ## Problems in the ontology files to fix before the crawler depends on them

@@ -28,7 +28,7 @@ from helios_ds.deletion import DatasetGone, delete_dataset
 from helios_ds.lifecycle import InvalidTransition
 from helios_ds.manifests import GenerationManifest
 from helios_ds.scenarios import SCENARIOS, ArtifactPlan, ScenarioPlan
-from helios_ds.schemas import ArtifactRecord
+from helios_ds.schemas import ArtifactRecord, ExpectedQueryRecord, ExpectedResultRecord
 
 from .identity import require_user
 from .service import GenerationService, get_service
@@ -400,6 +400,65 @@ def get_artifact_content(
             "Content-Disposition": f'{disposition}; filename="{record.artifact_id}.{extension}"'
         },
     )
+
+
+class GoldenQuestion(BaseModel):
+    query_id: str
+    kind: Optional[str]
+    difficulty: Optional[str]
+    question: str
+    principal_id: str
+    result_type: Optional[str]
+    answer: Optional[str]
+    result: Dict[str, Any]
+    required_structured: Optional[Dict[str, Any]]
+    required_entities: List[str]
+    required_artifacts: List[str]
+    required_claims: List[str]
+    required_evidence: List[str]
+
+
+KIND_ORDER = ("structured", "unstructured", "resolution", "joined", "cross_document", "no_answer")
+
+
+@router.get("/datasets/{dataset_id}/golden-questions", response_model=List[GoldenQuestion])
+def list_golden_questions(
+    dataset_id: str, service: GenerationService = Depends(get_service)
+) -> List[GoldenQuestion]:
+    """The dataset's golden questions with their answers (task C-08). Answer key:
+    generation project only."""
+    _info(service, dataset_id)
+    sink = service.jobs.sink
+    results = {
+        r.query_id: r
+        for r in sink.read_dataset("helios_ground_truth.expected_results", dataset_id)
+        if isinstance(r, ExpectedResultRecord)
+    }
+    questions = []
+    for q in sink.read_dataset("helios_ground_truth.expected_queries", dataset_id):
+        if not isinstance(q, ExpectedQueryRecord):
+            continue
+        result = results.get(q.query_id)
+        data = result.result_data if result else {}
+        questions.append(
+            GoldenQuestion(
+                query_id=q.query_id,
+                kind=q.kind,
+                difficulty=q.difficulty,
+                question=q.question,
+                principal_id=q.principal_id,
+                result_type=result.result_type if result else None,
+                answer=data.get("answer"),
+                result=data,
+                required_structured=q.required_structured,
+                required_entities=q.required_entities,
+                required_artifacts=q.required_artifacts,
+                required_claims=q.required_claims,
+                required_evidence=q.required_evidence,
+            )
+        )
+    order = {k: i for i, k in enumerate(KIND_ORDER)}
+    return sorted(questions, key=lambda q: (order.get(q.kind or "", 99), q.question))
 
 
 class DeleteRequest(BaseModel):

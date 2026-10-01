@@ -1,12 +1,14 @@
-# Ossie -> ontology mapping for the TPC-DS sample model.
+# Ossie -> ontology mapping for the published TPC-DS model.
 # Validated against ../mapping.schema.yaml (class SourceMapping).
+# Element names follow models/published/tpcds.ossie.yaml: datasets are named
+# after TPC-DS tables, relationships "<table>__<column>__<target>", metrics by name.
 # This is the file propose_ontology will generate and the console review UI will approve.
 
 model: tpcds.ossie.yaml
-ontology_version: helios_retail@0.1.0
+ontology_version: helios_retail@0.2.0
 
 entities:
-  - ossie_element: dim_customer
+  - ossie_element: customer
     class: Customer
     identifiers:
       primary: [c_customer_sk]
@@ -19,13 +21,13 @@ entities:
       - attribute: customer_id
         columns: [c_customer_id]
 
-  - ossie_element: dim_store
+  - ossie_element: store
     class: Store
     identifiers:
       primary: [s_store_sk]
       secondary: [s_store_id]
       display: [s_store_name]
-      aliases: [s_store_name, s_market_desc]
+      aliases: []
     attributes:
       - attribute: store_id
         columns: [s_store_id]
@@ -34,7 +36,7 @@ entities:
       - attribute: market
         columns: [s_market_id]
 
-  - ossie_element: dim_warehouse
+  - ossie_element: warehouse
     class: Warehouse
     identifiers:
       primary: [w_warehouse_sk]
@@ -46,24 +48,48 @@ entities:
       - attribute: address
         columns: [w_street_number, w_street_name, w_city, w_state, w_zip]
 
-  - ossie_element: dim_item
+  - ossie_element: item
     class: Item
     identifiers:
       primary: [i_item_sk]
       secondary: [i_item_id]
       display: [i_product_name]
-      aliases: [i_item_desc]
+      aliases: []
     attributes:
       - attribute: item_id
         columns: [i_item_id]
       - attribute: sku
         columns: [i_item_id]
-      - attribute: brand
-        columns: [i_brand]
       - attribute: category
         columns: [i_category]
+      - attribute: color
+        columns: [i_color]
+      - attribute: item_class
+        columns: [i_class]
 
-  - ossie_element: dim_promotion
+  # Brand is a label on the item table, grouped by brand ID.
+  - ossie_element: item
+    class: Brand
+    identifiers:
+      primary: [i_brand_id]
+      display: [i_brand]
+      aliases: [i_brand]
+    attributes:
+      - attribute: brand_id
+        columns: [i_brand_id]
+
+  - ossie_element: reason
+    class: Reason
+    identifiers:
+      primary: [r_reason_sk]
+      secondary: [r_reason_id]
+      display: [r_reason_desc]
+      aliases: [r_reason_desc]
+    attributes:
+      - attribute: reason_id
+        columns: [r_reason_id]
+
+  - ossie_element: promotion
     class: Promotion
     identifiers:
       primary: [p_promo_sk]
@@ -75,32 +101,60 @@ entities:
       - attribute: channel
         columns: [p_channel_email, p_channel_catalog, p_channel_tv]
 
+  - ossie_element: store_sales
+    class: Sale
+    identifiers:
+      primary: [ss_ticket_number, ss_item_sk]
+      secondary: [ss_ticket_number]
+      display: [ss_ticket_number]
+    attributes:
+      - attribute: ticket_number
+        columns: [ss_ticket_number]
+      - attribute: amount
+        columns: [ss_net_paid]
+
+  - ossie_element: store_returns
+    class: Return
+    identifiers:
+      primary: [sr_ticket_number, sr_item_sk]
+      secondary: [sr_ticket_number]
+      display: [sr_ticket_number]
+    attributes:
+      - attribute: amount
+        columns: [sr_return_amt]
+
 relationships:
-  - ossie_relationship: "store_sales.ss_customer_sk -> dim_customer"
+  - ossie_relationship: store_sales__ss_customer_sk__customer
     edge: PartyTo
-  - ossie_relationship: "store_sales.ss_store_sk -> dim_store"
+  - ossie_relationship: store_sales__ss_store_sk__store
     edge: LocatedAt
-  - ossie_relationship: "store_sales.ss_item_sk -> dim_item"
-    edge: Mentions
-  - ossie_relationship: "store_returns.sr_customer_sk -> dim_customer"
+  - ossie_relationship: store_sales__ss_item_sk__item
+    edge: Contains
+  - ossie_relationship: store_returns__sr_customer_sk__customer
     edge: PartyTo
+  - ossie_relationship: store_returns__sr_store_sk__store
+    edge: LocatedAt
+  - ossie_relationship: store_returns__sr_item_sk__item
+    edge: Contains
+  - ossie_relationship: store_returns__sr_reason_sk__reason
+    edge: HasReason
+  # Return -> Sale (ReturnOf) has no Ossie relationship: TPC-DS joins them on
+  # (ticket number, item), not a foreign key. The crawler derives it from the
+  # shared ticket number.
 
 concepts:
   - glossary_term: "Net Revenue"
     class: SemanticConcept
-    ossie_element: measures.net_revenue
-  - glossary_term: "Return Rate"
+    ossie_element: metrics.store_sales_revenue
+  - glossary_term: "Return Amount"
     class: SemanticConcept
-    ossie_element: measures.return_rate
+    ossie_element: metrics.store_returns_amount
 
 resolution:
   scope:
-    - source_pattern: "s3://helios-ds/customers/**"
-      candidate_classes: [Customer, Contract]
-    - source_pattern: "s3://helios-ds/stores/**"
-      candidate_classes: [Store, Warehouse, Equipment]
-    - source_pattern: "s3://helios-ds/products/**"
-      candidate_classes: [Item, Promotion]
+    # The Helios-DS corpus: PDF, email and chat about store returns.
+    - source_pattern: "s3a://applied-ai-buk-d5eff1ab/helios-db/source/datasets/**"
+      candidate_classes: [Customer, Item, Brand, Store, Sale, Return, Reason]
   thresholds:
     alias_min_score: 0.92
     fuzzy_min_score: 0.85

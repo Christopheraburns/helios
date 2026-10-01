@@ -282,6 +282,13 @@ class ExpectedQueryRecord(BaseModel):
     required_entities: List[str] = Field(default_factory=list)
     required_artifacts: List[str] = Field(default_factory=list)
     required_claims: List[str] = Field(default_factory=list)
+    # Added in C-08; appended so the table migrates additively.
+    kind: Optional[str] = Field(
+        None,
+        description="structured, unstructured, resolution, joined, cross_document or no_answer",
+    )
+    difficulty: Optional[str] = Field(None, description="Tier of the entity reference asked by")
+    required_evidence: List[str] = Field(default_factory=list, description="Evidence row IDs")
 
 
 class ExpectedResultRecord(BaseModel):
