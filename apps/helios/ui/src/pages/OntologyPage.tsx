@@ -6,6 +6,7 @@ import type {
 } from "../api/client";
 import { ErrorState, LoadingState } from "../components/AsyncState";
 import OntologyGraphView, { LAYER_COLOURS } from "../features/ontology/OntologyGraphView";
+import PublishPanel from "../features/ontology/PublishPanel";
 import {
   brokenClasses,
   buildOntologyGraphModel,
@@ -25,7 +26,13 @@ function message(err: unknown, fallback: string): string {
 }
 
 export default function OntologyPage({ context }: OntologyPageProps) {
-  const { loadOntologyVersions, loadOntologyGraph, loadOntologyClass } = context;
+  const { loadOntologyVersions, loadOntologyGraph, loadOntologyClass, ontologyClient, selectedOrganizationId } =
+    context;
+  const [showPublish, setShowPublish] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [preferVersion, setPreferVersion] = useState<string | null>(null);
+  const [activating, setActivating] = useState(false);
+  const [activateError, setActivateError] = useState<string | null>(null);
   const [versions, setVersions] = useState<OntologyVersionSummary[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
   const [graph, setGraph] = useState<OntologyGraphPayload | null>(null);
@@ -46,7 +53,8 @@ export default function OntologyPage({ context }: OntologyPageProps) {
         const data = await loadOntologyVersions();
         if (cancelled) return;
         setVersions(data);
-        const active = data.find((v) => v.is_active) ?? data[0];
+        const preferred = preferVersion ? data.find((v) => v.version === preferVersion) : undefined;
+        const active = preferred ?? data.find((v) => v.is_active) ?? data[0];
         if (active) setSelectedVersion(active.version);
       } catch (err) {
         if (!cancelled) setError(message(err, "Failed to load versions"));
@@ -57,7 +65,39 @@ export default function OntologyPage({ context }: OntologyPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [loadOntologyVersions]);
+    // preferVersion is read when a reload is requested; it is not a trigger itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadOntologyVersions, reloadKey]);
+
+  const afterPublish = (version: string) => {
+    setPreferVersion(version);
+    setReloadKey((k) => k + 1);
+  };
+
+  const selectedSummary = versions.find((v) => v.version === selectedVersion) ?? null;
+
+  const activateSelected = async () => {
+    if (!selectedVersion) return;
+    setActivating(true);
+    setActivateError(null);
+    try {
+      await ontologyClient().activateOntology!(selectedVersion, selectedOrganizationId);
+      afterPublish(selectedVersion);
+    } catch (err) {
+      setActivateError(message(err, "Activation failed"));
+    } finally {
+      setActivating(false);
+    }
+  };
+
+  const publishPanel = showPublish && (
+    <PublishPanel
+      api={ontologyClient}
+      organizationId={selectedOrganizationId}
+      onPublished={afterPublish}
+      onClose={() => setShowPublish(false)}
+    />
+  );
 
   useEffect(() => {
     if (!selectedVersion) return;
@@ -154,7 +194,11 @@ export default function OntologyPage({ context }: OntologyPageProps) {
         <div className="empty-state">
           <h2>No ontology versions published</h2>
           <p>Publish a LinkML schema to get started.</p>
+          <button className="publish-button publish-button--primary" onClick={() => setShowPublish(true)}>
+            Publish a version…
+          </button>
         </div>
+        {publishPanel}
       </div>
     );
   }
@@ -162,7 +206,13 @@ export default function OntologyPage({ context }: OntologyPageProps) {
   return (
     <div className="ontology-page">
       <div className="ontology-header">
-        <h1>Ontology Browser</h1>
+        <div className="ontology-title-row">
+          <h1>Ontology Browser</h1>
+          <button className="publish-button" onClick={() => setShowPublish((v) => !v)}>
+            Publish a version…
+          </button>
+        </div>
+        {publishPanel}
 
         <div className="ontology-toolbar">
           <div className="version-selector">
@@ -173,13 +223,45 @@ export default function OntologyPage({ context }: OntologyPageProps) {
               onChange={(e) => setSelectedVersion(e.target.value)}
             >
               {versions.map((v) => (
-                <option key={v.version} value={v.version}>
+                <option key={`${v.version}:${v.content_hash}`} value={v.version}>
                   {v.version}
                   {v.is_active ? " (active)" : ""}
+                  {v.in_lakehouse === false ? " (not recorded)" : ""}
                   {` • ${v.node_count} nodes, ${v.edge_count} edges`}
                 </option>
               ))}
             </select>
+            {selectedSummary && (
+              <span className="version-meta">
+                {selectedSummary.in_lakehouse === false ? (
+                  <span className="badge broken" title="Published to the local cache before versions were recorded in the lakehouse">
+                    not recorded: republish to use it
+                  </span>
+                ) : (
+                  <>
+                    {selectedSummary.published_by && (
+                      <span className="muted">
+                        published by {selectedSummary.published_by}
+                        {selectedSummary.published_at
+                          ? ` on ${new Date(selectedSummary.published_at).toLocaleString()}`
+                          : ""}
+                      </span>
+                    )}
+                    {selectedSummary.is_active ? (
+                      <span className="badge">active</span>
+                    ) : (
+                      <button
+                        className="publish-button"
+                        disabled={activating}
+                        onClick={() => void activateSelected()}
+                      >
+                        Activate {selectedSummary.version}
+                      </button>
+                    )}
+                  </>
+                )}
+              </span>
+            )}
           </div>
 
           <fieldset className="layer-filter">
@@ -212,6 +294,7 @@ export default function OntologyPage({ context }: OntologyPageProps) {
             Show relationships (attribute ranges)
           </label>
         </div>
+        {activateError && <pre className="publish-error">{activateError}</pre>}
         <p className="ontology-legend">
           Grey arrows: <strong>is_a</strong> (arrow at the parent). Orange dashed: an attribute
           whose values are another class (<code>*</code> = many). Click a class to focus on its

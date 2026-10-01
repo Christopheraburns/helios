@@ -1050,6 +1050,53 @@ export interface OntologyVersionSummary {
   edge_count: number;
   enum_count: number;
   is_active: boolean;
+  /** Recorded in helios_index (O-6); false for versions only in the local cache. */
+  in_lakehouse?: boolean;
+  published_at?: string | null;
+  published_by?: string | null;
+  schema_path?: string | null;
+}
+
+export interface OntologySchema {
+  schema_path: string;
+  name: string | null;
+  title: string | null;
+  version: string;
+  layer: "core" | "pack" | "customer";
+}
+
+export interface OntologyCheckResult {
+  version: string;
+  content_hash: string;
+  node_count: number;
+  edge_count: number;
+  enum_count: number;
+  class_count: number;
+  schema_path: string;
+  broken_mappings: Array<Record<string, string>>;
+  /** new; identical (publishing is a no-op); conflict (the version exists with other content). */
+  status: "new" | "identical" | "conflict";
+  existing_content_hash: string | null;
+  changes: {
+    compared_with: string;
+    classes_added: string[];
+    classes_removed: string[];
+    mappings_added: string[];
+    mappings_removed: string[];
+    attributes_added: number;
+    attributes_removed: number;
+  } | null;
+  lakehouse: boolean;
+}
+
+export interface OntologyPublishResult {
+  version: string;
+  content_hash: string;
+  node_count: number;
+  edge_count: number;
+  enum_count: number;
+  broken_mappings: Array<Record<string, string>>;
+  recorded_in_lakehouse: boolean;
 }
 
 export interface OntologyGraphPayload {
@@ -1077,6 +1124,10 @@ export interface HeliosApi {
   health(): Promise<ApiHealth>;
   diagnostics(): Promise<ApiDiagnostics>;
   ontologyVersions?(): Promise<OntologyVersionSummary[]>;
+  ontologySchemas?(): Promise<OntologySchema[]>;
+  checkOntology?(version: string, schemaPath: string, organizationId: string): Promise<OntologyCheckResult>;
+  publishOntology?(version: string, schemaPath: string, organizationId: string): Promise<OntologyPublishResult>;
+  activateOntology?(version: string, organizationId: string): Promise<{ version: string }>;
   ontologyGraph?(version: string): Promise<OntologyGraphPayload>;
   ontologyClass?(version: string, className: string): Promise<OntologyClassDetail>;
   crawlRuns?(source?: string): Promise<CrawlRunSummary[]>;
@@ -1332,6 +1383,30 @@ export class HeliosApiClient implements HeliosApi {
   ontologyVersions(): Promise<OntologyVersionSummary[]> {
     return this.get<OntologyVersionSummary[]>("/api/v1/ontology/versions");
   }
+  ontologySchemas(): Promise<OntologySchema[]> {
+    return this.get<OntologySchema[]>("/api/v1/ontology/schemas");
+  }
+
+  checkOntology(version: string, schemaPath: string, organizationId: string): Promise<OntologyCheckResult> {
+    return this.post<OntologyCheckResult>(
+      `/api/v1/ontology:check?organization_id=${encodeURIComponent(organizationId)}`,
+      { version, schema_path: schemaPath },
+    );
+  }
+
+  publishOntology(version: string, schemaPath: string, organizationId: string): Promise<OntologyPublishResult> {
+    return this.post<OntologyPublishResult>(
+      `/api/v1/ontology:publish?organization_id=${encodeURIComponent(organizationId)}`,
+      { version, schema_path: schemaPath },
+    );
+  }
+
+  activateOntology(version: string, organizationId: string): Promise<{ version: string }> {
+    return this.post<{ version: string }>(
+      `/api/v1/ontology/${encodeURIComponent(version)}:activate?organization_id=${encodeURIComponent(organizationId)}`,
+    );
+  }
+
 
   ontologyGraph(version: string): Promise<OntologyGraphPayload> {
     return this.get<OntologyGraphPayload>(

@@ -126,6 +126,24 @@ Browser ──► Helios UI (new Ontology page)
   The parser now records each class's `layer`, `kind`, `abstract` and `description`, and each attribute's `declared_by` and `inherited`. That changes the content hash, so **republish the ontology** to see layers and kinds. Broken-mapping highlighting arrived with CR-0b (2026-10-01): the parser reads `ontology/mappings/`, the inspector lists each class's Ossie mappings, and classes with a missing element are outlined in red. *Done when:* the hierarchy and relationships are visible without selecting anything, and selecting a class shows its connections.
 - [x] **O-5** *(Done: `6f5cb83`, `docs/ontology-deployment.md`.)* Docs: deployment steps for the Helios Graph Application (runtime, entry point, environment variables, token, resources) in `docs/ui-deployment.md` and the in-app documentation. *Done when:* someone else can deploy it from the docs alone.
 
+- [x] **O-6** *(Added and built 2026-10-01, uncommitted.)* Publish and activate from the Ontology page.
+
+  **API (`apps/helios/console/ontology.py`):**
+  - `GET /api/v1/ontology/schemas` lists the publishable root schemas, most complete first.
+  - `POST /api/v1/ontology:check` is a dry run. It reports counts and broken mappings, whether the version number is new, identical or a conflict, and the classes and mappings added or removed compared with the active version. It writes nothing.
+  - `:publish` and `/{version}:activate` now require **`ontology.edit` in the selected organization**: 401 without an identity, 400 without an organization, 403 without the role.
+  - The schema path must sit inside `ontology/`.
+  - `GET /versions` lists the lakehouse record, with who published each version and when, and which is active. Versions found only in the local cache (published before CR-0c, such as 0.1.0) are listed as "not recorded" and can't be activated until republished.
+  - Graphs load the content the lakehouse records for a version. A version with several cached contents is refused (409) instead of picking one at random.
+
+  **UI:**
+  - **Publish a version…** opens a panel: choose the root schema, enter a version (prefilled from the schema), **Check**, **Publish**, **Activate**. A conflicting version number is shown and publishing is refused.
+  - The version selector shows "(active)" and "(not recorded)", who published the selected version and when, and an **Activate** button.
+
+  **Tests:** 5 API tests and 3 panel tests.
+
+  *Done when:* a user can publish 0.2.0 and activate it from the UI, and the crawler's runs record it.
+
 ## Problems in the ontology files to fix before the crawler depends on them
 
 1. **The mapping doesn't match the published Ossie model.** `mappings/ossie/tpcds.yaml` uses `dim_customer`, `dim_store`, `dim_warehouse`, `dim_item` and `dim_promotion`, plus measures `net_revenue` and `return_rate`. `models/published/tpcds.ossie.yaml` uses `customer`, `store_sales` and `store_sales_revenue`, and has no `net_revenue` or `return_rate`.
