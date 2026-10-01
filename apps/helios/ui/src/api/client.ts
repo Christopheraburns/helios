@@ -974,7 +974,73 @@ function apiErrorMessage(payload: unknown): string | null {
       return typeof item === "string";
     }).join("; ");
   }
+  if (
+    detail &&
+    typeof detail === "object" &&
+    "problems" in detail &&
+    Array.isArray(detail.problems)
+  ) {
+    const message = "message" in detail && typeof detail.message === "string" ? detail.message : "";
+    const problems = detail.problems.filter((item): item is string => typeof item === "string");
+    return [message, ...problems].filter(Boolean).join("\n• ");
+  }
   return null;
+}
+
+export interface CrawlRunSummary {
+  crawl_run_id: string;
+  connector: string;
+  source: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  actor: string;
+  ontology_version: string;
+  crawler_version: string;
+  settings_version: number | null;
+  settings_hash: string | null;
+  settings: Record<string, unknown>;
+  counts: Record<string, number>;
+  error: string | null;
+}
+
+export interface CrawlRunAsset {
+  asset_id: string;
+  asset_version_id: string;
+  ontology_class: string;
+  mime_type: string;
+  status: string;
+  status_detail: string;
+  size_bytes: number;
+  semantic_timestamp: string | null;
+  object_key: string | null;
+}
+
+export interface CrawlRunDetail extends CrawlRunSummary {
+  asset_counts: { by_status: Record<string, number>; by_class: Record<string, number> };
+  assets: CrawlRunAsset[];
+}
+
+export interface CrawlerSettingsVersion {
+  version: number;
+  content_hash: string;
+  created_at: string;
+  created_by: string;
+  note: string;
+  active: boolean;
+}
+
+export interface CrawlerSettingsState {
+  active_version: number | null;
+  using_defaults: boolean;
+  content_hash: string;
+  settings: Record<string, unknown>;
+  versions: CrawlerSettingsVersion[];
+}
+
+export interface CrawlerSettingsSaveResult extends CrawlerSettingsVersion {
+  created: boolean;
+  warnings: string[];
 }
 
 export interface OntologyVersionSummary {
@@ -1013,6 +1079,18 @@ export interface HeliosApi {
   ontologyVersions?(): Promise<OntologyVersionSummary[]>;
   ontologyGraph?(version: string): Promise<OntologyGraphPayload>;
   ontologyClass?(version: string, className: string): Promise<OntologyClassDetail>;
+  crawlRuns?(source?: string): Promise<CrawlRunSummary[]>;
+  crawlRun?(crawlRunId: string): Promise<CrawlRunDetail>;
+  crawlerSettings?(): Promise<CrawlerSettingsState>;
+  crawlerSettingsDefaults?(): Promise<{ content_hash: string; settings: Record<string, unknown> }>;
+  crawlerSettingsVersion?(
+    version: number,
+  ): Promise<CrawlerSettingsVersion & { settings: Record<string, unknown> }>;
+  saveCrawlerSettings?(
+    settings: Record<string, unknown>,
+    note: string,
+  ): Promise<CrawlerSettingsSaveResult>;
+  activateCrawlerSettings?(version: number): Promise<{ version: number }>;
   modelProviderSettings?(): Promise<ModelProviderSettings>;
   updateModelProviderSettings?(
     settings: ModelProviderSettingsWrite,
@@ -1266,6 +1344,40 @@ export class HeliosApiClient implements HeliosApi {
       `/api/v1/ontology/${encodeURIComponent(version)}/classes/${encodeURIComponent(className)}`,
     );
   }
+  crawlRuns(source?: string): Promise<CrawlRunSummary[]> {
+    const query = source ? `?source=${encodeURIComponent(source)}` : "";
+    return this.get<CrawlRunSummary[]>(`/api/v1/crawler/runs${query}`);
+  }
+
+  crawlRun(crawlRunId: string): Promise<CrawlRunDetail> {
+    return this.get<CrawlRunDetail>(`/api/v1/crawler/runs/${encodeURIComponent(crawlRunId)}`);
+  }
+
+  crawlerSettings(): Promise<CrawlerSettingsState> {
+    return this.get<CrawlerSettingsState>("/api/v1/crawler/settings");
+  }
+
+  crawlerSettingsDefaults(): Promise<{ content_hash: string; settings: Record<string, unknown> }> {
+    return this.get("/api/v1/crawler/settings/defaults");
+  }
+
+  crawlerSettingsVersion(
+    version: number,
+  ): Promise<CrawlerSettingsVersion & { settings: Record<string, unknown> }> {
+    return this.get(`/api/v1/crawler/settings/versions/${version}`);
+  }
+
+  saveCrawlerSettings(
+    settings: Record<string, unknown>,
+    note: string,
+  ): Promise<CrawlerSettingsSaveResult> {
+    return this.post<CrawlerSettingsSaveResult>("/api/v1/crawler/settings", { settings, note });
+  }
+
+  activateCrawlerSettings(version: number): Promise<{ version: number }> {
+    return this.post<{ version: number }>(`/api/v1/crawler/settings/${version}:activate`);
+  }
+
 
   updateModelProviderSettings(
     settings: ModelProviderSettingsWrite,

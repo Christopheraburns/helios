@@ -5,6 +5,8 @@
     GET  /api/v1/crawler/settings/versions/{version}   one version
     POST /api/v1/crawler/settings                      validate and save a new version
     POST /api/v1/crawler/settings/{version}:activate   use it for the next crawls
+    GET  /api/v1/crawler/runs                          crawl runs, newest first
+    GET  /api/v1/crawler/runs/{crawl_run_id}           one run with its assets
 
 Settings live in helios_index; editing them never touches code. Saving checks
 the document's structure and that every class and claim predicate it names
@@ -19,7 +21,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from helios_core.crawler.settings import DEFAULT_SETTINGS, CrawlerSettings, ontology_problems
 from helios_core.index import crawler_settings as versions
-from helios_core.index import ontology_versions
+from helios_core.index import ontology_versions, runs
+from helios_core.index.records import AssetRecord
 from pydantic import BaseModel, ValidationError
 
 from . import ontology
@@ -155,3 +158,70 @@ def activate_settings(version: int, request: Request) -> dict[str, Any]:
     except versions.UnknownSettingsVersion:
         raise HTTPException(status_code=404, detail=f"settings version {version} not found")
     return activation.model_dump()
+
+
+# --- crawl runs ---------------------------------------------------------------------
+
+
+def _run_view(run: Any) -> dict[str, Any]:
+    return {
+        "crawl_run_id": run.crawl_run_id,
+        "connector": run.connector,
+        "source": run.source,
+        "status": run.status,
+        "started_at": run.started_at,
+        "finished_at": run.finished_at,
+        "actor": run.actor,
+        "ontology_version": run.ontology_version,
+        "crawler_version": run.crawler_version,
+        "settings_version": run.settings_version,
+        "settings_hash": run.settings_hash,
+        "settings": run.settings,
+        "counts": run.counts,
+        "error": run.error,
+    }
+
+
+@crawler_router.get("/runs")
+def list_runs(source: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    """Crawl runs (latest state of each), newest first; optionally for one source."""
+    store = _store()
+    selected = [r for r in runs.runs(store) if source is None or r.source == source]
+    return [_run_view(r) for r in selected[: max(1, min(limit, 1000))]]
+
+
+@crawler_router.get("/runs/{crawl_run_id}")
+def get_run(crawl_run_id: str) -> dict[str, Any]:
+    """One run, with every asset it recorded and counts by status and class."""
+    store = _store()
+    run = next((r for r in runs.runs(store) if r.crawl_run_id == crawl_run_id), None)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"crawl run {crawl_run_id} not found")
+    assets = [
+        a
+        for a in store.read("helios_index.assets", {"crawl_run_id": crawl_run_id})
+        if isinstance(a, AssetRecord)
+    ]
+    by_status: dict[str, int] = {}
+    by_class: dict[str, int] = {}
+    for asset in assets:
+        by_status[asset.status] = by_status.get(asset.status, 0) + 1
+        by_class[asset.ontology_class] = by_class.get(asset.ontology_class, 0) + 1
+    return {
+        **_run_view(run),
+        "asset_counts": {"by_status": by_status, "by_class": by_class},
+        "assets": [
+            {
+                "asset_id": a.asset_id,
+                "asset_version_id": a.asset_version_id,
+                "ontology_class": a.ontology_class,
+                "mime_type": a.mime_type,
+                "status": a.status,
+                "status_detail": a.status_detail,
+                "size_bytes": a.size_bytes,
+                "semantic_timestamp": a.semantic_timestamp,
+                "object_key": a.source_locator.get("key"),
+            }
+            for a in sorted(assets, key=lambda a: (a.status != "fetched", a.asset_id))
+        ],
+    }

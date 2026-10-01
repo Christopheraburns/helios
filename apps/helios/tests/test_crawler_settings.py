@@ -237,3 +237,49 @@ def test_api_warns_when_no_ontology_is_active(client):
     saved = client.post("/api/v1/crawler/settings", json={"settings": _doc()})
     assert saved.status_code == 200
     assert "not checked" in saved.json()["warnings"][0]
+
+
+def test_api_lists_runs_and_shows_one_with_its_assets(client, index):
+    from helios_core.index.records import AssetRecord
+
+    run = runs.start(
+        index,
+        connector="helios_ds_s3",
+        source="ds1",
+        ontology_version="0.2.0",
+        crawler_version="0.1.0",
+        actor="srv",
+        settings_version=None,
+        settings_hash="h",
+    )
+    index.append(
+        "helios_index.assets",
+        [
+            AssetRecord(
+                crawl_run_id=run.crawl_run_id,
+                asset_id=a,
+                asset_version_id="v",
+                connector="helios_ds_s3",
+                source="ds1",
+                ontology_class=c,
+                mime_type="application/pdf",
+                source_locator={"key": f"k/{a}"},
+                size_bytes=1,
+                ontology_version="0.2.0",
+                status=s,
+            )
+            for a, c, s in [("a1", "Document", "fetched"), ("a2", "Message", "fetch_failed")]
+        ],
+    )
+    runs.finish(index, run, {"listed": 2, "fetched": 1, "fetch_failed": 1})
+    [listed] = client.get("/api/v1/crawler/runs").json()
+    assert listed["status"] == "SUCCEEDED" and listed["counts"]["listed"] == 2
+    assert client.get("/api/v1/crawler/runs", params={"source": "other"}).json() == []
+    detail = client.get(f"/api/v1/crawler/runs/{run.crawl_run_id}").json()
+    assert detail["asset_counts"] == {
+        "by_status": {"fetched": 1, "fetch_failed": 1},
+        "by_class": {"Document": 1, "Message": 1},
+    }
+    assert [a["asset_id"] for a in detail["assets"]] == ["a1", "a2"]
+    assert detail["assets"][1]["object_key"] == "k/a2"
+    assert client.get("/api/v1/crawler/runs/nope").status_code == 404
