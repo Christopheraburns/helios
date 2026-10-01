@@ -6,12 +6,13 @@ import json
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
-from pydantic import BaseModel
-
-from helios_core.ontology.parser import parse, ParseResult
-from helios_core.ontology.graph import OntologyGraph, OntologyGraphError
+import yaml
 from apps.helios.graph import store
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from helios_core.ontology.graph import OntologyGraph, OntologyGraphError
+from helios_core.ontology.mapping import load_mappings
+from helios_core.ontology.parser import ParseResult, parse
+from pydantic import BaseModel
 
 LOGGER = logging.getLogger(__name__)
 ontology_router = APIRouter(prefix="/api/v1/ontology", tags=["ontology"])
@@ -62,8 +63,15 @@ async def publish_ontology(request: PublishRequest) -> OntologyVersionResponse:
             detail=f"schema file not found: {request.schema_path}",
         )
 
+    # Mappings and the published Ossie model they are checked against (CR-0b).
+    mappings = load_mappings(repo_root / "ontology" / "mappings" / "ossie")
+    ossie_file = repo_root / "models" / "published" / "tpcds.ossie.yaml"
+    ossie_model = yaml.safe_load(ossie_file.read_text()) if ossie_file.exists() else None
+
     try:
-        result: ParseResult = parse(str(schema_file), version=request.version)
+        result: ParseResult = parse(
+            str(schema_file), version=request.version, ossie_model=ossie_model, mappings=mappings
+        )
     except Exception as e:
         LOGGER.exception("schema parse failed")
         raise HTTPException(

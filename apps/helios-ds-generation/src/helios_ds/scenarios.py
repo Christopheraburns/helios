@@ -16,7 +16,7 @@ rendered into one or more artifacts. Planning is deterministic:
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from pydantic import BaseModel
 
@@ -332,9 +332,13 @@ def _largest_remainder(total: int, weights: Mapping[str, float]) -> Dict[str, in
     return counts
 
 
-def allocate(config: DatasetConfig) -> Tuple[Dict[str, Dict[str, int]], Dict[str, int]]:
+def allocate(
+    config: DatasetConfig, supports: Optional[Callable[[str, str], bool]] = None
+) -> Tuple[Dict[str, Dict[str, int]], Dict[str, int]]:
     """Split artifact targets across scenario types.
 
+    ``supports(scenario_type, artifact_type)`` narrows which scenario types may take
+    an artifact type (the planner passes "its template has a renderer").
     Returns ({scenario_type: {artifact_type: count}}, {artifact_type: unallocatable}).
     """
     weights = {name: w for name, w in config.normalized_scenario_weights().items() if w > 0}
@@ -344,7 +348,12 @@ def allocate(config: DatasetConfig) -> Tuple[Dict[str, Dict[str, int]], Dict[str
         artifact = config.artifacts[artifact_type]
         if not artifact.enabled or artifact.target_count == 0:
             continue
-        supporters = {s: w for s, w in weights.items() if artifact_type in SCENARIOS[s].artifacts}
+        supporters = {
+            s: w
+            for s, w in weights.items()
+            if artifact_type in SCENARIOS[s].artifacts
+            and (supports is None or supports(s, artifact_type))
+        }
         if not supporters:
             unallocated[artifact_type] = artifact.target_count
             continue
@@ -354,19 +363,38 @@ def allocate(config: DatasetConfig) -> Tuple[Dict[str, Dict[str, int]], Dict[str
     return allocation, unallocated
 
 
-def tables_for(config: DatasetConfig) -> List[str]:
-    """TPC-DS tables the enabled scenarios read (fingerprint scope)."""
-    allocation, _ = allocate(config)
+def renderable(templates: TemplateRegistry) -> Callable[[str, str], bool]:
+    """``supports`` predicate: the scenario's template for the artifact type can render."""
+
+    def supports(scenario_type: str, artifact_type: str) -> bool:
+        return templates.get(SCENARIOS[scenario_type].artifacts[artifact_type]).has_renderer
+
+    return supports
+
+
+def tables_for(
+    config: DatasetConfig, supports: Optional[Callable[[str, str], bool]] = None
+) -> List[str]:
+    """TPC-DS tables the planned scenarios read (fingerprint scope)."""
+    allocation, _ = allocate(config, supports)
     return sorted({t for s, a in allocation.items() if a for t in SCENARIOS[s].tables})
 
 
 class ScenarioPlanner:
-    def __init__(self, config: DatasetConfig, templates: TemplateRegistry):
+    """Plans a dataset. By default only artifacts whose template has a renderer are
+    planned, so the requested counts go to story types that produce files, and
+    "planned" equals "rendered". ``renderable_only=False`` plans every supported
+    template (used by planner tests, and for when more renderers exist)."""
+
+    def __init__(
+        self, config: DatasetConfig, templates: TemplateRegistry, renderable_only: bool = True
+    ):
         self.config = config
         self.templates = templates
+        self.supports = renderable(templates) if renderable_only else None
 
     def plan(self, repository: TpcdsRepository, dataset_id: str) -> GenerationPlan:
-        allocation, unallocated = allocate(self.config)
+        allocation, unallocated = allocate(self.config, self.supports)
         root_seed = dataset_seed(self.config.master_seed)
         scenarios: List[ScenarioPlan] = []
         scenario_counts: Dict[str, Dict[str, int]] = {}

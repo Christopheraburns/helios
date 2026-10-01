@@ -46,6 +46,9 @@ class RenderSummary:
     ground_truth: Dict[str, int] = field(default_factory=dict)  # table -> rows
     locators_checked: int = 0
     locators_unchecked: int = 0  # e.g. PDF locators when pypdf is not installed
+    golden: Dict[str, int] = field(default_factory=dict)  # golden questions per kind
+    # The ground truth itself, for the golden-question builder (not serialised).
+    truth: Optional[GroundTruth] = field(default=None, repr=False)
 
     @property
     def total_rendered(self) -> int:
@@ -159,6 +162,7 @@ def render_dataset(
             builder.add_scenario(scenario, story, by_scenario.get(scenario.scenario_id, []))
     write_ground_truth(sink, dataset_id, builder.truth)
     summary.ground_truth = builder.truth.counts()
+    summary.truth = builder.truth
     return summary
 
 

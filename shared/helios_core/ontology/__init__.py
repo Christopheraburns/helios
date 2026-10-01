@@ -10,7 +10,22 @@ from .graph import (
     OntologyGraphError,
 )
 
+from .mapping import (
+    ClassIdentifiers,
+    ResolutionConfig,
+    SourceMapping,
+    load_mapping,
+    load_mappings,
+    resolution_config,
+)
+
 __all__ = [
+    "ClassIdentifiers",
+    "ResolutionConfig",
+    "SourceMapping",
+    "load_mapping",
+    "load_mappings",
+    "resolution_config",
     "EDGE_TYPES",
     "LAYERS",
     "NODE_LABELS",

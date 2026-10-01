@@ -4,6 +4,7 @@
 - **Deciders:** Helios-DS project owner
 - **Burn-down task:** R-01 (`docs/helios-ds-burndown.md`)
 - **Amended 2026-09-30:** stage C (curation overlays) and the S-04 roles are cut. Helios-DS-Generation now produces one text-first development corpus for the Helios crawler, so corrections are made by editing templates and regenerating (stage B). Decisions 1, 4, 5, 6 and 7 stand; decisions 2 (stage C) and 3 no longer apply.
+- **Amendment 2 (2026-09-30): golden questions.** Golden questions are generated with the dataset (deterministically, from its ground truth). While the dataset is `IN_REVIEW` they may be curated: accepted, dropped, reworded, or added by hand with validated evidence. Curation is recorded as an append-only log, like review marks, and never overwrites the generated rows. Approval freezes the final question set and records its hash on the approval event. Afterwards nothing about the dataset changes, questions included (decision 1). Regenerating from the recorded inputs reproduces the generated questions; the approved set is kept as its own record. *(2026-10-01: curation (C-11) was cut. Approval freezes the generated questions as they are.)*
 
 ## Context
 

@@ -41,7 +41,17 @@ CONFIG = DatasetConfig(
 
 
 @pytest.fixture
-def published(tmp_path, small_repo, templates):
+def published(tmp_path, small_repo, templates, monkeypatch):
+    # A mixed-story dataset like those made before generator 0.3.1, which planned
+    # stories without renderers: the viewer must still show them.
+    import helios_ds.pipeline
+    import helios_ds.scenarios
+
+    def plan_everything(templates):
+        return lambda scenario_type, artifact_type: True
+
+    monkeypatch.setattr(helios_ds.pipeline, "renderable", plan_everything)
+    monkeypatch.setattr(helios_ds.scenarios, "renderable", plan_everything)
     sink = SqlLakehouseSink(lambda: duckdb.connect(str(tmp_path / "lakehouse.duckdb")), DUCKDB)
     sink.ensure_tables()
     store = LocalObjectStore(str(tmp_path / "objects"))

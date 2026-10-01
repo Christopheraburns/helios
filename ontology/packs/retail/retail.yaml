@@ -1,10 +1,12 @@
 id: https://helios.dev/ontology/packs/retail
 name: helios_retail
 title: Helios Retail Domain Pack
-version: 0.1.0
+version: 0.2.0
 description: >-
   Retail subclasses under the Helios core ontology. Derived from TPC-DS and
   reusable for any retail customer. Adds leaves only; never redefines core.
+  0.2.0 adds Sale, Reason and Brand, the retail relationship types, and the
+  retail claim vocabulary the crawler extracts.
 
 prefixes:
   linkml: https://w3id.org/linkml/
@@ -28,6 +30,7 @@ classes:
 
   Store:
     is_a: Location
+    description: A physical store where sales and returns happen.
     attributes:
       store_id:
         range: string
@@ -36,28 +39,100 @@ classes:
 
   Warehouse:
     is_a: Location
+    description: A warehouse that holds inventory.
     attributes:
       warehouse_id:
         range: string
 
+  Brand:
+    is_a: Organization
+    description: A brand under which items are sold. In TPC-DS a brand is a label on the item table rather than a table of its own.
+    attributes:
+      brand_id:
+        range: string
+
   Item:
     is_a: Product
+    description: A sellable item (SKU).
     attributes:
       item_id:
         range: string
       brand:
+        range: Brand
+      color:
+        range: string
+      item_class:
+        description: Product class within the category, e.g. "dresses".
+        range: string
+
+  Reason:
+    is_a: EnterpriseEntity
+    description: >-
+      A coded reason a transaction cites, e.g. a return reason such as
+      "Package was damaged". Reference data, resolved like an entity because
+      documents name it.
+    attributes:
+      reason_id:
         range: string
 
   Promotion:
     is_a: Event
+    description: A promotion run on one or more channels.
     attributes:
       promo_id:
         range: string
       channel:
         range: string
 
+  Sale:
+    is_a: Transaction
+    description: A sale, identified by its ticket (store channel) and the items on it.
+    attributes:
+      ticket_number:
+        range: string
+      sold_at:
+        range: Store
+      buyer:
+        range: Customer
+
   Return:
     is_a: Transaction
+    description: The return of an item from an earlier sale.
     attributes:
       reason:
+        range: Reason
+      of_sale:
+        range: Sale
+      returned_item:
+        range: Item
+      authorization_number:
+        description: >-
+          The return authorization (RMA) number. Appears in documents only;
+          TPC-DS has no column for it, so it is linked through co-occurrence.
         range: string
+
+  # ---- Retail relationship types (graph edges) -------------------------------
+  Contains:
+    is_a: Relationship
+    description: A sale contains an item.
+  ReturnOf:
+    is_a: Relationship
+    description: A return reverses part of an earlier sale.
+  HasReason:
+    is_a: Relationship
+    description: A transaction cites a reason.
+
+enums:
+  RetailClaimPredicate:
+    description: >-
+      Claim predicates the crawler extracts from retail documents (Claim.predicate).
+      Declared here, in the domain pack, as a real retail tenant's pack would.
+    permissible_values:
+      PACKAGING_DAMAGED:
+        description: The item or its packaging arrived or was found damaged.
+      RETURN_REASON:
+        description: The reason recorded for a return.
+      REFUND_REQUESTED:
+        description: A customer asked for a refund.
+      REFUND_APPROVED:
+        description: A refund was approved.

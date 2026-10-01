@@ -26,11 +26,12 @@ def _published(sink, dataset_id):
         (a.artifact_id, a.sha256, a.size_bytes)
         for a in sink.read_dataset("helios_ds.artifacts", dataset_id)
     )
+    from helios_ds.golden import GOLDEN_TABLES
     from helios_ds.ground_truth import TRUTH_TABLES
 
     truth = {
         table: sorted(r.model_dump_json() for r in sink.read_dataset(table, dataset_id))
-        for table in TRUTH_TABLES
+        for table in TRUTH_TABLES + GOLDEN_TABLES
     }
     return [d.model_dump() for d in datasets], plans, templates, artifacts, truth
 
@@ -198,7 +199,7 @@ def test_tampered_artifact_fails_the_rerun(make_env, tiny_config, small_repo, te
     assert path.read_bytes() == b"tampered"
 
 
-def test_artifact_types_without_renderers_are_reported_pending(make_env, small_repo, templates):
+def test_artifact_types_without_renderers_are_not_planned(make_env, small_repo, templates):
     from helios_ds.config import ArtifactConfig, DatasetConfig, ScenarioConfig
 
     config = DatasetConfig(
@@ -208,5 +209,7 @@ def test_artifact_types_without_renderers_are_reported_pending(make_env, small_r
     sink, store = make_env("p")
     result = plan_and_publish(config, small_repo, templates, sink, store)
     assert result.rendered == {"pdf": 2}
-    assert result.pending == {"image": 2}
+    assert result.pending == {}
+    # The unrenderable request stays visible in the manifest's counts.
+    assert result.artifact_counts["image"] == {"target": 2, "planned": 0}
     assert result.state is DatasetState.IN_REVIEW

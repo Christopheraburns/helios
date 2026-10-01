@@ -11,6 +11,8 @@ A lineage is the set of datasets generated from the same config (same
 its lineage (ADR 0001, decision 4), so at most one per lineage is READY.
 """
 
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -23,6 +25,8 @@ from .schemas import (
     ArtifactRecord,
     DatasetLifecycleRecord,
     DatasetRecord,
+    ExpectedQueryRecord,
+    ExpectedResultRecord,
     ScenarioPlanRecord,
     TemplateVersionRecord,
     TruthClaimRecord,
@@ -90,11 +94,15 @@ def validate_published(
     store: ObjectStore,
     dataset_id: str,
     expected_artifact_ids: Optional[Set[str]] = None,
+    check_artifact_bytes: bool = False,
 ) -> List[str]:
     """Problems that must block a dataset from leaving VALIDATING. Empty = valid.
 
     ``expected_artifact_ids`` (the planned artifacts that have a renderer) makes
     the check require exactly those artifacts to be recorded.
+    ``check_artifact_bytes`` also reads every artifact back from the store and
+    compares it with its recorded SHA-256 (approval does; generation doesn't need
+    to, because every write is already verified).
     """
     problems: List[str] = []
     datasets = sink.read_dataset("helios_ds.datasets", dataset_id)
@@ -149,10 +157,41 @@ def validate_published(
     if expected_artifact_ids is not None and set(ids) != expected_artifact_ids:
         missing = len(expected_artifact_ids - set(ids))
         problems.append(f"{missing} renderable planned artifacts were not recorded")
+    if check_artifact_bytes:
+        problems += _artifact_byte_problems(store, dataset_id, artifacts)
     problems += _ground_truth_problems(
         sink, dataset_id, set(ids), {s.scenario_id for s in manifest.scenarios}
     )
     return problems
+
+
+def _artifact_byte_problems(
+    store: ObjectStore, dataset_id: str, artifacts: List[ArtifactRecord]
+) -> List[str]:
+    """Every artifact is present at its recorded locator with its recorded hash."""
+    from .render.dataset import artifact_key  # the renderers import this module
+
+    def check(record: ArtifactRecord) -> Optional[str]:
+        extension = str(record.source_locator.get("key", "")).rsplit(".", 1)[-1]
+        key = artifact_key(dataset_id, record.artifact_id, extension)
+        if store.locator(key) != record.source_locator:
+            return "locator"
+        data = store.get(key)
+        if data is None:
+            return "missing"
+        if sha256_hex(data) != record.sha256 or len(data) != record.size_bytes:
+            return "hash"
+        return None
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(check, artifacts))
+    failures = Counter(r for r in results if r)
+    labels = {
+        "locator": "artifacts whose recorded locator does not match the object store",
+        "missing": "artifacts missing from the object store",
+        "hash": "artifacts whose stored bytes do not match their recorded SHA-256",
+    }
+    return [f"{count} {labels[kind]}" for kind, count in sorted(failures.items())]
 
 
 def _ground_truth_problems(
@@ -218,7 +257,54 @@ def _ground_truth_problems(
             [c for c in claims.values() if c.claim_id not in {e.claim_id for e in evidence}],
         ),
     ]
-    return [f"ground truth: {len(rows)} {label}" for label, rows in checks if rows]
+    problems = [f"ground truth: {len(rows)} {label}" for label, rows in checks if rows]
+    return problems + _golden_problems(
+        sink, dataset_id, artifact_ids, entities, set(claims), {e.evidence_id for e in evidence}
+    )
+
+
+def _golden_problems(
+    sink: LakehouseSink,
+    dataset_id: str,
+    artifact_ids: Set[str],
+    entity_ids: Set[str],
+    claim_ids: Set[str],
+    evidence_ids: Set[str],
+) -> List[str]:
+    """Golden questions (C-08) may only cite what exists, and each has one answer."""
+    queries = [
+        q
+        for q in sink.read_dataset("helios_ground_truth.expected_queries", dataset_id)
+        if isinstance(q, ExpectedQueryRecord)
+    ]
+    results = [
+        r
+        for r in sink.read_dataset("helios_ground_truth.expected_results", dataset_id)
+        if isinstance(r, ExpectedResultRecord)
+    ]
+    answered = Counter(r.query_id for r in results)
+    query_ids = {q.query_id for q in queries}
+    checks: List[Tuple[str, List[Any]]] = [
+        ("questions without exactly one answer", [q for q in queries if answered[q.query_id] != 1]),
+        ("answers to unknown questions", [r for r in results if r.query_id not in query_ids]),
+        (
+            "questions citing unknown entities",
+            [q for q in queries if set(q.required_entities) - entity_ids],
+        ),
+        (
+            "questions citing unknown claims",
+            [q for q in queries if set(q.required_claims) - claim_ids],
+        ),
+        (
+            "questions citing unknown evidence",
+            [q for q in queries if set(q.required_evidence) - evidence_ids],
+        ),
+        (
+            "questions citing unrecorded artifacts",
+            [q for q in queries if set(q.required_artifacts) - artifact_ids],
+        ),
+    ]
+    return [f"golden questions: {len(rows)} {label}" for label, rows in checks if rows]
 
 
 class DatasetLifecycle:
@@ -288,7 +374,7 @@ class DatasetLifecycle:
         _require_actor(approver)
         if self.state(dataset_id) is not DatasetState.IN_REVIEW:
             raise InvalidTransition(f"{dataset_id} is not IN_REVIEW")
-        problems = validate_published(self.sink, store, dataset_id)
+        problems = validate_published(self.sink, store, dataset_id, check_artifact_bytes=True)
         if problems:
             raise ValidationFailed(dataset_id, problems)
         record = self._append(dataset_id, DatasetState.READY, approver, None, reason)
