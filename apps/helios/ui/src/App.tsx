@@ -34,6 +34,7 @@ const ActivityLogsPage = lazy(() => import("./pages/ActivityLogsPage"));
 const ModelProviderPage = lazy(() => import("./pages/ModelProviderPage"));
 const MCPManagementPage = lazy(() => import("./pages/MCPManagementPage"));
 const OntologyPage = lazy(() => import("./pages/OntologyPage"));
+const CrawlerPage = lazy(() => import("./pages/CrawlerPage"));
 const GlossaryTermPage = lazy(() =>
   import("./pages/GlossaryPage").then((module) => ({
     default: module.GlossaryTermPage,
@@ -225,6 +226,10 @@ function ApplicationShell({ client }: AppProps) {
               <Route
                 path="/ontology"
                 element={<OntologyPage context={context} />}
+              />
+              <Route
+                path="/crawler"
+                element={<CrawlerPage context={context} />}
               />
               <Route
                 path="/governance"

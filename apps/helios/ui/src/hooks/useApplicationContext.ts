@@ -84,6 +84,8 @@ export interface ApplicationContextState {
   loadOntologyVersions: () => Promise<OntologyVersionSummary[]>;
   loadOntologyGraph: (version: string) => Promise<OntologyGraphPayload>;
   loadOntologyClass: (version: string, className: string) => Promise<OntologyClassDetail>;
+  /** The API client for crawler runs and settings (CR-9). */
+  crawlerClient: () => HeliosApi;
   loadModelProviderSettings: () => Promise<ModelProviderSettings>;
   updateModelProviderSettings: (
     settings: ModelProviderSettingsWrite,
@@ -592,6 +594,14 @@ export function useApplicationContext(
     return api.ontologyClass(version, className);
   }, [client]);
 
+  const crawlerClient = useCallback(() => {
+    const api = client();
+    if (!api.crawlRuns || !api.crawlerSettings) {
+      throw new ApiUnavailableError("The crawler API is unavailable.");
+    }
+    return api;
+  }, [client]);
+
   const loadModelProviderSettings = useCallback(() => {
     const api = client();
     if (!api.modelProviderSettings) {
@@ -1049,6 +1059,7 @@ export function useApplicationContext(
     loadOntologyVersions,
     loadOntologyGraph,
     loadOntologyClass,
+    crawlerClient,
     loadModelProviderSettings,
     updateModelProviderSettings,
     deleteModelProviderSettings,

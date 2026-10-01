@@ -246,7 +246,14 @@ The crawler runs as a **Workbench Job in the Helios project** (`apps/helios/`). 
   - golden questions at the retrieval level: for each question, are its required entities linked and its required evidence segments indexed? No-answer questions must have no linked documents.
 
   Results are written to a scores table and shown as a report. *Done when:* a scored report for crawl run × development corpus exists and is reproducible.
-- [ ] **CR-9** Visibility in the Helios UI, **including the crawler settings editor** (CR-0e: view versions, edit as a validated form or JSON, save as a new version, activate): a crawl-runs page (run, counts, scores) and instance browsing on the Ontology page (from a class to its entities, then their mentions and evidence). *Done when:* you can go from `Customer` to a customer's linked documents and the passages that mention them.
+- [ ] **CR-9** *(First slice done 2026-10-01, uncommitted, tested on real runs.)* A **Crawler** page in the Helios UI (Build → Crawler, `/crawler`, `pages/CrawlerPage.tsx`):
+  - **Runs tab:** every crawl, newest first, with status, listed, fetched, carried forward, problems, duration, and ontology and settings versions; a source filter. Clicking a run shows its facts and request, asset counts by status and class (clickable filters), search, and each asset's status and problem detail.
+  - **Settings tab:** the active version (or built-in defaults), version history with Edit and Activate, and a JSON editor with Format and a note. "Validate and save" lists the API's validation problems inline, then offers to activate the new version. There is help on what each section means.
+  - **API:** `GET /api/v1/crawler/runs[?source=]` and `GET /api/v1/crawler/runs/{id}`.
+  - **Tests:** 2 page tests and 1 API test.
+  - **Still to come:** scores (CR-8), segments, mentions and links per asset (CR-3 onward), instance browsing from the Ontology page, a structured settings form, starting a crawl from the UI (via the Workbench Jobs API), and an RBAC permission.
+
+  Original task: Visibility in the **Helios UI** (`apps/helios/ui`; all crawler screens live there, none in the Helios-DS dashboard), **including the crawler settings editor** (CR-0e: view versions, edit as a validated form or JSON, save as a new version, activate): a crawl-runs page (run, counts, scores) and instance browsing on the Ontology page (from a class to its entities, then their mentions and evidence). *Done when:* you can go from `Customer` to a customer's linked documents and the passages that mention them.
 
 ### Later
 
