@@ -104,6 +104,9 @@ def client(index, tmp_path, monkeypatch):
     # Identity comes from the API's principal_from_request; stubbed here so the test
     # doesn't import the whole API (and its MCP client).
     monkeypatch.setattr(api, "_actor", lambda request: "cloudera-workbench:alice")
+    monkeypatch.setattr(
+        api, "require_ontology_edit", lambda request, org: "cloudera-workbench:alice"
+    )
     app = FastAPI()
     app.include_router(api.ontology_router)
     return TestClient(app)
@@ -134,3 +137,104 @@ def test_activate_records_and_points_the_cache(client, index):
     assert response.status_code == 200, response.text
     assert versions.active(index).version == "0.2.0"
     assert store.active_pointer()["version"] == "0.2.0"
+
+
+# --- O-6: check, schemas, versions, permission ------------------------------------------
+
+
+def test_schemas_lists_publishable_roots_most_complete_first(client):
+    schemas = client.get("/api/v1/ontology/schemas").json()
+    assert [s["layer"] for s in schemas] == ["customer", "pack", "core"]
+    assert schemas[0]["schema_path"] == SCHEMA
+    assert schemas[1]["version"] == "0.2.0"
+
+
+def test_check_reports_status_and_changes_without_writing(client, index):
+    body = {"version": "0.2.0", "schema_path": SCHEMA}
+    first = client.post("/api/v1/ontology:check", json=body).json()
+    assert first["status"] == "new" and first["broken_mappings"] == []
+    assert first["changes"] is None  # nothing active yet
+    assert versions.versions(index) == []  # a check writes nothing
+
+    client.post("/api/v1/ontology:publish", json=body)
+    client.post("/api/v1/ontology/0.2.0:activate")
+    assert client.post("/api/v1/ontology:check", json=body).json()["status"] == "identical"
+
+    core = client.post(
+        "/api/v1/ontology:check",
+        json={"version": "0.2.0", "schema_path": "ontology/core/core.yaml"},
+    ).json()
+    assert core["status"] == "conflict"
+    assert "Customer" in core["changes"]["classes_removed"]
+    assert core["changes"]["mappings_removed"]
+
+    bad = client.post(
+        "/api/v1/ontology:check", json={"version": "1", "schema_path": "../etc/passwd"}
+    )
+    assert bad.status_code == 400
+
+
+def test_versions_list_the_lakehouse_record_and_flag_cache_only_versions(client, index, graph):
+    from apps.helios.graph import store
+
+    legacy = parse(str(EXTENSION), version="0.1.0").graph
+    store.save(legacy)  # published to the cache before CR-0c
+    client.post("/api/v1/ontology:publish", json={"version": "0.2.0", "schema_path": SCHEMA})
+    client.post("/api/v1/ontology/0.2.0:activate")
+    listed = {v["version"]: v for v in client.get("/api/v1/ontology/versions").json()}
+    assert listed["0.2.0"]["in_lakehouse"] and listed["0.2.0"]["is_active"]
+    assert listed["0.2.0"]["published_by"] == "cloudera-workbench:alice"
+    assert listed["0.1.0"]["in_lakehouse"] is False and not listed["0.1.0"]["is_active"]
+    graph_payload = client.get("/api/v1/ontology/0.2.0/graph").json()
+    assert graph_payload["version"] == "0.2.0"
+
+
+def test_a_version_with_several_cached_contents_is_refused(client):
+    from apps.helios.graph import store
+
+    store.save(parse(str(EXTENSION), version="0.1.0").graph)
+    store.save(parse(str(REPO_ROOT / "ontology/core/core.yaml"), version="0.1.0").graph)
+    response = client.get("/api/v1/ontology/0.1.0/graph")
+    assert response.status_code == 409 and "new version" in response.json()["detail"]
+
+
+def test_require_ontology_edit_checks_identity_organization_and_role(monkeypatch):
+    import sys
+    import types
+
+    from apps.helios.console import ontology as api
+    from fastapi import HTTPException
+    from helios_core import authz
+
+    principal = {"value": None}
+    fake_api = types.ModuleType("apps.helios.console.api")
+    fake_api.principal_from_request = lambda request: principal["value"]
+    monkeypatch.setitem(sys.modules, "apps.helios.console.api", fake_api)
+
+    class Decision:
+        def __init__(self, allowed):
+            self.allowed, self.reason = allowed, "no role granting ontology.edit"
+
+    class FakePolicy:
+        def __init__(self, allowed):
+            self.allowed = allowed
+
+        def can(self, who, action, resource):
+            assert action == authz.Action.ONTOLOGY_EDIT and resource.organization_id == "org1"
+            return Decision(self.allowed)
+
+    request = types.SimpleNamespace(app=types.SimpleNamespace(state=types.SimpleNamespace()))
+
+    def status(org):
+        try:
+            return api.require_ontology_edit(request, org)
+        except HTTPException as exc:
+            return exc.status_code
+
+    assert status("org1") == 401
+    principal["value"] = types.SimpleNamespace(id="cloudera-workbench:alice")
+    assert status(None) == 400
+    request.app.state.authorization_policy = FakePolicy(False)
+    assert status("org1") == 403
+    request.app.state.authorization_policy = FakePolicy(True)
+    assert status("org1") == "cloudera-workbench:alice"

@@ -430,3 +430,139 @@
   background: #fee2e2;
   color: #991b1b;
 }
+
+.ontology-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ontology-title-row h1 {
+  margin-bottom: 12px;
+}
+
+.version-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+  font-size: 13px;
+}
+
+.publish-button {
+  border: 1px solid var(--border-color, #d1d5db);
+  background: white;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.publish-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.publish-button--primary {
+  background: var(--primary, #2563eb);
+  border-color: var(--primary, #2563eb);
+  color: white;
+}
+
+.publish-panel {
+  margin: 12px 0;
+  padding: 16px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.publish-panel__header {
+  display: flex;
+  align-items: center;
+}
+
+.publish-panel__header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.publish-panel__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.publish-panel__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-secondary, #4b5563);
+}
+
+.publish-panel__form select,
+.publish-panel__form input {
+  padding: 6px 8px;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 6px;
+  font-size: 13px;
+  min-width: 160px;
+}
+
+.publish-check {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.publish-check ul {
+  margin: 4px 0 0 18px;
+}
+
+.publish-status--new {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.publish-status--identical {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.publish-status--conflict {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.publish-warning {
+  color: #92400e;
+  background: #fef3c7;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+
+.publish-error {
+  color: #991b1b;
+  background: #fee2e2;
+  padding: 8px 10px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+
+.publish-success {
+  color: #166534;
+  background: #dcfce7;
+  padding: 8px 10px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
