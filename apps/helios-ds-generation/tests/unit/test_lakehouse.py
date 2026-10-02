@@ -146,6 +146,7 @@ def test_sql_sink_gives_each_thread_its_own_connection(tmp_path):
 # Impala reserved words that could plausibly be chosen as column names. Regression:
 # a `comment` column broke CREATE TABLE in Impala (DuckDB accepts it).
 IMPALA_RESERVED = {
+    "fields",
     "comment",
     "location",
     "partition",

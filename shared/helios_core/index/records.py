@@ -108,6 +108,10 @@ class SegmentRecord(BaseModel):
     locator: dict[str, Any]
     text: str
     ontology_version: str = ""
+    # Added with CR-3: structure the analyzer recognised in the segment, e.g. PDF
+    # label/value fields and table rows, or a chat message's sender and time.
+    # Named "structure" because FIELDS is an Impala reserved word.
+    structure: dict[str, Any] = Field(default_factory=dict)
 
 
 # --- what was found -----------------------------------------------------------------

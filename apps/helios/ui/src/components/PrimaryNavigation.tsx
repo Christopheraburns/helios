@@ -107,8 +107,6 @@ export default function PrimaryNavigation({
           label: "Data Sources",
           to: "/data-sources",
           icon: "data",
-          requiresModel: true,
-          requiredAction: "model.read",
         },
         {
           label: "Ontology",

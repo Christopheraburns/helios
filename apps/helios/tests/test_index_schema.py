@@ -200,3 +200,11 @@ def test_ids_are_stable_and_distinct():
     assert ids.external_id("tpcds", "store_returns", {"sr_ticket_number": 7, "sr_item_sk": 2}) == (
         "tpcds.store_returns:sr_item_sk=2,sr_ticket_number=7"
     )
+
+
+def test_no_column_name_is_an_impala_reserved_word():
+    from helios_core.index.tables import IMPALA_RESERVED, columns
+
+    for table, model in TABLES.items():
+        clashes = {name for name, _ in columns(model)} & IMPALA_RESERVED
+        assert not clashes, (table, clashes)

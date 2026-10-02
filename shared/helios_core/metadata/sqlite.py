@@ -1,4 +1,5 @@
 """SQLite implementation of the operational metadata repository."""
+
 from __future__ import annotations
 
 import json
@@ -45,9 +46,7 @@ def default_database_path() -> str:
     root = os.environ.get("HELIOS_ROOT") or os.path.join(
         os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios"
     )
-    return os.environ.get("HELIOS_METADATA_DB") or os.path.join(
-        root, "state", "helios.db"
-    )
+    return os.environ.get("HELIOS_METADATA_DB") or os.path.join(root, "state", "helios.db")
 
 
 class SQLiteMetadataRepository:
@@ -61,22 +60,18 @@ class SQLiteMetadataRepository:
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with self._connection() as connection:
             if self.path != ":memory:":
-                requested_mode = os.environ.get(
-                    "HELIOS_SQLITE_JOURNAL_MODE", "DELETE"
-                ).strip().upper()
+                requested_mode = (
+                    os.environ.get("HELIOS_SQLITE_JOURNAL_MODE", "DELETE").strip().upper()
+                )
                 if requested_mode not in SUPPORTED_JOURNAL_MODES:
                     raise ValueError(
                         "HELIOS_SQLITE_JOURNAL_MODE must be one of "
                         + ", ".join(sorted(SUPPORTED_JOURNAL_MODES))
                     )
-                actual_mode = str(
-                    connection.execute("PRAGMA journal_mode").fetchone()[0]
-                ).upper()
+                actual_mode = str(connection.execute("PRAGMA journal_mode").fetchone()[0]).upper()
                 if actual_mode != requested_mode:
                     actual_mode = str(
-                        connection.execute(
-                            f"PRAGMA journal_mode = {requested_mode}"
-                        ).fetchone()[0]
+                        connection.execute(f"PRAGMA journal_mode = {requested_mode}").fetchone()[0]
                     ).upper()
                 if actual_mode != requested_mode:
                     raise RuntimeError(
@@ -93,9 +88,7 @@ class SQLiteMetadataRepository:
             )
             applied = {
                 row["version"]
-                for row in connection.execute(
-                    "SELECT version FROM schema_migrations"
-                )
+                for row in connection.execute("SELECT version FROM schema_migrations")
             }
             for version, sql in MIGRATIONS:
                 if version in applied:
@@ -135,14 +128,11 @@ class SQLiteMetadataRepository:
     def schema_version(self) -> int:
         with self._connection() as connection:
             row = connection.execute(
-                "SELECT COALESCE(MAX(version), 0) AS version "
-                "FROM schema_migrations"
+                "SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations"
             ).fetchone()
             return int(row["version"])
 
-    def save_organization(
-        self, organization: Organization, slug: str
-    ) -> StoredOrganization:
+    def save_organization(self, organization: Organization, slug: str) -> StoredOrganization:
         if not slug or not slug.strip():
             raise ValueError("organization slug must not be empty")
         with self._connection() as connection:
@@ -161,9 +151,7 @@ class SQLiteMetadataRepository:
                 raise ValueError(str(exc)) from exc
         return StoredOrganization(organization, slug)
 
-    def stored_organization(
-        self, organization_id: str
-    ) -> StoredOrganization | None:
+    def stored_organization(self, organization_id: str) -> StoredOrganization | None:
         with self._connection() as connection:
             row = connection.execute(
                 "SELECT id, name, slug FROM organizations WHERE id = ?",
@@ -183,9 +171,7 @@ class SQLiteMetadataRepository:
                     (organization_id,),
                 )
             )
-            organization = Organization(
-                row["id"], row["name"], member_ids=members
-            )
+            organization = Organization(row["id"], row["name"], member_ids=members)
             return StoredOrganization(organization, row["slug"])
 
     def organization(self, organization_id: str) -> Organization | None:
@@ -255,12 +241,18 @@ class SQLiteMetadataRepository:
                 connection.execute(
                     """
                     INSERT INTO data_sources (
-                        id, organization_id, name, connector, connection_ref
-                    ) VALUES (?, ?, ?, ?, ?)
+                        id, organization_id, name, connector, connection_ref,
+                        description, scope_json, crawl_json, updated_at, updated_by
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         name = excluded.name,
                         connector = excluded.connector,
-                        connection_ref = excluded.connection_ref
+                        connection_ref = excluded.connection_ref,
+                        description = excluded.description,
+                        scope_json = excluded.scope_json,
+                        crawl_json = excluded.crawl_json,
+                        updated_at = excluded.updated_at,
+                        updated_by = excluded.updated_by
                     WHERE data_sources.organization_id = excluded.organization_id
                     """,
                     (
@@ -269,6 +261,11 @@ class SQLiteMetadataRepository:
                         data_source.name,
                         data_source.connector,
                         data_source.connection_ref,
+                        data_source.description,
+                        json.dumps(data_source.scope, sort_keys=True),
+                        json.dumps(data_source.crawl, sort_keys=True),
+                        data_source.updated_at,
+                        data_source.updated_by,
                     ),
                 )
                 row = connection.execute(
@@ -276,9 +273,7 @@ class SQLiteMetadataRepository:
                     (data_source.id,),
                 ).fetchone()
                 if row and row["organization_id"] != data_source.organization_id:
-                    raise ValueError(
-                        "cannot move a data source between organizations"
-                    )
+                    raise ValueError("cannot move a data source between organizations")
             except sqlite3.IntegrityError as exc:
                 raise ValueError(str(exc)) from exc
         return data_source
@@ -287,7 +282,8 @@ class SQLiteMetadataRepository:
         with self._connection() as connection:
             row = connection.execute(
                 """
-                SELECT id, organization_id, name, connector, connection_ref
+                SELECT id, organization_id, name, connector, connection_ref,
+                       description, scope_json, crawl_json, updated_at, updated_by
                 FROM data_sources
                 WHERE id = ?
                 """,
@@ -295,13 +291,23 @@ class SQLiteMetadataRepository:
             ).fetchone()
             return _data_source(row) if row else None
 
-    def data_sources_for_organization(
-        self, organization_id: str
-    ) -> list[DataSource]:
+    def delete_data_source(self, data_source_id: str) -> bool:
+        """Delete a data source; ValueError if a model still uses it."""
+        with self._connection() as connection:
+            try:
+                cursor = connection.execute(
+                    "DELETE FROM data_sources WHERE id = ?", (data_source_id,)
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError("the data source is used by a model") from exc
+            return cursor.rowcount > 0
+
+    def data_sources_for_organization(self, organization_id: str) -> list[DataSource]:
         with self._connection() as connection:
             rows = connection.execute(
                 """
-                SELECT id, organization_id, name, connector, connection_ref
+                SELECT id, organization_id, name, connector, connection_ref,
+                       description, scope_json, crawl_json, updated_at, updated_by
                 FROM data_sources
                 WHERE organization_id = ?
                 ORDER BY lower(name), id
@@ -392,9 +398,7 @@ class SQLiteMetadataRepository:
 
     def stored_model(self, model_id: str) -> StoredModel | None:
         with self._connection() as connection:
-            row = connection.execute(
-                "SELECT * FROM models WHERE id = ?", (model_id,)
-            ).fetchone()
+            row = connection.execute("SELECT * FROM models WHERE id = ?", (model_id,)).fetchone()
             if row is None:
                 return None
             model = self._model_from_row(connection, row)
@@ -460,9 +464,7 @@ class SQLiteMetadataRepository:
                     row["organization_id"],
                     row["organization_id"],
                 )
-                grants.append(
-                    authz.Grant(principal_id, authz.Role(row["role"]), resource)
-                )
+                grants.append(authz.Grant(principal_id, authz.Role(row["role"]), resource))
             for row in connection.execute(
                 """
                 SELECT mm.model_id, mm.role, m.organization_id
@@ -473,12 +475,8 @@ class SQLiteMetadataRepository:
                 """,
                 (principal_id,),
             ):
-                resource = authz.Resource(
-                    "model", row["model_id"], row["organization_id"]
-                )
-                grants.append(
-                    authz.Grant(principal_id, authz.Role(row["role"]), resource)
-                )
+                resource = authz.Resource("model", row["model_id"], row["organization_id"])
+                grants.append(authz.Grant(principal_id, authz.Role(row["role"]), resource))
         return grants
 
     def create_conversation(
@@ -493,9 +491,7 @@ class SQLiteMetadataRepository:
         title = title.strip()
         _validate_conversation_text(title, "conversation title", 200)
         _validate_conversation_text(user_content, "user message", 10_000)
-        _validate_conversation_text(
-            assistant_content, "assistant message", 100_000
-        )
+        _validate_conversation_text(assistant_content, "assistant message", 100_000)
         conversation_id = str(uuid.uuid4())
         user_message_id = str(uuid.uuid4())
         assistant_message_id = str(uuid.uuid4())
@@ -554,9 +550,7 @@ class SQLiteMetadataRepository:
                     )
             except sqlite3.IntegrityError as exc:
                 raise ValueError(str(exc)) from exc
-        conversation = self.conversation_for_principal(
-            conversation_id, model_id, principal_id
-        )
+        conversation = self.conversation_for_principal(conversation_id, model_id, principal_id)
         if conversation is None:
             raise RuntimeError("conversation was not persisted")
         return conversation
@@ -580,10 +574,7 @@ class SQLiteMetadataRepository:
                 (model_id, principal_id, include_archived),
             ).fetchall()
             return [
-                self._conversation_from_row(
-                    connection, row, include_messages=False
-                )
-                for row in rows
+                self._conversation_from_row(connection, row, include_messages=False) for row in rows
             ]
 
     def conversation_for_principal(
@@ -603,9 +594,7 @@ class SQLiteMetadataRepository:
             ).fetchone()
             if row is None:
                 return None
-            return self._conversation_from_row(
-                connection, row, include_messages=True
-            )
+            return self._conversation_from_row(connection, row, include_messages=True)
 
     def append_conversation_turn(
         self,
@@ -618,9 +607,7 @@ class SQLiteMetadataRepository:
         turn: dict | None = None,
     ) -> StoredConversation:
         _validate_conversation_text(user_content, "user message", 10_000)
-        _validate_conversation_text(
-            assistant_content, "assistant message", 100_000
-        )
+        _validate_conversation_text(assistant_content, "assistant message", 100_000)
         now = _now()
         with self._connection() as connection:
             row = connection.execute(
@@ -706,9 +693,7 @@ class SQLiteMetadataRepository:
                     turn,
                     now,
                 )
-        conversation = self.conversation_for_principal(
-            conversation_id, model_id, principal_id
-        )
+        conversation = self.conversation_for_principal(conversation_id, model_id, principal_id)
         if conversation is None:
             raise RuntimeError("conversation was not persisted")
         return conversation
@@ -741,9 +726,7 @@ class SQLiteMetadataRepository:
             )
             if updated.rowcount != 1:
                 raise LookupError("conversation not found")
-        conversation = self.conversation_for_principal(
-            conversation_id, model_id, principal_id
-        )
+        conversation = self.conversation_for_principal(conversation_id, model_id, principal_id)
         if conversation is None:
             raise RuntimeError("conversation was not persisted")
         return conversation
@@ -789,9 +772,7 @@ class SQLiteMetadataRepository:
             )
         return run
 
-    def save_semantic_revision(
-        self, revision: SemanticRevision
-    ) -> SemanticRevision:
+    def save_semantic_revision(self, revision: SemanticRevision) -> SemanticRevision:
         with self._connection() as connection:
             connection.execute(
                 """
@@ -826,14 +807,10 @@ class SQLiteMetadataRepository:
             or stored.ossie_version != revision.ossie_version
             or stored.size_bytes != revision.size_bytes
         ):
-            raise RuntimeError(
-                "semantic revision metadata is immutable"
-            )
+            raise RuntimeError("semantic revision metadata is immutable")
         return stored
 
-    def semantic_revision(
-        self, revision_id: str
-    ) -> SemanticRevision | None:
+    def semantic_revision(self, revision_id: str) -> SemanticRevision | None:
         with self._connection() as connection:
             row = connection.execute(
                 """
@@ -843,9 +820,7 @@ class SQLiteMetadataRepository:
             ).fetchone()
         return _semantic_revision(row) if row else None
 
-    def latest_semantic_revision(
-        self, model_id: str
-    ) -> SemanticRevision | None:
+    def latest_semantic_revision(self, model_id: str) -> SemanticRevision | None:
         with self._connection() as connection:
             row = connection.execute(
                 """
@@ -973,10 +948,12 @@ class SQLiteMetadataRepository:
             values.append(status)
         clause = " AND ".join(where)
         with self._connection() as connection:
-            total = int(connection.execute(
-                f"SELECT COUNT(*) AS count FROM agent_trace_runs WHERE {clause}",
-                values,
-            ).fetchone()["count"])
+            total = int(
+                connection.execute(
+                    f"SELECT COUNT(*) AS count FROM agent_trace_runs WHERE {clause}",
+                    values,
+                ).fetchone()["count"]
+            )
             rows = connection.execute(
                 f"""
                 SELECT * FROM agent_trace_runs
@@ -1052,15 +1029,10 @@ class SQLiteMetadataRepository:
                 (
                     status,
                     started_at.isoformat() if started_at else current["started_at"],
-                    (
-                        completed_at.isoformat()
-                        if completed_at
-                        else current["completed_at"]
-                    ),
+                    (completed_at.isoformat() if completed_at else current["completed_at"]),
                     error,
                     _bounded_json(
-                        metrics if metrics is not None
-                        else json.loads(current["metrics_json"]),
+                        metrics if metrics is not None else json.loads(current["metrics_json"]),
                         250_000,
                     ),
                     (
@@ -1103,9 +1075,7 @@ class SQLiteMetadataRepository:
             ).fetchall()
             return [_evaluation_run(row) for row in rows]
 
-    def append_evaluation_result(
-        self, result: EvaluationResult
-    ) -> EvaluationResult:
+    def append_evaluation_result(self, result: EvaluationResult) -> EvaluationResult:
         with self._connection() as connection:
             connection.execute(
                 """
@@ -1128,9 +1098,7 @@ class SQLiteMetadataRepository:
             )
         return result
 
-    def evaluation_results(
-        self, evaluation_run_id: str
-    ) -> list[EvaluationResult]:
+    def evaluation_results(self, evaluation_run_id: str) -> list[EvaluationResult]:
         with self._connection() as connection:
             rows = connection.execute(
                 """
@@ -1280,7 +1248,7 @@ class SQLiteMetadataRepository:
                        COUNT(*) AS event_count,
                        MAX(organization_id) AS organization_id
                 FROM audit_events
-                WHERE {' AND '.join(where)}
+                WHERE {" AND ".join(where)}
                 GROUP BY session_id, principal_id
                 ORDER BY last_seen_at DESC
                 LIMIT ?
@@ -1319,9 +1287,7 @@ class SQLiteMetadataRepository:
             )
             return deleted.rowcount
 
-    def _validate_model_references(
-        self, connection: sqlite3.Connection, model: Model
-    ) -> None:
+    def _validate_model_references(self, connection: sqlite3.Connection, model: Model) -> None:
         organization = connection.execute(
             "SELECT 1 FROM organizations WHERE id = ?",
             (model.organization_id,),
@@ -1334,18 +1300,13 @@ class SQLiteMetadataRepository:
                 (reference.data_source_id,),
             ).fetchone()
             if row is None:
-                raise ValueError(
-                    f"unknown data source {reference.data_source_id!r}"
-                )
+                raise ValueError(f"unknown data source {reference.data_source_id!r}")
             if row["organization_id"] != model.organization_id:
                 raise ValueError(
-                    f"data source {reference.data_source_id!r} belongs to "
-                    "another organization"
+                    f"data source {reference.data_source_id!r} belongs to another organization"
                 )
 
-    def _model_from_row(
-        self, connection: sqlite3.Connection, row: sqlite3.Row
-    ) -> Model:
+    def _model_from_row(self, connection: sqlite3.Connection, row: sqlite3.Row) -> Model:
         references = tuple(
             DataSourceReference(
                 reference["data_source_id"],
@@ -1368,9 +1329,7 @@ class SQLiteMetadataRepository:
             description=row["description"],
             data_sources=references,
             version_ids=tuple(json.loads(row["version_ids_json"])),
-            discovery_run_ids=tuple(
-                json.loads(row["discovery_run_ids_json"])
-            ),
+            discovery_run_ids=tuple(json.loads(row["discovery_run_ids_json"])),
             glossary_id=row["glossary_id"],
             semantic_model_id=row["semantic_model_id"],
             ontology_id=row["ontology_id"],
@@ -1414,9 +1373,7 @@ class SQLiteMetadataRepository:
                     request_id=turn["request_id"],
                     tool_trace=tuple(json.loads(turn["tool_trace_json"])),
                     query_result=(
-                        json.loads(turn["query_result_json"])
-                        if turn["query_result_json"]
-                        else None
+                        json.loads(turn["query_result_json"]) if turn["query_result_json"] else None
                     ),
                     provenance=json.loads(turn["provenance_json"]),
                     trace_run_id=turn["trace_run_id"],
@@ -1441,9 +1398,7 @@ class SQLiteMetadataRepository:
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
             archived_at=(
-                datetime.fromisoformat(row["archived_at"])
-                if row["archived_at"]
-                else None
+                datetime.fromisoformat(row["archived_at"]) if row["archived_at"] else None
             ),
             messages=messages,
             turns=turns,
@@ -1478,6 +1433,11 @@ def _data_source(row: sqlite3.Row) -> DataSource:
         name=row["name"],
         connector=row["connector"],
         connection_ref=row["connection_ref"],
+        description=row["description"],
+        scope=json.loads(row["scope_json"] or "{}"),
+        crawl=json.loads(row["crawl_json"] or "{}"),
+        updated_at=row["updated_at"],
+        updated_by=row["updated_by"],
     )
 
 
@@ -1522,11 +1482,7 @@ def _trace_run(row: sqlite3.Row) -> TraceRun:
         termination_reason=row["termination_reason"],
         answer=row["answer"],
         started_at=datetime.fromisoformat(row["started_at"]),
-        completed_at=(
-            datetime.fromisoformat(row["completed_at"])
-            if row["completed_at"]
-            else None
-        ),
+        completed_at=(datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None),
         duration_ms=row["duration_ms"],
         tokens_in=row["tokens_in"],
         tokens_out=row["tokens_out"],
@@ -1559,11 +1515,7 @@ def _trace_span(row: sqlite3.Row) -> TraceSpan:
         name=row["name"],
         status=row["status"],
         started_at=datetime.fromisoformat(row["started_at"]),
-        completed_at=(
-            datetime.fromisoformat(row["completed_at"])
-            if row["completed_at"]
-            else None
-        ),
+        completed_at=(datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None),
         latency_ms=row["latency_ms"],
         input=json.loads(row["input_json"]),
         output=json.loads(row["output_json"]),
@@ -1588,16 +1540,8 @@ def _evaluation_run(row: sqlite3.Row) -> EvaluationRun:
         candidate_model=row["candidate_model"],
         max_tool_rounds=row["max_tool_rounds"],
         created_at=datetime.fromisoformat(row["created_at"]),
-        started_at=(
-            datetime.fromisoformat(row["started_at"])
-            if row["started_at"]
-            else None
-        ),
-        completed_at=(
-            datetime.fromisoformat(row["completed_at"])
-            if row["completed_at"]
-            else None
-        ),
+        started_at=(datetime.fromisoformat(row["started_at"]) if row["started_at"] else None),
+        completed_at=(datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None),
         error=row["error"],
         metrics=json.loads(row["metrics_json"]),
         cancel_requested=bool(row["cancel_requested"]),
@@ -1693,11 +1637,14 @@ def _bounded_json(value: object, maximum: int) -> str:
     )
     if len(encoded.encode()) <= maximum:
         return encoded
-    return json.dumps({
-        "truncated": True,
-        "original_bytes": len(encoded.encode()),
-        "preview": encoded[: max(maximum - 200, 0)],
-    }, separators=(",", ":"))
+    return json.dumps(
+        {
+            "truncated": True,
+            "original_bytes": len(encoded.encode()),
+            "preview": encoded[: max(maximum - 200, 0)],
+        },
+        separators=(",", ":"),
+    )
 
 
 def _now() -> str:

@@ -3,6 +3,7 @@
 fastapi==0.141.1
 httpx==0.28.1
 impyla==0.24.0
+pypdf==6.19.0  # crawler: PDF text extraction (CR-3)
 Jinja2==3.1.6
 jsonschema==4.23.0
 mcp==2.2.0

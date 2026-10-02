@@ -1720,14 +1720,14 @@ describe("Helios application shell", () => {
       "Model Overview",
       "Semantic Model",
       "Models & Discovery",
-      "Data Sources",
     ]) {
       expect(
         screen.queryByRole("link", { name: modelScoped }),
       ).not.toBeInTheDocument();
     }
-    // The ontology is not model-scoped, so it stays reachable.
+    // The ontology and data sources are not model-scoped, so they stay reachable.
     expect(screen.getByRole("link", { name: "Ontology" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Data Sources" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Activity Logs" }))
       .toBeInTheDocument();
   });

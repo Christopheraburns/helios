@@ -49,7 +49,7 @@ def seed_organizations_and_principals(repository):
 def test_migrations_are_versioned_and_idempotent(repository):
     repository.migrate()
 
-    assert repository.schema_version() == 7
+    assert repository.schema_version() == 8
     with sqlite3.connect(repository.path) as connection:
         tables = {
             row[0]
@@ -419,3 +419,38 @@ def test_repository_stores_references_not_credentials(repository):
     assert "connection_ref" in data_source_columns
     assert {"password", "secret", "token"}.isdisjoint(data_source_columns)
     assert {"password", "secret", "token"}.isdisjoint(principal_columns)
+
+
+def test_data_sources_keep_crawl_scope_and_can_be_deleted_when_unused(repository):
+    """DS-2: crawl configuration round-trips; a model's data source can't be deleted."""
+    seed_organizations_and_principals(repository)
+    source = DataSource(
+        id="corpus",
+        organization_id="acme",
+        name="Helios-DS development corpus",
+        connector="helios_ds",
+        connection_ref="S3 Object Store",
+        description="The crawler's development corpus",
+        scope={"dataset_id": "1ca99f86"},
+        crawl={"enabled": True, "settings_version": None, "schedule": "manual"},
+        updated_at="2026-10-02T00:00:00+00:00",
+        updated_by="cloudera-workbench:alice",
+    )
+    repository.save_data_source(source)
+    assert repository.data_source("corpus") == source
+    assert repository.data_sources_for_organization("acme")[0].scope == {"dataset_id": "1ca99f86"}
+
+    repository.save_data_source(
+        DataSource(id="warehouse", organization_id="acme", name="Warehouse",
+                   connector="impala", connection_ref="impala")
+    )
+    repository.save_model(
+        Model(id="m", organization_id="acme", name="M",
+              data_sources=(DataSourceReference("warehouse"),)),
+        created_by=principal("alice").id,
+    )
+    with pytest.raises(ValueError, match="used by a model"):
+        repository.delete_data_source("warehouse")
+    assert repository.delete_data_source("corpus") is True
+    assert repository.data_source("corpus") is None
+    assert repository.delete_data_source("corpus") is False

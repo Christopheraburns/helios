@@ -103,3 +103,27 @@ def ddl_statements(dialect: Dialect = IMPALA) -> list[str]:
             f"CREATE TABLE IF NOT EXISTS {table} (\n  {cols}\n){dialect.table_suffix}"
         )
     return statements
+
+
+# Impala reserved words (Impala 4), which cannot be column names unescaped.
+# Checked by tests; earlier regressions: COMMENT (Helios-DS), FIELDS (CR-3).
+IMPALA_RESERVED = frozenset(
+    """
+    add aggregate all alter analytic and anti api_version array as asc avro between bigint
+    binary block_size boolean by cached case cascade cast change char class close_fn column
+    columns comment compression compute copy create cross current data database databases
+    date datetime decimal default delete delimited desc describe distinct div double drop
+    else encoding end escaped exists explain extended external false fields fileformat files
+    finalize_fn first float following for format formatted from full function functions
+    grant group hash having if ilike in incremental init_fn inner inpath insert int integer
+    intermediate interval into invalidate iregexp is join kudu last left like limit lines
+    load location map merge_fn metadata not null nulls offset on or order outer over
+    overwrite parquet partition partitioned partitions preceding prepare_fn primary produced
+    purge range rcfile real recover refresh regexp rename repeatable replace replication
+    restrict returns revoke right rlike role roles row rows schema schemas select semi
+    sequencefile serdeproperties serialize_fn set show smallint sort stats stored
+    straight_join string struct symbol table tables tablesample tblproperties terminated
+    textfile then timestamp tinyint to true truncate unbounded uncached union unknown update
+    update_fn upsert use using values varchar view when where with
+    """.split()
+)

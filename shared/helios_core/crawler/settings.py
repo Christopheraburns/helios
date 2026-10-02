@@ -51,10 +51,25 @@ class ChatAnalyzer(_Model):
     )
 
 
+class TextAnalyzer(_Model):
+    """Plain text and Markdown files (object stores)."""
+
+    enabled: bool = True
+    max_chars: int = Field(2_000_000, ge=1, description="Longer files are cut, and say so")
+
+
+class RowAnalyzer(_Model):
+    """Table rows as documents (the table_rows connector): one segment per text column."""
+
+    enabled: bool = True
+
+
 class Analyzers(_Model):
     pdf: PdfAnalyzer = Field(default_factory=PdfAnalyzer)
     email: EmailAnalyzer = Field(default_factory=EmailAnalyzer)
     chat: ChatAnalyzer = Field(default_factory=ChatAnalyzer)
+    text: TextAnalyzer = Field(default_factory=TextAnalyzer)
+    row: RowAnalyzer = Field(default_factory=RowAnalyzer)
 
 
 # --- mentions -------------------------------------------------------------------

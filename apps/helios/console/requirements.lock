@@ -19,6 +19,7 @@ httpx==0.28.1
 httpx2==2.13.1
 idna==3.20
 impyla==0.24.0
+pypdf==6.19.0
 Jinja2==3.1.6
 jsonschema==4.23.0
 jsonschema-specifications==2025.9.1

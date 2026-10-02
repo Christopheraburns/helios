@@ -194,7 +194,7 @@ export default function OntologyPage({ context }: OntologyPageProps) {
         <div className="empty-state">
           <h2>No ontology versions published</h2>
           <p>Publish a LinkML schema to get started.</p>
-          <button className="publish-button publish-button--primary" onClick={() => setShowPublish(true)}>
+          <button className="button button--primary publish-open" onClick={() => setShowPublish(true)}>
             Publish a version…
           </button>
         </div>
@@ -208,7 +208,7 @@ export default function OntologyPage({ context }: OntologyPageProps) {
       <div className="ontology-header">
         <div className="ontology-title-row">
           <h1>Ontology Browser</h1>
-          <button className="publish-button" onClick={() => setShowPublish((v) => !v)}>
+          <button className="button button--primary publish-open" onClick={() => setShowPublish((v) => !v)}>
             Publish a version…
           </button>
         </div>
@@ -251,7 +251,7 @@ export default function OntologyPage({ context }: OntologyPageProps) {
                       <span className="badge">active</span>
                     ) : (
                       <button
-                        className="publish-button"
+                        className="button button--secondary publish-inline"
                         disabled={activating}
                         onClick={() => void activateSelected()}
                       >
@@ -297,8 +297,8 @@ export default function OntologyPage({ context }: OntologyPageProps) {
         {activateError && <pre className="publish-error">{activateError}</pre>}
         <p className="ontology-legend">
           Grey arrows: <strong>is_a</strong> (arrow at the parent). Orange dashed: an attribute
-          whose values are another class (<code>*</code> = many). Click a class to focus on its
-          connections; click the background to clear.
+          whose values are another class (<code>*</code> = many). Click a class to show only its
+          own connections and their names; click the background to see everything again.
         </p>
       </div>
 
@@ -328,13 +328,6 @@ export default function OntologyPage({ context }: OntologyPageProps) {
                   if (e.key === "Enter" || e.key === " ") setSelectedClass(c.name);
                 }}
               >
-                <span
-                  className="layer-swatch"
-                  style={{
-                    background: LAYER_COLOURS[c.layer].fill,
-                    borderColor: LAYER_COLOURS[c.layer].border,
-                  }}
-                />
                 {c.name}
               </div>
             ))}

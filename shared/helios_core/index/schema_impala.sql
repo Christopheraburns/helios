@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS helios_index.segments (
   ordinal BIGINT,
   locator STRING,
   text STRING,
-  ontology_version STRING
+  ontology_version STRING,
+  structure STRING
 ) STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
 
 CREATE TABLE IF NOT EXISTS helios_index.mentions (
