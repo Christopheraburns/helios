@@ -33,6 +33,14 @@ class DatasetRecord(BaseModel):
     manifest_sha256: str = Field(..., description="SHA256 of canonical manifest bytes")
     scenario_count: int = Field(...)
     planned_artifact_count: int = Field(...)
+    # Reproducibility dependencies (Q-03)
+    lockfile: Optional[str] = Field(None, description="SHA256 of requirements.lock")
+    reportlab_version: Optional[str] = Field(None, description="Pinned ReportLab version")
+    pypdf_version: Optional[str] = Field(None, description="Pinned pypdf version")
+    fonts: Optional[str] = Field(None, description="System fonts installed in runtime")
+    manifest_schema_version: Optional[str] = Field(None, description="Manifest format schema version")
+    platform_architecture: Optional[str] = Field(None, description="CPU architecture (e.g. x86_64)")
+    runtime_version: Optional[str] = Field(None, description="helios-ds-runtime image version")
 
 
 class GenerationRunRecord(BaseModel):
@@ -48,6 +56,9 @@ class GenerationRunRecord(BaseModel):
     python_version: str = Field(...)
     platform: str = Field(...)
     container_digest: Optional[str] = Field(None)
+    # Reproducibility tracking (Q-03)
+    platform_architecture: Optional[str] = Field(None, description="CPU architecture")
+    runtime_version: Optional[str] = Field(None, description="helios-ds-runtime version")
 
 
 class DatasetLifecycleRecord(BaseModel):

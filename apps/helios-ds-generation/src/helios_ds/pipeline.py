@@ -10,6 +10,8 @@ Rendering happens while the dataset is CREATING (spec: publish protocol), so a
 dataset only reaches VALIDATING and IN_REVIEW once its artifacts exist.
 """
 
+import hashlib
+import importlib.metadata
 import platform
 import uuid
 from dataclasses import dataclass, field
@@ -20,7 +22,7 @@ from .golden import build_golden, check_golden, write_golden
 from .lakehouse import LakehouseSink
 from .lakehouse.sink import canonical_json
 from .lifecycle import DatasetLifecycle, DatasetState, ValidationFailed, utc_now, validate_published
-from .manifests import GenerationIdentity, GenerationManifest, manifest_key
+from .manifests import GenerationIdentity, GenerationManifest, MANIFEST_SCHEMA_VERSION, manifest_key
 from .object_store import DeterminismIntegrityError, ObjectStore
 from .render.dataset import RenderSummary, render_dataset, renderable_artifact_ids
 from .scenarios import ScenarioPlanner, renderable, tables_for
@@ -35,6 +37,42 @@ PUBLISHED_STATES = {
     DatasetState.SUPERSEDED,
     DatasetState.REJECTED,
 }
+RUNTIME_VERSION = "0.1.1"  # helios-ds-runtime version with pinned dependencies (Q-03)
+
+
+def _get_lockfile_hash() -> Optional[str]:
+    """Return SHA256 of requirements.lock if available."""
+    try:
+        import os
+        runtime_dir = os.path.join(os.path.dirname(__file__), "..", "..", "runtimes", "helios-ds")
+        lockfile_path = os.path.join(runtime_dir, "requirements.lock")
+        if os.path.exists(lockfile_path):
+            with open(lockfile_path, "rb") as f:
+                return hashlib.sha256(f.read()).hexdigest()
+    except Exception:
+        pass
+    return None
+
+
+def _get_package_version(package_name: str) -> Optional[str]:
+    """Get the installed version of a package."""
+    try:
+        return importlib.metadata.version(package_name)
+    except Exception:
+        return None
+
+
+def _get_reproducibility_deps() -> Dict[str, Optional[str]]:
+    """Gather all reproducibility dependencies for Q-03."""
+    return {
+        "lockfile": _get_lockfile_hash(),
+        "reportlab_version": _get_package_version("reportlab"),
+        "pypdf_version": _get_package_version("pypdf"),
+        "fonts": "fonts-dejavu-core",  # from Dockerfile
+        "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
+        "platform_architecture": platform.machine(),
+        "runtime_version": RUNTIME_VERSION,
+    }
 
 
 @dataclass(frozen=True)
@@ -120,6 +158,7 @@ def _publish_rows(
         ],
     )
     identity = manifest.identity
+    repro_deps = _get_reproducibility_deps()
     sink.append(
         "helios_ds.datasets",
         [
@@ -138,6 +177,14 @@ def _publish_rows(
                 manifest_sha256=manifest_sha,
                 scenario_count=len(manifest.scenarios),
                 planned_artifact_count=sum(len(s.artifacts) for s in manifest.scenarios),
+                # Reproducibility dependencies (Q-03)
+                lockfile=repro_deps.get("lockfile"),
+                reportlab_version=repro_deps.get("reportlab_version"),
+                pypdf_version=repro_deps.get("pypdf_version"),
+                fonts=repro_deps.get("fonts"),
+                manifest_schema_version=repro_deps.get("manifest_schema_version"),
+                platform_architecture=repro_deps.get("platform_architecture"),
+                runtime_version=repro_deps.get("runtime_version"),
             )
         ],
     )
@@ -245,6 +292,7 @@ def _record_run(
     outcome: str,
     error: Optional[str],
 ) -> None:
+    repro_deps = _get_reproducibility_deps()
     sink.append(
         "helios_ds.generation_runs",
         [
@@ -259,6 +307,8 @@ def _record_run(
                 python_version=platform.python_version(),
                 platform=platform.platform(),
                 container_digest=None,
+                platform_architecture=repro_deps.get("platform_architecture"),
+                runtime_version=repro_deps.get("runtime_version"),
             )
         ],
     )
