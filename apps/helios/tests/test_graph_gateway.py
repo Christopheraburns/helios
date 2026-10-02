@@ -8,10 +8,9 @@ Memgraph itself.
 from types import SimpleNamespace
 
 import pytest
-from fastapi.testclient import TestClient
-
 from apps.helios.graph import gateway
 from apps.helios.tests.test_ontology_graph import FakeBolt, sample_graph
+from fastapi.testclient import TestClient
 
 TOKEN = "test-token"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
@@ -247,3 +246,94 @@ def test_rebuild_skips_reload_when_memgraph_already_holds_the_version(client):
         }
     )
     assert gateway._rebuild_active(warm)["status"] == "unchanged"
+
+
+# --- crawl-run projections (CR-7) -----------------------------------------
+
+
+@pytest.fixture
+def graph_client(client, monkeypatch):
+    """The gateway over a Bolt fake with MERGE semantics (see test_graph_index)."""
+    from apps.helios.tests.test_graph_index import FakeGraph
+
+    graph = FakeGraph({"0.2.0": {"Item"}})
+    monkeypatch.setitem(gateway._state, "client", graph)
+    return SimpleNamespace(http=client.http, graph=graph)
+
+
+@pytest.mark.parametrize(
+    "method,path",
+    [
+        ("post", "/v1/index/run:begin"),
+        ("post", "/v1/index/run/assets"),
+        ("post", "/v1/index/run:finish"),
+        ("get", "/v1/index/run"),
+        ("get", "/v1/index"),
+        ("delete", "/v1/index/run"),
+    ],
+)
+def test_index_endpoints_require_the_service_token(client, method, path):
+    assert getattr(client.http, method)(path).status_code == 401
+
+
+def test_index_load_lifecycle(graph_client):
+    http, graph = graph_client.http, graph_client.graph
+    assert http.get("/v1/index/run", headers=AUTH).status_code == 404
+    assert http.post("/v1/index/run/assets", json={"rows": []}, headers=AUTH).status_code == 404
+
+    begun = http.post("/v1/index/run:begin", json={"ontology_version": "0.2.0"}, headers=AUTH)
+    assert begun.status_code == 200 and begun.json()["status"] == "created"
+
+    loaded = http.post(
+        "/v1/index/run/entities",
+        json={"rows": [{"entity_id": "e1", "ontology_class": "Item", "canonical_name": "x"},
+                       {"entity_id": "e2", "ontology_class": "Ghost", "canonical_name": "y"}]},
+        headers=AUTH,
+    )
+    assert loaded.json() == {"crawl_run_id": "run", "table": "entities", "rows": 2,
+                             "merged": 2, "skipped": 0, "without_class": 1}
+
+    state = http.get("/v1/index/run", headers=AUTH).json()
+    assert state["complete"] is False and state["counts"] is None
+    assert state["live_counts"]["nodes"]["Entity"] == 2
+
+    finished = http.post("/v1/index/run:finish", headers=AUTH).json()
+    assert finished["status"] == "complete"
+    assert finished["counts"]["edges"] == {"INSTANCE_OF": 1, "IN_RUN": 2}
+    assert http.get("/v1/index", headers=AUTH).json()["runs"][0]["complete"] is True
+
+    # A complete load is protected unless the caller forces a reload.
+    again = http.post("/v1/index/run:begin", json={"ontology_version": "0.2.0"}, headers=AUTH)
+    assert again.status_code == 409 and again.json()["detail"] == "run_already_loaded"
+    forced = http.post("/v1/index/run:begin", json={"ontology_version": "0.2.0", "force": True}, headers=AUTH)
+    assert forced.json()["status"] == "replaced"
+    assert http.get("/v1/index/run", headers=AUTH).json()["live_counts"]["nodes"]["Entity"] == 0
+
+    # An incomplete load is simply replaced.
+    assert http.post("/v1/index/run:begin", json={"ontology_version": "0.2.0"}, headers=AUTH).status_code == 200
+
+    assert http.delete("/v1/index/run", headers=AUTH).json()["status"] == "dropped"
+    assert http.get("/v1/index/run", headers=AUTH).status_code == 404
+    assert http.delete("/v1/index/run", headers=AUTH).status_code == 404
+    assert ("Class", "0.2.0", "Item") in graph.nodes  # the ontology is untouched
+
+
+def test_index_rejects_unknown_tables_and_relationship_types(graph_client):
+    http = graph_client.http
+    http.post("/v1/index/run:begin", json={"ontology_version": "0.2.0"}, headers=AUTH)
+    assert http.post("/v1/index/run/crawl_runs", json={"rows": [{}]}, headers=AUTH).status_code == 404
+    response = http.post(
+        "/v1/index/run/relationships",
+        json={"rows": [{"relationship_id": "r", "relationship_type": "Owns", "source_kind": "entity",
+                        "source_id": "a", "target_kind": "entity", "target_id": "b"}]},
+        headers=AUTH,
+    )
+    assert response.status_code == 422
+    assert "Owns" in response.json()["detail"]
+    assert "Owns" not in graph_client.graph.statements()
+
+
+def test_index_endpoints_report_503_when_memgraph_is_down(client, monkeypatch):
+    monkeypatch.setitem(gateway._state, "client", None)
+    response = client.http.post("/v1/index/run:begin", json={"ontology_version": "v"}, headers=AUTH)
+    assert response.status_code == 503

@@ -12,6 +12,7 @@ import App from "./App";
 import {
   ApiDiagnostics,
   ApiUnavailableError,
+  AssistantWorkspaceState,
   AuthenticationError,
   AuthorizationError,
   DiscoveryRun,
@@ -346,6 +347,72 @@ function proposalCollection(
   };
 }
 
+function workspaceState(organizationId = "north"): AssistantWorkspaceState {
+  const model = modelsFor(organizationId).models[0];
+  return {
+    organization: {
+      id: organizationId,
+      name: organizationId === "north" ? "North Region" : "South Region",
+    },
+    selected_model_id: model.id,
+    llm_provider: { configured: true, provider: "openai", model: "gpt-4o" },
+    mcp: { configured: true },
+    ontology: { version_count: 1, active_version: "0.2.0" },
+    data_sources: [
+      {
+        id: "warehouse",
+        name: "Production Warehouse",
+        connector: "impala",
+        crawl_enabled: false,
+        last_crawl: null,
+      },
+    ],
+    crawl_runs: { total: 0, last: null },
+    models: [
+      {
+        id: model.id,
+        name: model.name,
+        data_source_count: 1,
+        lifecycle: overviewFor(model.id).lifecycle,
+        summary: overviewFor(model.id).summary,
+        has_conversations: false,
+        available_actions: model.available_actions,
+      },
+    ],
+    journeys: [
+      {
+        id: "semantic-model",
+        title: "Create a semantic model",
+        description: "From sources to a published model.",
+        progress: { done: 1, total: 2 },
+        next_step_id: "review",
+        steps: [
+          {
+            id: "discover",
+            title: "Run discovery",
+            description: "Harvest and profile the sources.",
+            route: "/models",
+            params: {},
+            doc_slug: null,
+            status: "done",
+            note: null,
+          },
+          {
+            id: "review",
+            title: "Review proposals",
+            description: "Accept or reject proposed elements.",
+            route: "/canvas",
+            params: { review_run_id: "run-1" },
+            doc_slug: "review-proposals",
+            status: "todo",
+            note: null,
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function successfulClient(): HeliosApi {
   return {
     health: vi.fn().mockResolvedValue({ status: "ok" }),
@@ -419,6 +486,17 @@ function successfulClient(): HeliosApi {
     modelOverview: vi.fn((modelId: string) =>
       Promise.resolve(overviewFor(modelId)),
     ),
+    assistantWorkspaceState: vi.fn((organizationId: string) =>
+      Promise.resolve(workspaceState(organizationId)),
+    ),
+    assistantTurn: vi.fn().mockResolvedValue({
+      answer: "Open the canvas to review proposals.",
+      actions: [],
+      tool_trace: [],
+      provenance: { llm: { provider: "openai", model: "gpt-4o" } },
+      request_id: null,
+      trace_run_id: null,
+    }),
     modelRuns: vi.fn().mockResolvedValue({
       model_id: "north-model",
       runs: [discoveryRun()],
@@ -791,10 +869,10 @@ describe("Helios application shell", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("Loading Helios");
     expect(screen.getByLabelText("Organization")).toBeDisabled();
-    expect(screen.getByLabelText("Model")).toBeDisabled();
+    expect(screen.getByLabelText("Model", { selector: "select" })).toBeDisabled();
   });
 
-  it("opens Talk to Your Data as the conversation-first home", async () => {
+  it("opens Home with the lifecycle checklist as the landing page", async () => {
     const client = successfulClient();
     window.history.replaceState(
       {},
@@ -805,27 +883,37 @@ describe("Helios application shell", () => {
     render(<App client={client} />);
 
     expect(
-      await screen.findByRole("heading", { name: "North Model" }),
+      await screen.findByRole("heading", { name: "North Region" }),
     ).toBeInTheDocument();
-    await waitFor(() => expect(window.location.pathname).toBe("/talk"));
+    await waitFor(() => expect(window.location.pathname).toBe("/home"));
     const navigation = screen.getByRole("navigation", {
       name: "Primary navigation",
     });
-    expect(within(navigation).getByRole("heading", { name: "Ask" }))
-      .toBeInTheDocument();
-    expect(within(navigation).getByRole("heading", { name: "Build" }))
-      .toBeInTheDocument();
-    expect(within(navigation).getByRole("heading", { name: "Govern" }))
-      .toBeInTheDocument();
+    for (const group of ["Start", "Ask", "Model", "Sources", "Settings", "Help"]) {
+      expect(within(navigation).getByRole("heading", { name: group }))
+        .toBeInTheDocument();
+    }
+    expect(within(navigation).queryByRole("link", { name: "Proposals" }))
+      .not.toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Helios Talk to Your Data" }),
+      within(navigation).getByRole("button", { name: "Assistant" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByRole("link", { name: "Helios home" }),
     ).toHaveAttribute(
       "href",
-      "/talk?organization=north&model=north-model",
+      "/home?organization=north&model=north-model",
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Create a semantic model" }),
+    ).toBeInTheDocument();
+    expect(client.assistantWorkspaceState).toHaveBeenCalledWith(
+      "north",
+      "north-model",
     );
   });
 
-  it("manages a session-only AI model provider from Govern", async () => {
+  it("manages a session-only LLM provider from Settings", async () => {
     const client = successfulClient();
     vi.mocked(client.updateModelProviderSettings!).mockResolvedValue({
       source: "session",
@@ -856,7 +944,7 @@ describe("Helios application shell", () => {
     render(<App client={client} />);
 
     expect(
-      await screen.findByRole("heading", { name: "AI Model Provider" }),
+      await screen.findByRole("heading", { name: "LLM Provider" }),
     ).toBeInTheDocument();
     const openAi = screen.getByRole("option", { name: "OpenAI-compatible" });
     expect(openAi).toBeEnabled();
@@ -938,7 +1026,7 @@ describe("Helios application shell", () => {
     render(<App client={client} />);
 
     expect(
-      await screen.findByRole("heading", { name: "MCP Management" }),
+      await screen.findByRole("heading", { name: "MCP Server" }),
     ).toBeInTheDocument();
     expect(await screen.findByText("Available")).toBeInTheDocument();
     expect(screen.getByText("helios · 0.1.0")).toBeInTheDocument();
@@ -1076,7 +1164,7 @@ describe("Helios application shell", () => {
       await screen.findByRole("heading", { name: "North Model" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Organization")).toHaveValue("north");
-    expect(await screen.findByLabelText("Model")).toHaveValue("north-model");
+    expect(await screen.findByLabelText("Model", { selector: "select" })).toHaveValue("north-model");
     expect(screen.getByText("Data Analyst")).toBeInTheDocument();
     expect(screen.getByText(/^Build \S+$/)).toBeInTheDocument();
     expect(await screen.findByText("12")).toBeInTheDocument();
@@ -1091,8 +1179,20 @@ describe("Helios application shell", () => {
     expect(document.querySelector('a[href^="/runs/"]')).toBeNull();
     expect(screen.queryByRole("link", { name: "Publish" }))
       .not.toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Primary navigation" }))
-      .toHaveTextContent("GovernAI Model ProviderMCP ManagementGlossary");
+    const navigation = screen.getByRole("navigation", {
+      name: "Primary navigation",
+    });
+    expect(navigation).toHaveTextContent(
+      "ModelOverviewCanvasReview2GlossaryRuns",
+    );
+    expect(navigation).toHaveTextContent(
+      "SettingsLLM ProviderMCP ServerActivity Logs",
+    );
+    expect(within(navigation).getByRole("link", { name: "Review 2 pending" }))
+      .toHaveAttribute(
+        "href",
+        "/canvas?organization=north&model=north-model&review_run_id=run-1",
+      );
     expect(
       await screen.findByRole("heading", { name: "Helios health" }),
     ).toBeInTheDocument();
@@ -1189,21 +1289,30 @@ describe("Helios application shell", () => {
   it("loads models from the API when the organization changes", async () => {
     const client = successfulClient();
     render(<App client={client} />);
-    await screen.findByRole("heading", { name: "North Model" });
+    await screen.findByRole("heading", { name: "North Region" });
+    expect(
+      await screen.findByRole("link", { name: "Open North Model overview" }),
+    ).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Organization"), {
       target: { value: "south" },
     });
 
     expect(
-      await screen.findByRole("heading", { name: "South Model" }),
+      await screen.findByRole("link", { name: "Open South Model overview" }),
     ).toBeInTheDocument();
     expect(client.models).toHaveBeenLastCalledWith("south");
+    await waitFor(() =>
+      expect(client.assistantWorkspaceState).toHaveBeenLastCalledWith(
+        "south",
+        "south-model",
+      ),
+    );
   });
 
   it("collapses the desktop workspace navigation without hiding its links", async () => {
     render(<App client={successfulClient()} />);
-    await screen.findByRole("heading", { name: "North Model" });
+    await screen.findByRole("heading", { name: "North Region" });
 
     const navigation = screen.getByRole("navigation", {
       name: "Primary navigation",
@@ -1217,7 +1326,7 @@ describe("Helios application shell", () => {
       "app__body--workspace-collapsed",
     );
     expect(
-      screen.getByRole("link", { name: "Semantic Model" }),
+      screen.getByRole("link", { name: "Canvas" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Expand workspace" }),
@@ -1336,9 +1445,9 @@ describe("Helios application shell", () => {
   it("loads the selected model graph on the canvas route", async () => {
     const client = successfulClient();
     render(<App client={client} />);
-    await screen.findByRole("heading", { name: "North Model" });
+    await screen.findByRole("heading", { name: "North Region" });
 
-    fireEvent.click(screen.getByRole("link", { name: "Semantic Model" }));
+    fireEvent.click(screen.getByRole("link", { name: "Canvas" }));
 
     expect(
       await screen.findByRole("heading", { name: "North Model" }),
@@ -1662,10 +1771,10 @@ describe("Helios application shell", () => {
       await screen.findByRole("heading", { name: "Canvas" }),
     ).toBeInTheDocument();
     expect(await screen.findByLabelText("Organization")).toHaveValue("south");
-    expect(await screen.findByLabelText("Model")).toHaveValue("south-model");
+    expect(await screen.findByLabelText("Model", { selector: "select" })).toHaveValue("south-model");
     expect(client.models).toHaveBeenCalledWith("south");
 
-    fireEvent.click(screen.getByRole("link", { name: "Model Overview" }));
+    fireEvent.click(screen.getByRole("link", { name: "Overview" }));
     expect(window.location.pathname).toBe("/model-overview");
     expect(window.location.search).toContain("organization=south");
     expect(window.location.search).toContain("model=south-model");
@@ -1682,13 +1791,13 @@ describe("Helios application shell", () => {
     render(<App client={client} />);
 
     expect(
-      await screen.findByRole("heading", { name: "North Model" }),
+      await screen.findByRole("heading", { name: "North Region" }),
     ).toBeInTheDocument();
     await waitFor(() => {
       expect(window.location.search).toContain("organization=north");
     });
-    expect(screen.getByLabelText("Model")).toHaveValue("north-model");
-    expect(screen.getByRole("link", { name: "Semantic Model" }))
+    expect(screen.getByLabelText("Model", { selector: "select" })).toHaveValue("north-model");
+    expect(screen.getByRole("link", { name: "Canvas" }))
       .toHaveAttribute(
         "href",
         "/canvas?organization=north&model=north-model",
@@ -1705,22 +1814,28 @@ describe("Helios application shell", () => {
       models: [],
       count: 0,
     });
+    vi.mocked(client.assistantWorkspaceState!).mockResolvedValue({
+      ...workspaceState("north"),
+      selected_model_id: null,
+      models: [],
+    });
 
     render(<App client={client} />);
 
     expect(
-      await screen.findByRole("heading", {
-        name: "No semantic models available",
-      }),
+      await screen.findByRole("heading", { name: "North Region" }),
     ).toBeInTheDocument();
+    expect(
+      await screen.findByText(/No semantic models yet/),
+    ).toBeInTheDocument();
+    expect(client.assistantWorkspaceState).toHaveBeenCalledWith(
+      "north",
+      undefined,
+    );
     expect(screen.getByLabelText("Organization")).toHaveValue("north");
-    expect(screen.getByLabelText("Model")).toBeDisabled();
+    expect(screen.getByLabelText("Model", { selector: "select" })).toBeDisabled();
     expect(window.location.search).not.toContain("model=");
-    for (const modelScoped of [
-      "Model Overview",
-      "Semantic Model",
-      "Models & Discovery",
-    ]) {
+    for (const modelScoped of ["Overview", "Canvas", "Runs", "Glossary"]) {
       expect(
         screen.queryByRole("link", { name: modelScoped }),
       ).not.toBeInTheDocument();
@@ -1772,7 +1887,7 @@ describe("Helios application shell", () => {
     render(<App client={client} />);
 
     expect(
-      await screen.findByRole("heading", { name: "Discovery & Activity" }),
+      await screen.findByRole("heading", { name: "Discovery runs" }),
     ).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "run-1" })).toHaveAttribute(
       "href",
@@ -1813,7 +1928,7 @@ describe("Helios application shell", () => {
     expect(screen.getByRole("heading", { name: "Harvest" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Profile" }))
       .not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Discovery & Activity" }))
+    expect(screen.getByRole("link", { name: "Discovery runs" }))
       .toHaveAttribute(
         "href",
         "/models?organization=north&model=north-model",
@@ -2525,7 +2640,7 @@ describe("Helios application shell", () => {
     expect(
       await screen.findByRole("heading", { name: "North Model" }),
     ).toBeInTheDocument();
-    const composer = screen.getByLabelText("Ask about this model");
+    const composer = await screen.findByLabelText("Ask about this model");
     fireEvent.change(composer, { target: { value: "How many orders?" } });
     fireEvent.click(screen.getByRole("button", { name: "Ask Helios" }));
 

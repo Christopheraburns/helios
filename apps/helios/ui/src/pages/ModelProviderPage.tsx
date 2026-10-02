@@ -170,8 +170,8 @@ export default function ModelProviderPage({
     <div className="provider-settings">
       <header className="page-header">
         <div>
-          <p className="page-header__eyebrow">Govern</p>
-          <h1>AI Model Provider</h1>
+          <p className="page-header__eyebrow">Settings</p>
+          <h1>LLM Provider</h1>
           <p>
             Override the project model provider for this browser session and
             your signed-in identity.

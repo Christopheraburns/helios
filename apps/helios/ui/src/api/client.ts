@@ -948,6 +948,96 @@ export interface ClientAuditEvent {
   model_id?: string;
 }
 
+export interface AssistantJourneyStep {
+  id: string;
+  title: string;
+  description: string;
+  route: string;
+  params: Record<string, string>;
+  doc_slug: string | null;
+  status: "done" | "todo" | "external";
+  note: string | null;
+}
+
+export interface AssistantJourney {
+  id: string;
+  title: string;
+  description: string;
+  progress: { done: number; total: number };
+  next_step_id: string | null;
+  steps: AssistantJourneyStep[];
+}
+
+export interface AssistantWorkspaceState {
+  organization: { id: string; name: string };
+  selected_model_id: string | null;
+  llm_provider: {
+    configured: boolean;
+    provider: string | null;
+    model: string | null;
+  };
+  mcp: { configured: boolean };
+  ontology: { version_count: number; active_version: string | null };
+  data_sources: Array<{
+    id: string;
+    name: string;
+    connector: string;
+    crawl_enabled: boolean;
+    last_crawl: {
+      crawl_run_id: string;
+      status: string;
+      started_at: string;
+    } | null;
+  }>;
+  crawl_runs: {
+    total: number;
+    last: {
+      crawl_run_id: string;
+      status: string;
+      started_at: string;
+      source: string;
+    } | null;
+  };
+  models: Array<{
+    id: string;
+    name: string;
+    data_source_count: number;
+    lifecycle: ModelOverview["lifecycle"];
+    summary: ModelOverview["summary"];
+    has_conversations: boolean;
+    available_actions: string[];
+  }>;
+  journeys: AssistantJourney[];
+}
+
+export interface AssistantTurnRequest {
+  organization: string;
+  model: string | null;
+  message: string;
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
+  location?: { pathname: string; search: string };
+}
+
+export interface AssistantAction {
+  type: "navigate";
+  route: string;
+  params: Record<string, string>;
+  label: string;
+}
+
+export interface AssistantTurnResponse {
+  answer: string;
+  actions: AssistantAction[];
+  tool_trace: Array<{
+    name: string;
+    arguments: Record<string, unknown>;
+    ok: boolean;
+  }>;
+  provenance: { llm: { provider: string; model: string } };
+  request_id: string | null;
+  trace_run_id: string | null;
+}
+
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
 export class ConflictError extends Error {}
@@ -957,6 +1047,9 @@ export class ApiUnavailableError extends Error {
     super(message);
   }
 }
+
+/** HTTP 503: the API is reachable but a dependency (such as the LLM provider) is not configured. */
+export class ServiceUnavailableError extends ApiUnavailableError {}
 
 function apiErrorMessage(payload: unknown): string | null {
   if (!payload || typeof payload !== "object" || !("detail" in payload)) {
@@ -1002,6 +1095,39 @@ export interface CrawlRunSummary {
   settings: Record<string, unknown>;
   counts: Record<string, number>;
   error: string | null;
+  latest_evaluation: CrawlEvaluationSummary | null;
+}
+
+/** The headline numbers of an evaluation (CR-8); null where undefined (nothing to score). */
+export type CrawlEvaluationNumbers = Record<string, number | null>;
+
+export interface CrawlEvaluationSummary {
+  evaluation_id: string;
+  crawl_run_id: string;
+  dataset_id: string;
+  evaluated_at: string;
+  evaluator: string;
+  evaluator_mode: "proxy" | "workload_user" | string;
+  harness_version: string;
+  ontology_version: string;
+  strategy: string;
+  status: string;
+  error: string | null;
+  summary: CrawlEvaluationNumbers;
+}
+
+export interface CrawlEvaluation extends CrawlEvaluationSummary {
+  metrics: Record<string, unknown>;
+  run?: {
+    started_at: string;
+    finished_at: string | null;
+    status: string;
+    source: string;
+    crawler_version: string;
+    settings_version: number | null;
+    ontology_version: string;
+    counts: Record<string, number>;
+  };
 }
 
 export interface CrawlRunAsset {
@@ -1179,6 +1305,9 @@ export interface HeliosApi {
   ontologyClass?(version: string, className: string): Promise<OntologyClassDetail>;
   crawlRuns?(source?: string): Promise<CrawlRunSummary[]>;
   crawlRun?(crawlRunId: string): Promise<CrawlRunDetail>;
+  evaluateCrawlRun?(crawlRunId: string, datasetId: string): Promise<CrawlEvaluation>;
+  crawlRunEvaluations?(crawlRunId: string): Promise<CrawlEvaluation[]>;
+  crawlerEvaluations?(dataset?: string): Promise<CrawlEvaluation[]>;
   crawlerSettings?(): Promise<CrawlerSettingsState>;
   crawlerSettingsDefaults?(): Promise<{ content_hash: string; settings: Record<string, unknown> }>;
   crawlerSettingsVersion?(
@@ -1365,6 +1494,11 @@ export interface HeliosApi {
   recordClientAuditEvent?(
     event: ClientAuditEvent,
   ): Promise<{ ok: true }>;
+  assistantWorkspaceState?(
+    organizationId: string,
+    modelId?: string,
+  ): Promise<AssistantWorkspaceState>;
+  assistantTurn?(body: AssistantTurnRequest): Promise<AssistantTurnResponse>;
   applicationUrl?(path: string): string;
 }
 
@@ -1480,6 +1614,24 @@ export class HeliosApiClient implements HeliosApi {
 
   crawlRun(crawlRunId: string): Promise<CrawlRunDetail> {
     return this.get<CrawlRunDetail>(`/api/v1/crawler/runs/${encodeURIComponent(crawlRunId)}`);
+  }
+
+  evaluateCrawlRun(crawlRunId: string, datasetId: string): Promise<CrawlEvaluation> {
+    return this.post<CrawlEvaluation>(
+      `/api/v1/crawler/runs/${encodeURIComponent(crawlRunId)}:evaluate`,
+      { dataset_id: datasetId },
+    );
+  }
+
+  crawlRunEvaluations(crawlRunId: string): Promise<CrawlEvaluation[]> {
+    return this.get<CrawlEvaluation[]>(
+      `/api/v1/crawler/runs/${encodeURIComponent(crawlRunId)}/evaluations`,
+    );
+  }
+
+  crawlerEvaluations(dataset?: string): Promise<CrawlEvaluation[]> {
+    const query = dataset ? `?dataset=${encodeURIComponent(dataset)}` : "";
+    return this.get<CrawlEvaluation[]>(`/api/v1/crawler/evaluations${query}`);
   }
 
   crawlerSettings(): Promise<CrawlerSettingsState> {
@@ -2029,6 +2181,21 @@ export class HeliosApiClient implements HeliosApi {
     return this.post<{ ok: true }>("/api/v1/audit/client-events", event);
   }
 
+  assistantWorkspaceState(
+    organizationId: string,
+    modelId?: string,
+  ): Promise<AssistantWorkspaceState> {
+    const query = new URLSearchParams({ organization: organizationId });
+    if (modelId) query.set("model", modelId);
+    return this.get<AssistantWorkspaceState>(
+      `/api/v1/assistant/workspace-state?${query.toString()}`,
+    );
+  }
+
+  assistantTurn(body: AssistantTurnRequest): Promise<AssistantTurnResponse> {
+    return this.post<AssistantTurnResponse>("/api/v1/assistant/turn", body);
+  }
+
   applicationUrl(path: string): string {
     return new URL(path, this.baseUrl).toString();
   }
@@ -2116,9 +2283,11 @@ export class HeliosApiClient implements HeliosApi {
         detail = null;
       }
       const message = apiErrorMessage(detail);
-      throw new ApiUnavailableError(
-        message || `The Helios API returned HTTP ${response.status}.`,
-      );
+      const text = message || `The Helios API returned HTTP ${response.status}.`;
+      if (response.status === 503) {
+        throw new ServiceUnavailableError(text);
+      }
+      throw new ApiUnavailableError(text);
     }
     if (!response.headers.get("content-type")?.includes("application/json")) {
       throw new AuthenticationError(

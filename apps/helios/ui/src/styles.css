@@ -3838,3 +3838,104 @@ a:focus-visible {
   .docs-layout { grid-template-columns: 1fr; }
   .docs-sidebar { position: static; }
 }
+
+/* Navigation assistant drawer layout and nav additions (UX overhaul). */
+.app__body--assistant-open {
+  grid-template-columns: 238px minmax(0, 1fr) 360px;
+}
+
+.app__body--assistant-open.app__body--workspace-collapsed {
+  grid-template-columns: 72px minmax(0, 1fr) 360px;
+}
+
+.primary-nav__link--button {
+  width: 100%;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.primary-nav__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  margin-left: auto;
+  padding: 0 7px;
+  color: #735710;
+  font-size: 0.72rem;
+  font-weight: 800;
+  background: #fff7db;
+  border: 1px solid #f0dda0;
+  border-radius: 999px;
+}
+
+.primary-nav--collapsed .primary-nav__badge {
+  display: none;
+}
+
+.lifecycle-strip {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 12px 0 0;
+  list-style: none;
+  border-top: 1px solid var(--slate-100);
+}
+
+.lifecycle-strip__step {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--slate-500);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.lifecycle-strip__step + .lifecycle-strip__step::before {
+  content: "";
+  width: 14px;
+  height: 1px;
+  margin-right: 4px;
+  background: var(--slate-300);
+}
+
+.lifecycle-strip__marker {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--slate-300);
+  border-radius: 50%;
+}
+
+.lifecycle-strip__step--done {
+  color: var(--green-600);
+}
+
+.lifecycle-strip__step--done .lifecycle-strip__marker {
+  background: var(--green-600);
+  border-color: var(--green-600);
+}
+
+.lifecycle-strip__step--available {
+  color: var(--cyan-600);
+}
+
+.lifecycle-strip__step--available .lifecycle-strip__marker {
+  background: var(--cyan-100);
+  border-color: var(--cyan-600);
+}
+
+@media (max-width: 980px) {
+  .app__body--assistant-open,
+  .app__body--assistant-open.app__body--workspace-collapsed {
+    grid-template-columns: 1fr;
+  }
+}

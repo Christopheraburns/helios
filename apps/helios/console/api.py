@@ -2520,6 +2520,27 @@ def list_accessible_models(
     organization_id: str | None = None,
 ) -> dict:
     repository: MetadataRepository = request.app.state.metadata_repository
+    models = [
+        _model_metadata(AuthorizedModel(model, principal, policy))
+        for model in accessible_models(
+            repository, principal, policy, organization_id
+        )
+    ]
+    models.sort(key=lambda item: item["name"].lower())
+    return {
+        "organization_id": organization_id,
+        "models": models,
+        "count": len(models),
+    }
+
+
+def accessible_models(
+    repository: MetadataRepository,
+    principal: authz.Principal,
+    policy: authz.Policy,
+    organization_id: str | None = None,
+) -> list[Model]:
+    """Models the principal may read, optionally limited to one organization."""
     candidates: dict[str, Model] = {}
     for grant in repository.grants_for_principal(principal.id):
         if organization_id and grant.organization_id != organization_id:
@@ -2531,9 +2552,8 @@ def list_accessible_models(
             model = repository.model(grant.model_id)
             if model is not None:
                 candidates[model.id] = model
-
-    models = [
-        _model_metadata(AuthorizedModel(model, principal, policy))
+    return [
+        model
         for model in candidates.values()
         if policy.can(
             principal,
@@ -2541,12 +2561,6 @@ def list_accessible_models(
             authz.Resource("model", model.id, model.organization_id),
         ).allowed
     ]
-    models.sort(key=lambda item: item["name"].lower())
-    return {
-        "organization_id": organization_id,
-        "models": models,
-        "count": len(models),
-    }
 
 
 @api_router.get("/organizations/{org_id}")

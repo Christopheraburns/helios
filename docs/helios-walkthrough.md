@@ -382,7 +382,7 @@ sequenceDiagram
 
     U->>AI: Which customers spent the most in our stores last year?
     AI->>H: search: "customers", "spent", "stores", "last year"
-    H-->>AI: metric total_net_sales on store_sales; dimension customer_id; time sold_date
+    H-->>AI: metric total_net_sales on store_sales, dimension customer_id, time sold_date
     AI->>H: compile: total_net_sales by customer_id, sold_date in last year, top 10
     H-->>AI: SELECT c.c_customer_id, SUM(s.ss_net_paid) ... JOIN customer c ON s.ss_customer_sk = c.c_customer_sk ...
     AI->>W: run the SQL

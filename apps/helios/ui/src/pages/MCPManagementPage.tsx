@@ -148,8 +148,8 @@ export default function MCPManagementPage({
     }`}>
       <header className="page-header">
         <div>
-          <p className="page-header__eyebrow">Govern</p>
-          <h1>MCP Management</h1>
+          <p className="page-header__eyebrow">Settings</p>
+          <h1>MCP Server</h1>
           <p>
             Monitor the Helios MCP service and control the bounded tool loop
             used by Talk to Your Data.

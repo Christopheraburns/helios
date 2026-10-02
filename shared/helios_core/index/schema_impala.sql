@@ -155,3 +155,19 @@ CREATE TABLE IF NOT EXISTS helios_index.crawler_settings_activations (
   activated_at STRING,
   activated_by STRING
 ) STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
+
+CREATE TABLE IF NOT EXISTS helios_index.evaluations (
+  evaluation_id STRING,
+  crawl_run_id STRING,
+  dataset_id STRING,
+  evaluated_at STRING,
+  evaluator STRING,
+  evaluator_mode STRING,
+  harness_version STRING,
+  ontology_version STRING,
+  strategy STRING,
+  metrics STRING,
+  summary STRING,
+  status STRING,
+  error STRING
+) STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');

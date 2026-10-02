@@ -229,3 +229,30 @@ class CrawlerSettingsActivationRecord(BaseModel):
     content_hash: str
     activated_at: str
     activated_by: str
+
+
+# --- evaluations (CR-8 / CR-E1) ------------------------------------------------------
+
+
+class EvaluationRecord(BaseModel):
+    """One scoring of a crawl run against a Helios-DS ground-truth dataset
+    (apps/helios/crawler/evaluate.py). Append-only: ``evaluation_id`` is derived
+    from (crawl_run_id, dataset_id, harness_version), so a re-evaluation adds a
+    row with the same ID and readers take the latest ``evaluated_at``; equal
+    ``metrics`` across rows show the harness is reproducible."""
+
+    evaluation_id: str
+    crawl_run_id: str
+    dataset_id: str = Field(description="The helios_ground_truth dataset scored against")
+    evaluated_at: str
+    evaluator: str = Field(description="The principal the harness ran as")
+    evaluator_mode: str = Field(
+        description='"proxy" (Impala delegation to the principal) or "workload_user"'
+    )
+    harness_version: str
+    ontology_version: str
+    strategy: str = Field(description="The run's crawler arm: deterministic, llm or hybrid")
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    summary: dict[str, Any] = Field(default_factory=dict, description="The headline numbers")
+    status: str = Field(description="SUCCEEDED or FAILED")
+    error: str | None = None

@@ -8,6 +8,9 @@ import {
 import {
   ApiDiagnostics,
   ApiUnavailableError,
+  AssistantTurnRequest,
+  AssistantTurnResponse,
+  AssistantWorkspaceState,
   AuditEvent,
   AuditEventCollection,
   AuditEventOptions,
@@ -82,6 +85,13 @@ export interface ApplicationContextState {
   selectModel: (modelId: string) => void;
   retry: () => void;
   loadOntologyVersions: () => Promise<OntologyVersionSummary[]>;
+  loadAssistantWorkspaceState: (
+    organizationId: string,
+    modelId?: string,
+  ) => Promise<AssistantWorkspaceState>;
+  sendAssistantTurn: (
+    body: AssistantTurnRequest,
+  ) => Promise<AssistantTurnResponse>;
   loadOntologyGraph: (version: string) => Promise<OntologyGraphPayload>;
   loadOntologyClass: (version: string, className: string) => Promise<OntologyClassDetail>;
   /** The API client for crawler runs and settings (CR-9). */
@@ -581,6 +591,25 @@ export function useApplicationContext(
     }
     return api.ontologyVersions();
   }, [client]);
+  const loadAssistantWorkspaceState = useCallback(
+    (organizationId: string, modelId?: string) => {
+      const api = client();
+      if (!api.assistantWorkspaceState) {
+        throw new ApiUnavailableError(
+          "The assistant workspace state API is unavailable.",
+        );
+      }
+      return api.assistantWorkspaceState(organizationId, modelId);
+    },
+    [client],
+  );
+  const sendAssistantTurn = useCallback((body: AssistantTurnRequest) => {
+    const api = client();
+    if (!api.assistantTurn) {
+      throw new ApiUnavailableError("The assistant API is unavailable.");
+    }
+    return api.assistantTurn(body);
+  }, [client]);
   const loadOntologyGraph = useCallback((version: string) => {
     const api = client();
     if (!api.ontologyGraph) {
@@ -1067,6 +1096,8 @@ export function useApplicationContext(
     selectModel,
     retry: () => setLoadVersion((version) => version + 1),
     loadOntologyVersions,
+    loadAssistantWorkspaceState,
+    sendAssistantTurn,
     loadOntologyGraph,
     loadOntologyClass,
     crawlerClient,

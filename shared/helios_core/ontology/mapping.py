@@ -113,13 +113,16 @@ class ClassIdentifiers(_Model):
 
 
 class ResolutionConfig(_Model):
-    """The resolver's view of a mapping: identifiers per class, scopes, thresholds."""
+    """The resolver's view of a mapping: identifiers per class, scopes, thresholds,
+    and the source's join paths (``relationships``: Ossie relationship name ->
+    ontology edge), which joint resolution follows instead of hand-written SQL."""
 
     model: str
     ontology_version: str
     classes: dict[str, ClassIdentifiers]
     scope: list[ResolutionScope]
     thresholds: Thresholds
+    relationships: dict[str, str] = Field(default_factory=dict)
 
     def candidate_classes(self, source_uri: str) -> list[str]:
         """Classes to look for in an asset at ``source_uri`` (all mapped, if no scope matches)."""
@@ -152,6 +155,7 @@ def resolution_config(mapping: SourceMapping) -> ResolutionConfig:
         classes=classes,
         scope=list(mapping.resolution.scope),
         thresholds=mapping.resolution.thresholds,
+        relationships={r.ossie_relationship: r.edge for r in mapping.relationships},
     )
 
 

@@ -7,11 +7,13 @@ import {
 } from "react-router-dom";
 import { lazy, Suspense, useEffect, useState } from "react";
 
+import AssistantDrawer from "./components/AssistantDrawer";
 import { EmptyState, ErrorState, LoadingState } from "./components/AsyncState";
 import PrimaryNavigation from "./components/PrimaryNavigation";
 import TopNavigation from "./components/TopNavigation";
 import { HeliosApi } from "./api/client";
 import { useApplicationContext } from "./hooks/useApplicationContext";
+import HomePage from "./pages/HomePage";
 import ModelsPage from "./pages/ModelsPage";
 import OverviewPage from "./pages/OverviewPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
@@ -64,9 +66,24 @@ function ApplicationShell({ client }: AppProps) {
       return false;
     }
   });
+  const [assistantOpen, setAssistantOpen] = useState(() => {
+    try {
+      return window.localStorage.getItem("helios.assistant.open") === "true";
+    } catch {
+      return false;
+    }
+  });
   const errorTitle = context.errorKind
     ? errorTitles[context.errorKind]
     : "Helios could not be loaded";
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("helios.assistant.open", String(assistantOpen));
+    } catch {
+      // The shell remains usable when browser storage is unavailable.
+    }
+  }, [assistantOpen]);
 
   useEffect(() => {
     try {
@@ -144,11 +161,13 @@ function ApplicationShell({ client }: AppProps) {
       <div
         className={`app__body${
           workspaceCollapsed ? " app__body--workspace-collapsed" : ""
-        }`}
+        }${assistantOpen ? " app__body--assistant-open" : ""}`}
       >
         <PrimaryNavigation
           context={context}
           collapsed={workspaceCollapsed}
+          assistantOpen={assistantOpen}
+          onOpenAssistant={() => setAssistantOpen((open) => !open)}
           onToggleCollapsed={() => {
             const collapsed = !workspaceCollapsed;
             setWorkspaceCollapsed(collapsed);
@@ -186,8 +205,17 @@ function ApplicationShell({ client }: AppProps) {
                 path="/"
                 element={
                   <Navigate
-                    to={{ pathname: "/talk", search: location.search }}
+                    to={{ pathname: "/home", search: location.search }}
                     replace
+                  />
+                }
+              />
+              <Route
+                path="/home"
+                element={
+                  <HomePage
+                    context={context}
+                    onOpenAssistant={() => setAssistantOpen(true)}
                   />
                 }
               />
@@ -264,6 +292,11 @@ function ApplicationShell({ client }: AppProps) {
             </Suspense>
           )}
         </main>
+        <AssistantDrawer
+          context={context}
+          open={assistantOpen}
+          onClose={() => setAssistantOpen(false)}
+        />
       </div>
     </div>
   );

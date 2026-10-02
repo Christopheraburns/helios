@@ -80,7 +80,7 @@ def _crawl(index, connector, analyze=None, full=False, settings=DEFAULT_SETTINGS
 
 
 def _seen(target):
-    return lambda run, fetched, segments: target.append(fetched.asset.asset_id)
+    return lambda run, fetched, segments, mentions: target.append(fetched.asset.asset_id)
 
 
 def test_lists_only_the_dataset_and_maps_ontology_classes(corpus):
@@ -117,6 +117,7 @@ def test_second_crawl_carries_assets_and_segments_forward(corpus, index):
         "listed": 3,
         "carried_forward": 3,
         "segments": first.counts["segments"],
+        "mentions": 0,
     }
     assert seen == []  # nothing fetched or analyzed
     first_segments = index.read("helios_index.segments", {"crawl_run_id": first.crawl_run_id})
@@ -161,7 +162,7 @@ def test_an_integrity_failure_is_recorded_and_retried_next_time(corpus, index):
 def test_a_crashing_crawl_is_marked_failed_and_leaves_no_rows(corpus, index):
     connector, _ = corpus
 
-    def explode(run, fetched, segments):
+    def explode(run, fetched, segments, mentions):
         raise RuntimeError("analyzer bug")
 
     with pytest.raises(RuntimeError):

@@ -117,7 +117,7 @@ export default function ModelsPage({ context }: ModelsPageProps) {
       <header className="page-header">
         <div>
           <p className="page-header__eyebrow">{organization?.name ?? "Helios workspace"}</p>
-          <h1>Discovery &amp; Activity</h1>
+          <h1>Discovery runs</h1>
           <p>
             Artifact-backed discovery history for {model?.name ?? "the selected model"}.
           </p>

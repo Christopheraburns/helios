@@ -7,6 +7,10 @@ every caller goes through the fixed, parameterised endpoints defined here.
 Memgraph holds no durable truth: it is rebuilt from the payload cache on
 startup, and published versions are snapshotted to the lakehouse by the
 publisher (O-2). Nothing here is a system of record.
+
+Crawl-run projections (CR-7, `/v1/index/...`) are pushed by the Helios API from
+helios_index and are deliberately *not* rebuilt on startup: the lakehouse is
+canonical and the API re-projects a run on demand.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ from pydantic import BaseModel, Field
 
 from helios_core.ontology import OntologyGraph, OntologyGraphError
 
-from . import memgraph_process, ontology, store
+from . import index, memgraph_process, ontology, store
 from .bolt import connect
 
 _TOKEN = os.environ.get("HELIOS_GRAPH_TOKEN")
@@ -58,6 +62,7 @@ async def lifespan(app: FastAPI):
         _memgraph.wait_until_listening()
         _state["client"] = connect()
         ontology.ensure_indexes(_state["client"])
+        index.ensure_indexes(_state["client"])
         _state["started_at"] = time.time()
         _state["startup_seconds"] = round(time.monotonic() - started, 2)
         print(f"memgraph ready in {_state['startup_seconds']}s (pid {_memgraph.pid})", flush=True)
@@ -279,3 +284,85 @@ async def class_detail(version: str, name: str) -> dict[str, Any]:
     if detail is None:
         raise HTTPException(status_code=404, detail="class_not_found")
     return detail
+
+
+# --- crawl-run projections (CR-7) ---------------------------------------------------
+
+
+class BeginIndexRequest(BaseModel):
+    ontology_version: str = Field(description="The ontology version the run was made under")
+    force: bool = Field(default=False, description="Drop a complete load of this run first")
+
+
+class IndexRowsRequest(BaseModel):
+    """One batch of helios_index rows, as the record models dump them."""
+
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+
+
+def _index_run(client: Any, crawl_run_id: str) -> dict[str, Any]:
+    state = index.run_state(client, crawl_run_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="run_not_loaded")
+    return state
+
+
+@app.post("/v1/index/{crawl_run_id}:begin", dependencies=[Depends(require_token)])
+async def begin_index_run(crawl_run_id: str, request: BeginIndexRequest) -> dict[str, Any]:
+    """Start (or restart) loading one crawl run. An incomplete load is always
+    replaced; a complete one only with `force`."""
+    client = _client()
+    existing = index.run_state(client, crawl_run_id)
+    if existing is not None:
+        if existing.get("complete") and not request.force:
+            raise HTTPException(status_code=409, detail="run_already_loaded")
+        index.drop_run(client, crawl_run_id)
+    result = index.begin_run(client, crawl_run_id, request.ontology_version)
+    result["status"] = "replaced" if existing is not None else "created"
+    return result
+
+
+@app.post("/v1/index/{crawl_run_id}/{table}", dependencies=[Depends(require_token)])
+async def load_index_rows(crawl_run_id: str, table: str, request: IndexRowsRequest) -> dict[str, Any]:
+    """Load one table's rows for a run begun with :begin. Returns how many rows
+    were merged and how many edges were skipped for want of their end nodes."""
+    if table not in index.TABLES:
+        raise HTTPException(status_code=404, detail="unknown_table")
+    client = _client()
+    state = _index_run(client, crawl_run_id)
+    try:
+        result = index.load_batch(
+            client, crawl_run_id, table, request.rows, ontology_version=state["ontology_version"]
+        )
+    except index.IndexGraphError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"crawl_run_id": crawl_run_id, "table": table, "rows": len(request.rows), **result}
+
+
+@app.post("/v1/index/{crawl_run_id}:finish", dependencies=[Depends(require_token)])
+async def finish_index_run(crawl_run_id: str) -> dict[str, Any]:
+    client = _client()
+    _index_run(client, crawl_run_id)
+    return index.finish_run(client, crawl_run_id)
+
+
+@app.get("/v1/index", dependencies=[Depends(require_token)])
+async def list_index_runs() -> dict[str, Any]:
+    return {"runs": index.list_runs(_client())}
+
+
+@app.get("/v1/index/{crawl_run_id}", dependencies=[Depends(require_token)])
+async def index_run_state(crawl_run_id: str) -> dict[str, Any]:
+    """The run's load state with live counts (the stored counts are from :finish)."""
+    client = _client()
+    state = _index_run(client, crawl_run_id)
+    state["live_counts"] = index.counts(client, crawl_run_id)
+    return state
+
+
+@app.delete("/v1/index/{crawl_run_id}", dependencies=[Depends(require_token)])
+async def drop_index_run(crawl_run_id: str) -> dict[str, Any]:
+    client = _client()
+    _index_run(client, crawl_run_id)
+    index.drop_run(client, crawl_run_id)
+    return {"status": "dropped", "crawl_run_id": crawl_run_id}
