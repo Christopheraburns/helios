@@ -22,6 +22,6 @@ describe("DocsLayout", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Helios Query" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to console" }))
-      .toHaveAttribute("href", "/talk");
+      .toHaveAttribute("href", "/home");
   });
 });

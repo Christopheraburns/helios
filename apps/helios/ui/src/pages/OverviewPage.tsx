@@ -215,7 +215,7 @@ export default function OverviewPage({ context }: OverviewPageProps) {
                 <button
                   className="button button--secondary"
                   disabled
-                  title="The API does not yet expose a discovery launch operation."
+                  title="Discovery runs as a Workbench Job; launching it from the UI is not available yet."
                   type="button"
                 >
                   Run Discovery
@@ -255,6 +255,7 @@ export default function OverviewPage({ context }: OverviewPageProps) {
                 {publishMessage}
               </p>
             ) : null}
+            <LifecycleStrip lifecycle={overview.lifecycle} />
           </section>
 
           <SystemStatusSection
@@ -573,4 +574,45 @@ function formatReview(
       : `${lifecycle.unresolved_review_items} unresolved items`;
   }
   return formatLabel(lifecycle.review_status);
+}
+
+type LifecycleStepState = "done" | "available" | "todo";
+
+function LifecycleStrip({
+  lifecycle,
+}: {
+  lifecycle: NonNullable<ApplicationContextState["modelOverview"]>["lifecycle"];
+}) {
+  const published = lifecycle.publication_state === "published";
+  const steps: Array<{ label: string; state: LifecycleStepState }> = [
+    {
+      label: "Discover",
+      state: lifecycle.discovery_status === "proposals_ready" ? "done" : "todo",
+    },
+    {
+      label: "Review",
+      state: lifecycle.review_status === "complete" ? "done" : "todo",
+    },
+    { label: "Publish", state: published ? "done" : "todo" },
+    { label: "Ask", state: published ? "available" : "todo" },
+  ];
+  const stateLabel: Record<LifecycleStepState, string> = {
+    done: "done",
+    available: "available",
+    todo: "to do",
+  };
+  return (
+    <ol className="lifecycle-strip" aria-label="Model lifecycle">
+      {steps.map((step) => (
+        <li
+          className={`lifecycle-strip__step lifecycle-strip__step--${step.state}`}
+          key={step.label}
+        >
+          <span className="lifecycle-strip__marker" aria-hidden="true" />
+          <span className="lifecycle-strip__label">{step.label}</span>
+          <span className="sr-only">: {stateLabel[step.state]}</span>
+        </li>
+      ))}
+    </ol>
+  );
 }

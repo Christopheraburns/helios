@@ -36,10 +36,10 @@ export default function TopNavigation({ context }: TopNavigationProps) {
       <Link
         className="brand"
         to={{
-          pathname: "/talk",
+          pathname: "/home",
           search: contextSearch ? `?${contextSearch}` : "",
         }}
-        aria-label="Helios Talk to Your Data"
+        aria-label="Helios home"
       >
         <span className="brand__mark" aria-hidden="true">
           H

@@ -18,6 +18,7 @@ from .records import (
     CrawlRunRecord,
     EntityLinkRecord,
     EntityRecord,
+    EvaluationRecord,
     MentionRecord,
     OntologyActivationRecord,
     OntologyVersionRecord,
@@ -41,10 +42,16 @@ TABLES: dict[str, type[BaseModel]] = {
     f"{NAMESPACE}.claim_evidence": ClaimEvidenceRecord,
     f"{NAMESPACE}.crawler_settings": CrawlerSettingsRecord,
     f"{NAMESPACE}.crawler_settings_activations": CrawlerSettingsActivationRecord,
+    f"{NAMESPACE}.evaluations": EvaluationRecord,
 }
 
-# Tables written per crawl run (rows carry crawl_run_id).
-RUN_TABLES = tuple(name for name, model in TABLES.items() if "crawl_run_id" in model.model_fields)
+# Tables written per crawl run (rows carry crawl_run_id). Evaluations name a run
+# but are written by the harness, not the crawl, so they are not cleared with it.
+RUN_TABLES = tuple(
+    name
+    for name, model in TABLES.items()
+    if "crawl_run_id" in model.model_fields and model is not EvaluationRecord
+)
 
 _SQL_TYPES = {str: "STRING", int: "BIGINT", float: "DOUBLE", bool: "BOOLEAN"}
 

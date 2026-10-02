@@ -16,7 +16,7 @@ export default function DocsLayout() {
             <span className="brand__build">Documentation</span>
           </span>
         </Link>
-        <Link className="docs-topbar__back" to="/talk">
+        <Link className="docs-topbar__back" to="/home">
           Back to console
         </Link>
       </header>

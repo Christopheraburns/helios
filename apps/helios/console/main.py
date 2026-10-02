@@ -24,6 +24,7 @@ from fastapi import HTTPException
 
 from helios_core.metadata import SQLiteMetadataRepository
 from .api import api_router, principal_from_request
+from .assistant import assistant_router
 from .mcp_settings import DEFAULT_SESSION_MCP_SETTINGS_STORE
 from .model_provider import DEFAULT_SESSION_MODEL_PROVIDER_STORE
 from .review import review_router
@@ -200,6 +201,7 @@ app.include_router(review_router)
 app.include_router(ontology_router)
 app.include_router(crawler_router)
 app.include_router(data_sources_router)
+app.include_router(assistant_router)
 # Rebuild the on-disk ontology cache from helios_index (CR-0c), off the request path.
 start_cache_restore()
 

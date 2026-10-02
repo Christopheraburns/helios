@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type {
-  CrawlRunDetail,
-  CrawlRunSummary,
-  CrawlerSettingsSaveResult,
-  CrawlerSettingsState,
+import {
+  AuthorizationError,
+  type CrawlEvaluation,
+  type CrawlEvaluationNumbers,
+  type CrawlRunDetail,
+  type CrawlRunSummary,
+  type CrawlerSettingsSaveResult,
+  type CrawlerSettingsState,
 } from "../api/client";
 import { ErrorState, LoadingState } from "../components/AsyncState";
 import type { ApplicationContextState } from "../hooks/useApplicationContext";
@@ -14,7 +17,12 @@ interface CrawlerPageProps {
   context: ApplicationContextState;
 }
 
-type Tab = "runs" | "settings";
+type Tab = "runs" | "scores" | "settings";
+const TABS: { id: Tab; label: string }[] = [
+  { id: "runs", label: "Runs" },
+  { id: "scores", label: "Scores" },
+  { id: "settings", label: "Settings" },
+];
 
 function message(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
@@ -23,7 +31,24 @@ function message(err: unknown, fallback: string): string {
 const short = (value: string | null | undefined, n = 12) =>
   value ? (value.length > n ? `${value.slice(0, n)}…` : value) : "—";
 
-const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : "—");
+const when = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString() : "—");
+
+const pct = (value: number | null | undefined) => (value == null ? "—" : value.toFixed(2));
+
+/** "direct 0.97 · claims 0.91" from an evaluation's headline numbers. */
+function scoreLabel(summary: CrawlEvaluationNumbers | undefined): string {
+  if (!summary) return "—";
+  return `direct ${pct(summary.mention_recall_direct)} · claims ${pct(summary.claim_recall)}`;
+}
+
+/** The dataset a run was crawled from, when it is a Helios-DS dataset. */
+function datasetOf(run: CrawlRunSummary): string {
+  const source = run.settings?.data_source as { connector?: string; scope?: { dataset_id?: string } } | undefined;
+  if (run.connector.startsWith("helios_ds") || source?.connector?.startsWith("helios_ds")) {
+    return source?.scope?.dataset_id ?? run.source;
+  }
+  return "";
+}
 
 function duration(run: CrawlRunSummary): string {
   if (!run.finished_at) return run.status === "RUNNING" ? "running" : "—";
@@ -48,7 +73,8 @@ function statusClass(status: string): string {
 
 export default function CrawlerPage({ context }: CrawlerPageProps) {
   const [params, setParams] = useSearchParams();
-  const tab: Tab = params.get("tab") === "settings" ? "settings" : "runs";
+  const requested = params.get("tab");
+  const tab: Tab = requested === "settings" || requested === "scores" ? requested : "runs";
   const setTab = (next: Tab) => {
     const updated = new URLSearchParams(params);
     updated.set("tab", next);
@@ -64,20 +90,22 @@ export default function CrawlerPage({ context }: CrawlerPageProps) {
           Workbench Job (<code>python -m apps.helios.crawler crawl --dataset &lt;id&gt;</code>).
         </p>
         <div className="crawler-tabs" role="tablist">
-          {(["runs", "settings"] as Tab[]).map((t) => (
+          {TABS.map((t) => (
             <button
-              key={t}
+              key={t.id}
               role="tab"
-              aria-selected={tab === t}
-              className={`crawler-tab ${tab === t ? "active" : ""}`}
-              onClick={() => setTab(t)}
+              aria-selected={tab === t.id}
+              className={`crawler-tab ${tab === t.id ? "active" : ""}`}
+              onClick={() => setTab(t.id)}
             >
-              {t === "runs" ? "Runs" : "Settings"}
+              {t.label}
             </button>
           ))}
         </div>
       </div>
-      {tab === "runs" ? <RunsTab context={context} /> : <SettingsTab context={context} />}
+      {tab === "runs" && <RunsTab context={context} />}
+      {tab === "scores" && <ScoresTab context={context} />}
+      {tab === "settings" && <SettingsTab context={context} />}
     </div>
   );
 }
@@ -146,6 +174,7 @@ function RunsTab({ context }: CrawlerPageProps) {
               <th>Took</th>
               <th>Ontology</th>
               <th>Settings</th>
+              <th title="Latest evaluation: direct-mention recall and claim recall">Score</th>
             </tr>
           </thead>
           <tbody>
@@ -170,6 +199,7 @@ function RunsTab({ context }: CrawlerPageProps) {
                 <td className="nowrap">{duration(run)}</td>
                 <td>{run.ontology_version}</td>
                 <td>{run.settings_version ?? "defaults"}</td>
+                <td className="nowrap crawler-score">{scoreLabel(run.latest_evaluation?.summary)}</td>
               </tr>
             ))}
           </tbody>
@@ -238,6 +268,8 @@ function RunDetail({ context, crawlRunId }: CrawlerPageProps & { crawlRunId: str
       </dl>
       {run.error && <div className="crawler-error">{run.error}</div>}
 
+      <EvaluatePanel context={context} run={run} />
+
       <div className="crawler-chips">
         {Object.entries(run.asset_counts.by_status).map(([s, n]) => (
           <button
@@ -297,6 +329,284 @@ function RunDetail({ context, crawlRunId }: CrawlerPageProps & { crawlRunId: str
       </table>
       {assets.length > 500 && <p className="muted">Showing 500 of {assets.length}; filter to narrow.</p>}
     </section>
+  );
+}
+
+// --- evaluation ------------------------------------------------------------------
+
+function EvaluatePanel({ context, run }: CrawlerPageProps & { run: CrawlRunDetail }) {
+  const { crawlerClient } = context;
+  const suggested = datasetOf(run);
+  const [dataset, setDataset] = useState(suggested);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [result, setResult] = useState<CrawlEvaluation | null>(null);
+
+  useEffect(() => {
+    setDataset(suggested);
+    setResult(null);
+    setProblem(null);
+  }, [suggested, run.crawl_run_id]);
+
+  const evaluate = async () => {
+    setProblem(null);
+    setResult(null);
+    setBusy(true);
+    try {
+      setResult(await crawlerClient().evaluateCrawlRun!(run.crawl_run_id, dataset.trim()));
+    } catch (err) {
+      setProblem(
+        err instanceof AuthorizationError
+          ? "You don't have access to the ground truth for this dataset."
+          : message(err, "Evaluation failed"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const latest = result ?? run.latest_evaluation;
+  return (
+    <div className="crawler-evaluate">
+      <div className="crawler-evaluate-row">
+        <label>
+          Ground-truth dataset{" "}
+          <input
+            className="crawler-search"
+            aria-label="Ground-truth dataset"
+            value={dataset}
+            placeholder="Helios-DS dataset ID"
+            onChange={(e) => setDataset(e.target.value)}
+          />
+        </label>
+        <button
+          className="crawler-button crawler-button--primary"
+          disabled={busy || !dataset.trim()}
+          onClick={() => void evaluate()}
+        >
+          {busy ? "Evaluating…" : "Evaluate"}
+        </button>
+        <span className="muted">
+          Runs as you; Ranger decides whether you may read the ground truth.
+        </span>
+      </div>
+      {problem && <div className="crawler-error">{problem}</div>}
+      {latest && (
+        <div className={result ? "crawler-success" : "crawler-evaluate-latest"}>
+          {result ? "Scored" : "Last scored"} {when(latest.evaluated_at)} by {latest.evaluator} (
+          {latest.evaluator_mode}) against <span className="mono">{short(latest.dataset_id, 13)}</span>:{" "}
+          <span className="crawler-score">{scoreLabel(latest.summary)}</span>
+          {latest.error && <div className="crawler-problem">{latest.error}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- scores ----------------------------------------------------------------------------
+
+const SUMMARY_COLUMNS: { key: string; label: string; title: string }[] = [
+  { key: "segments_coverage", label: "Segments", title: "Truth evidence and mentions inside a crawler segment" },
+  { key: "mention_recall_direct", label: "Direct", title: "Recall of direct (identifier) mentions" },
+  { key: "mention_recall_alias", label: "Alias", title: "Recall of alias mentions" },
+  { key: "mention_recall_contextual", label: "Contextual", title: "Recall of contextual mentions" },
+  { key: "mention_precision", label: "Precision", title: "Crawler mentions that correspond to a truth mention" },
+  { key: "resolution_accuracy_alias", label: "Res. alias", title: "Resolution accuracy of alias mentions" },
+  { key: "sameas_precision", label: "SameAs", title: "Precision of definite (SameAs) links" },
+  { key: "claim_precision", label: "Claim P", title: "Claim precision" },
+  { key: "claim_recall", label: "Claim R", title: "Claim recall" },
+  { key: "evidence_agreement", label: "Evidence", title: "Matched claims with an agreeing evidence locator" },
+  { key: "questions_pass_rate", label: "Questions", title: "Golden questions passing at the retrieval level" },
+];
+
+type Cells = Record<string, Record<string, number | null>>;
+
+function MetricTable({ title, rows, columns }: { title: string; rows: Cells | undefined; columns: string[] }) {
+  const entries = Object.entries(rows ?? {});
+  if (entries.length === 0) return null;
+  return (
+    <section className="crawler-metric">
+      <h3>{title}</h3>
+      <table className="crawler-table">
+        <thead>
+          <tr>
+            <th />
+            {columns.map((c) => (
+              <th key={c} className="num">
+                {c.replace(/_/g, " ")}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map(([name, cell]) => (
+            <tr key={name}>
+              <td>{name}</td>
+              {columns.map((c) => (
+                <td key={c} className="num">
+                  {typeof cell[c] === "number" && !Number.isInteger(cell[c]) ? pct(cell[c]) : (cell[c] ?? "—")}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function EvaluationDetail({ evaluation }: { evaluation: CrawlEvaluation }) {
+  const m = evaluation.metrics as Record<string, Record<string, unknown>>;
+  const mentions = (m.mentions ?? {}) as { by_class_tier?: Record<string, Cells> };
+  const classTier: Cells = {};
+  for (const [cls, tiers] of Object.entries(mentions.by_class_tier ?? {})) {
+    for (const [tier, cell] of Object.entries(tiers)) classTier[`${cls} / ${tier}`] = cell;
+  }
+  const diagnostics = (m.diagnostics?.mentions ?? {}) as {
+    unmatched_crawler_mentions?: { extractor: string; class: string; count: number }[];
+    unfound_truth_surfaces?: { class: string; tier: string; surface: string; count: number }[];
+  };
+  if (evaluation.status !== "SUCCEEDED") {
+    return <div className="crawler-error">{evaluation.error ?? "evaluation failed"}</div>;
+  }
+  return (
+    <div className="crawler-evaluation-detail">
+      <MetricTable title="Mentions by class and tier" rows={classTier} columns={["truth_total", "truth_found", "recall", "class_correct_rate"]} />
+      <MetricTable title="Mention precision" rows={(m.mentions as { precision_by?: Cells })?.precision_by} columns={["crawler_total", "crawler_matched", "precision"]} />
+      <MetricTable title="Resolution by tier" rows={(m.resolution as { by_tier?: Cells })?.by_tier} columns={["found", "correct", "wrong", "possibly_only", "unresolved", "accuracy"]} />
+      <MetricTable title="Resolution by resolver" rows={(m.resolution as { by_resolver?: Cells })?.by_resolver} columns={["links", "correct", "accuracy"]} />
+      <MetricTable title="Claims by predicate" rows={(m.claims as { by_predicate?: Cells })?.by_predicate} columns={["truth_total", "truth_found", "recall", "crawler_total", "crawler_matched", "precision"]} />
+      <MetricTable title="Relationships by type" rows={(m.relationships as { by_type?: Cells })?.by_type} columns={["truth_total", "truth_found", "recall", "crawler_total", "crawler_matched", "precision"]} />
+      <MetricTable title="Questions by kind" rows={(m.questions as { by_kind?: Cells })?.by_kind} columns={["total", "passed", "pass_rate"]} />
+      <MetricTable title="Cases (pairwise)" rows={m.cases && !(m.cases as { skipped?: boolean }).skipped ? { pairs: m.cases as Record<string, number | null> } : undefined} columns={["crawler_pairs", "truth_pairs", "pairs_correct", "precision", "recall"]} />
+      <div className="crawler-diagnostics">
+        <section className="crawler-metric">
+          <h3>Unmatched crawler mentions</h3>
+          <ul>
+            {(diagnostics.unmatched_crawler_mentions ?? []).map((d) => (
+              <li key={`${d.extractor}/${d.class}`}>
+                {d.extractor} / {d.class}: {d.count}
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className="crawler-metric">
+          <h3>Most common unfound truth mentions</h3>
+          <ul>
+            {(diagnostics.unfound_truth_surfaces ?? []).map((d) => (
+              <li key={`${d.class}/${d.tier}/${d.surface}`}>
+                <span className="mono">{d.surface}</span> ({d.class} / {d.tier}): {d.count}
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function ScoresTab({ context }: CrawlerPageProps) {
+  const { crawlerClient } = context;
+  const [all, setAll] = useState<CrawlEvaluation[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [dataset, setDataset] = useState("");
+  const [open, setOpen] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      setAll(await crawlerClient().crawlerEvaluations!());
+    } catch (err) {
+      setError(message(err, "Failed to load evaluations"));
+    }
+  }, [crawlerClient]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const datasets = useMemo(() => Array.from(new Set((all ?? []).map((e) => e.dataset_id))).sort(), [all]);
+  const selected = dataset || datasets[0] || "";
+  const shown = (all ?? []).filter((e) => e.dataset_id === selected);
+
+  if (error) return <ErrorState title="Failed to load evaluations" message={error} />;
+  if (!all) return <LoadingState />;
+
+  return (
+    <div className="crawler-runs">
+      <div className="crawler-toolbar">
+        <label>
+          Dataset{" "}
+          <select value={selected} onChange={(e) => setDataset(e.target.value)}>
+            {datasets.map((d) => (
+              <option key={d} value={d}>
+                {short(d, 13)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="crawler-button" onClick={() => void load()}>
+          Refresh
+        </button>
+        <span className="muted">One row per crawl run: its latest evaluation against this dataset.</span>
+      </div>
+      {shown.length === 0 ? (
+        <div className="crawler-empty">No evaluations yet. Open a run and click Evaluate.</div>
+      ) : (
+        <table className="crawler-table crawler-scores">
+          <thead>
+            <tr>
+              <th>Run started</th>
+              <th>Strategy</th>
+              <th>Crawler</th>
+              <th>Settings</th>
+              <th>Status</th>
+              {SUMMARY_COLUMNS.map((c) => (
+                <th key={c.key} className="num" title={c.title}>
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((e) => (
+              <Fragment key={e.evaluation_id}>
+                <tr
+                  className={`clickable ${open === e.evaluation_id ? "selected" : ""}`}
+                  onClick={() => setOpen(open === e.evaluation_id ? null : e.evaluation_id)}
+                >
+                  <td className="nowrap" title={e.crawl_run_id}>
+                    {when(e.run?.started_at)}
+                  </td>
+                  <td>{e.strategy}</td>
+                  <td>{e.run?.crawler_version ?? "—"}</td>
+                  <td>{e.run?.settings_version ?? "defaults"}</td>
+                  <td>
+                    <span className={`crawler-badge ${statusClass(e.status)}`}>{e.status}</span>
+                  </td>
+                  {SUMMARY_COLUMNS.map((c) => (
+                    <td key={c.key} className="num">
+                      {pct(e.summary[c.key])}
+                    </td>
+                  ))}
+                </tr>
+                {open === e.evaluation_id && (
+                  <tr className="crawler-scores-detail">
+                    <td colSpan={5 + SUMMARY_COLUMNS.length}>
+                      <div className="muted">
+                        Evaluated {when(e.evaluated_at)} by {e.evaluator} ({e.evaluator_mode}), harness{" "}
+                        {e.harness_version}, ontology {e.ontology_version}.
+                      </div>
+                      <EvaluationDetail evaluation={e} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }
 

@@ -2,7 +2,7 @@
 
 Plan for the first Helios crawler. **How it analyzes an asset, step by step, and what is configurable: [crawler-analysis.md](crawler-analysis.md).** It indexes the Helios-DS development corpus (PDF, email, chat), resolves what the documents mention to TPC-DS entities through the ontology, extracts claims, writes `helios_index` in the lakehouse, and projects the result into Memgraph. Its output is scored against the hidden ground truth and the golden questions.
 
-**Status (2026-10-01):** plan only. No crawler, resolver, embedding or `helios_index` code exists. Inputs are ready:
+**Status (2026-10-02):** the deterministic arm (A) is complete end to end on the development corpus: fetch, segments, mentions, joint resolution, claims, Memgraph projection and the scoring harness (CR-0 to CR-8). Every gate is met; see the table under CR-8. Inputs were ready from the start:
 - **Development corpus:** `1ca99f86-e6a0-57fc-8311-cadcac4c8302`, READY. It has 101 return stories and 301 artifacts.
   - Ground truth: 794 entities and 3,135 mentions (2,131 direct, 698 alias, 306 contextual), 403 claims, 785 evidence passages.
   - 60 golden questions; question-set SHA-256 `ded20c2a…`.
@@ -229,13 +229,17 @@ The crawler runs as a **Workbench Job in the Helios project** (`apps/helios/`). 
   - The Crawler page shows Analyzed and Segments columns.
 
   Original task: Analyzers to segments: email (headers and body), chat (one segment per message), PDF (pages via `pypdf`, keeping text order). *Done when:* every development-corpus asset is segmented, and every ground-truth evidence locator falls inside a crawler segment. That last check runs in the evaluation project.
-- [ ] **CR-4** Mention extraction, built backwards from the data:
+- [x] **CR-4** *(Done 2026-10-02, uncommitted; measured on the development corpus.)* `apps/helios/crawler/gazetteer.py` builds per-class surface forms from the warehouse through the mapping (secondary keys, display names, alias columns, rendered alias templates, and partial first/last names for classes with two display columns; 348,409 forms; token-indexed longest match). `mentions.py` runs four extractors per asset: PDF labels and table cells, identifier patterns, gazetteer (low-specificity names such as store `ese` need a class cue within 40 characters or confirmation elsewhere in the asset; partial names need an anchored instance in the same asset), and contextual phrases. Locators follow the ground-truth conventions with offsets. **Result (CR-8):** direct-tier recall 0.997, alias 1.0, contextual 1.0; precision 0.93 (value mentions excluded). Crawler 0.4.0. Tests: `test_crawler_mentions.py`.
+
+  Original task: Mention extraction, built backwards from the data:
   - **identifier patterns:** item and customer IDs, ticket numbers, RMA and case numbers, email addresses, "receipt ending in NNNN", money and dates;
   - **a TPC-DS gazetteer** built from the mapping's display, secondary and alias columns: product, store, customer, brand and reason names, salutation plus surname, colour plus class, "<city> store";
   - **contextual references** ("the item", "this return"), which are recorded with no entity yet.
 
   *Done when:* direct-tier mention recall is ≥ 0.95 on the development corpus (scored by CR-8).
-- [ ] **CR-5** Resolution, recording `resolved_by` and evidence on every link:
+- [x] **CR-5** *(Done 2026-10-02, uncommitted; measured on the development corpus.)* `resolution.py` and `cases.py`: candidates by tier (exact_key, alias by specificity, partial names inheriting their anchor, minimal fuzzy), case clusters by union-find over the settings' identifiers, and **joint resolution**: one parameterised query per cluster against `store_returns` joined along the mapping's relationships (plus `store_sales` on ticket and item, `date_dim`, and co-located Brand on `item`), gated on a ticket or two constraint kinds; a unique row promotes every consistent mention to SameAs `joint`. Contextual references link when exactly one instance of the class is resolved in the asset or cluster. Return entities carry both the warehouse key and the document ids (RMA, CS). Relationships: Mentions, About, ReturnOf, Contains, LocatedAt, PartyTo, HasReason. `ResolutionConfig.relationships` exposes the mapping's join paths. **Result:** 101/101 clusters resolved uniquely; alias-tier accuracy 0.996, direct 0.999, contextual 1.0; SameAs precision 1.0 (3,351 links, none wrong, none below threshold); cases pairwise P/R 1.0/1.0; relationships 1.0 except LocatedAt/PartyTo recall 0.97 (returns with null store or customer keys). Crawler 0.5.0. Tests: `test_crawler_resolution.py`.
+
+  Original task: Resolution, recording `resolved_by` and evidence on every link:
   - **exact_key:** identifiers;
   - **alias:** gazetteer aliases, scored, with the alias threshold;
   - **fuzzy:** rapidfuzz on names, with the fuzzy threshold;
@@ -243,16 +247,36 @@ The crawler runs as a **Workbench Job in the Helios project** (`apps/helios/`). 
   - **contextual:** attach "the item" and similar to the asset's resolved entity of that type when there is exactly one.
 
   *Done when:* alias-tier resolution accuracy is ≥ 0.90 and nothing below threshold is linked as SameAs.
-- [ ] **CR-6** Claims: a predicate vocabulary declared in the retail pack (e.g. `PACKAGING_DAMAGED`, `RETURN_REASON`, `REFUND_REQUESTED`, `REFUND_APPROVED`), recognised by phrase rules over segments, with subject and object taken from the resolved entities and evidence spans recorded. *Done when:* claim precision is ≥ 0.90 and recall ≥ 0.80 on the development corpus.
+- [x] **CR-6** *(Done 2026-10-02, uncommitted; measured on the development corpus.)* `claims.py`: units are chat messages or sentences with exact offsets; cue phrases per predicate from the settings (strength strong/medium/weak → confidence 0.95/0.85/0.7; `*` gaps), clause-local negation and hedge guards, speaker voice (chat role, email author, PDF = staff); subject and object come from the case's resolved Return and its structural edges, one claim per (predicate, subject, object) per case with evidence per unit. **Result:** precision 1.0, recall 1.0 (403/403), evidence agreement 1.0 (785/785); all 60 golden questions pass at the retrieval level. Crawler 0.6.0. Tests: `test_crawler_claims.py`. The lexicon is generic retail language; the held-out corpus (C-12) is the over-tuning check.
+
+  Original task: Claims: a predicate vocabulary declared in the retail pack (e.g. `PACKAGING_DAMAGED`, `RETURN_REASON`, `REFUND_REQUESTED`, `REFUND_APPROVED`), recognised by phrase rules over segments, with subject and object taken from the resolved entities and evidence spans recorded. *Done when:* claim precision is ≥ 0.90 and recall ≥ 0.80 on the development corpus.
 
 ### Projection, scoring and visibility
 
-- [ ] **CR-7** Projection into Memgraph:
+- [x] **CR-7** *(Done 2026-10-02, uncommitted.)* Push model, like the ontology: `apps/helios/graph/index.py` (labels CrawlRun, Asset, Segment, Mention, Entity, Claim; whitelisted edge types incl. the ontology relationship classes; `INSTANCE_OF` to the materialised Class node; MERGE on index ids so reloads are idempotent and `drop_run` removes one run), gateway endpoints `/v1/index/{run}:begin|/{table}|:finish`, `GET/DELETE /v1/index/{run}`, `GET /v1/index`; `apps/helios/console/graph_client.py` (`HELIOS_GRAPH_GATEWAY_URL` + `HELIOS_GRAPH_TOKEN`); `POST /api/v1/crawler/runs/{id}:project` pushes a run's tables in reference order and returns graph counts beside index row counts. Projections are not rebuilt on gateway restart (the lakehouse is canonical). Tests: `test_graph_index.py` (drop and reload give equal counts, on a Bolt stand-in; the live Memgraph test runs in the helios-graph runtime).
+
+  Original task: Projection into Memgraph:
   - gateway endpoints to load one crawl run's entities, assets, segments, mentions, links and claims (whitelisted labels, as for the ontology), linked to the ontology classes they instantiate;
   - a Helios API client for the gateway (`HELIOS_GRAPH_GATEWAY_URL` plus token). The API currently reads the graph store files directly.
 
   *Done when:* deleting Memgraph's data and reloading from `helios_index` gives the same graph counts.
-- [ ] **CR-8** *(Rescoped 2026-10-02: the evaluation harness lives in the crawler package and is started from the Helios UI; see "Evaluation harness and LLM crawler" below.)* Scoring (reads ground truth and `helios_index`):
+- [x] **CR-8** *(Done 2026-10-02 together with CR-E1, uncommitted.)* `apps/helios/crawler/evaluate.py` scores one crawl run against one ground-truth dataset: segment coverage, mention precision and recall by class and tier, resolution accuracy by tier and wrong SameAs, case clusters (pairwise), relationships by type (ground-truth predicates mapped to ontology edges), claims by predicate with evidence-locator agreement, and the golden questions by kind (no-answer questions must have nothing linked). Results go to `helios_index.evaluations` (`EvaluationRecord`; metrics are deterministic, so a re-evaluation is byte-identical). CLI `python -m apps.helios.crawler evaluate --run … --dataset …`; API `POST /api/v1/crawler/runs/{id}:evaluate` runs as the signed-in principal through Impala proxy delegation (`evaluator_mode`), 403 when the ground truth is not readable; `GET …/evaluations`. Crawler page: Score column, Evaluate action, Scores tab. Tests: `test_crawler_evaluate.py`.
+
+  **Development corpus `1ca99f86…`, crawler 0.6.0 (final run `crawl_dad7102e…`, local index):**
+
+  | Measure | Gate | Result |
+  |---|---|---|
+  | Segment coverage | 1.0 | 1.000 |
+  | Mention recall direct / alias / contextual | ≥ 0.95 direct | 0.997 / 1.000 / 1.000 |
+  | Mention precision (value mentions excluded) | — | 0.928 |
+  | Resolution accuracy alias / direct / contextual | ≥ 0.90 alias | 0.996 / 0.999 / 1.000 |
+  | SameAs precision | no sub-threshold SameAs | 1.000 (3,351 links) |
+  | Cases pairwise P / R | — | 1.000 / 1.000 |
+  | Claims precision / recall | ≥ 0.90 / ≥ 0.80 | 1.000 / 1.000 |
+  | Evidence agreement | — | 1.000 |
+  | Golden questions pass rate (all six kinds) | — | 1.000 |
+
+  These numbers come from local development runs (run tables in DuckDB, TPC-DS and the corpus read from the lakehouse). The lakehouse run as `srv_helios_crawler` and its evaluation from the Crawler page are the next operational step. Original task: Scoring (reads ground truth and `helios_index`):
   - mention precision and recall by tier and entity type;
   - entity-resolution accuracy by tier;
   - claim precision and recall;
@@ -306,7 +330,7 @@ Two crawlers run side by side on the same corpus and are scored by the same harn
 
 **LLM:** the project default from the AI Model Provider page (the project's `LLM_PROVIDER`, model and endpoint environment variables, through `helios_core.llm`). Session overrides live only in the API's memory and can't reach a Job. Provider and model are recorded on every run; keys are never stored in tables.
 
-- [ ] **CR-E1** Harness:
+- [x] **CR-E1** *(Done 2026-10-02 with CR-8, except LLM-arm measures, which wait for CR-L1.)* Harness:
   - the CR-8 metrics: mentions by tier and class; resolution accuracy and wrong definite links; case clustering; claims; evidence locators; golden questions at the retrieval level, including correct "no answer";
   - plus, for LLM arms: hallucinated spans, tokens, cost and latency per document, and run-to-run variation;
   - results in a `helios_index.evaluations` table (run, corpus, evaluator principal, metrics, ground-truth dataset);

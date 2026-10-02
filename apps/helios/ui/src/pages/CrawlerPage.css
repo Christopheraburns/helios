@@ -316,3 +316,69 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* --- evaluation (CR-8) ------------------------------------------------------- */
+
+.crawler-score {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary, #111827);
+}
+
+.crawler-evaluate {
+  margin: 12px 0 16px;
+  padding: 12px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 6px;
+  background: var(--bg-secondary, #f9fafb);
+  font-size: 13px;
+}
+
+.crawler-evaluate-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.crawler-evaluate-row .crawler-search {
+  min-width: 320px;
+}
+
+.crawler-evaluate-latest {
+  margin-top: 8px;
+}
+
+.crawler-scores th.num {
+  white-space: nowrap;
+}
+
+.crawler-scores-detail > td {
+  background: var(--bg-secondary, #f9fafb);
+}
+
+.crawler-evaluation-detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.crawler-metric h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--text-secondary, #6b7280);
+}
+
+.crawler-metric ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.crawler-diagnostics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  grid-column: 1 / -1;
+}

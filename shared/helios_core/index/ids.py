@@ -55,3 +55,9 @@ def external_id(source: str, obj: str, key: dict[str, object]) -> str:
     e.g. "tpcds.customer:c_customer_sk=12345"."""
     rendered = ",".join(f"{name}={key[name]}" for name in sorted(key))
     return f"{source}.{obj}:{rendered}"
+
+
+def evaluation_id(crawl_run_id: str, dataset_id: str, harness_version: str) -> str:
+    """One ID per (run, ground-truth dataset, harness version): re-evaluations
+    share it, so their metrics can be compared for reproducibility."""
+    return _id("evaluation", crawl_run_id, dataset_id, harness_version)

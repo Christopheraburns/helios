@@ -178,7 +178,7 @@ export default function RunDetailPage({ context }: RunPageProps) {
     <>
       <nav className="breadcrumbs" aria-label="Breadcrumb">
         <Link to={{ pathname: "/models", search: location.search }}>
-          Discovery &amp; Activity
+          Discovery runs
         </Link>
         <span aria-hidden="true">/</span>
         <span aria-current="page">{run.id}</span>
@@ -458,7 +458,7 @@ export function HistoricalTableProfilePage({ context }: RunPageProps) {
   return (
     <>
       <nav className="breadcrumbs" aria-label="Breadcrumb">
-        <Link to={{ pathname: "/models", search: location.search }}>Discovery &amp; Activity</Link>
+        <Link to={{ pathname: "/models", search: location.search }}>Discovery runs</Link>
         <span aria-hidden="true">/</span>
         <Link
           to={{

@@ -1,0 +1,253 @@
+.home-page .page-header .home-page__assistant {
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+.home-page .summary-grid {
+  margin-top: 0;
+}
+
+.summary-card__text {
+  font-size: 1.25rem !important;
+  line-height: 1.3 !important;
+  overflow-wrap: anywhere;
+}
+
+.journey-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.journey-panel {
+  padding: 22px 24px;
+  background: #fff;
+  border: 1px solid var(--slate-200);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.journey-panel__header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.journey-panel__header .count-badge {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.journey-panel__header h2 {
+  margin: 0;
+  color: var(--navy-950);
+  font-size: 1.1rem;
+  letter-spacing: -0.015em;
+}
+
+.journey-panel__header p {
+  margin: 6px 0 0;
+  color: var(--slate-700);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.journey-steps {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.journey-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 10px;
+  border-radius: 9px;
+}
+
+.journey-step--next {
+  background: var(--cyan-100);
+}
+
+.journey-step__marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  color: var(--slate-500);
+  border: 2px solid var(--slate-300);
+  border-radius: 50%;
+}
+
+.journey-step__marker svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.journey-step__marker--done {
+  color: #fff;
+  background: var(--green-600);
+  border-color: var(--green-600);
+}
+
+.journey-step__marker--external {
+  color: #735710;
+  background: #fff7db;
+  border-color: #f0dda0;
+}
+
+.journey-step__body {
+  min-width: 0;
+}
+
+.journey-step__title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--navy-950);
+  font-size: 0.92rem;
+}
+
+.journey-step--done .journey-step__title strong {
+  color: var(--slate-500);
+}
+
+.journey-step__next {
+  padding: 1px 8px;
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--cyan-600);
+  border-radius: 999px;
+}
+
+.journey-step__body p {
+  margin: 3px 0 0;
+  color: var(--slate-700);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.journey-step__body .journey-step__note {
+  color: var(--slate-500);
+  font-style: italic;
+}
+
+.journey-step__links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.journey-step__open.button {
+  min-height: 30px;
+  margin-top: 0;
+  padding: 4px 11px;
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.journey-step__guide {
+  color: var(--cyan-600);
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.home-models {
+  margin-top: 28px;
+}
+
+.home-models h2 {
+  margin: 0 0 10px;
+  color: var(--navy-950);
+  font-size: 1.1rem;
+  letter-spacing: -0.015em;
+}
+
+.home-models__empty {
+  margin: 0;
+  color: var(--slate-500);
+  font-size: 0.88rem;
+}
+
+.home-models__list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-models__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 16px;
+  background: #fff;
+  border: 1px solid var(--slate-200);
+  border-radius: 10px;
+}
+
+.home-models__name {
+  color: var(--navy-950);
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-models__unresolved {
+  color: var(--slate-500);
+  font-size: 0.82rem;
+}
+
+.home-models__link {
+  color: var(--cyan-600);
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+@media (max-width: 980px) {
+  .journey-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-page .summary-grid--four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .home-models__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+@media (max-width: 680px) {
+  .journey-step {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .journey-step__links {
+    grid-column: 2;
+    flex-direction: row;
+    align-items: center;
+  }
+}
