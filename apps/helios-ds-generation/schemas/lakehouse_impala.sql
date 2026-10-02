@@ -17,7 +17,14 @@ CREATE TABLE IF NOT EXISTS helios_ds.datasets (
   manifest_locator STRING,
   manifest_sha256 STRING,
   scenario_count BIGINT,
-  planned_artifact_count BIGINT
+  planned_artifact_count BIGINT,
+  lockfile STRING,
+  reportlab_version STRING,
+  pypdf_version STRING,
+  fonts STRING,
+  manifest_schema_version STRING,
+  platform_architecture STRING,
+  runtime_version STRING
 )
 STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
 
@@ -31,7 +38,9 @@ CREATE TABLE IF NOT EXISTS helios_ds.generation_runs (
   error STRING,
   python_version STRING,
   platform STRING,
-  container_digest STRING
+  container_digest STRING,
+  platform_architecture STRING,
+  runtime_version STRING
 )
 STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
 

@@ -11,10 +11,10 @@ RUN apt-get update \
       fonts-dejavu-core \
  && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /tmp/requirements.txt
+COPY requirements.lock /tmp/requirements.lock
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir -r /tmp/requirements.txt \
- && rm /tmp/requirements.txt
+ && pip install --no-cache-dir -r /tmp/requirements.lock \
+ && rm /tmp/requirements.lock
 
 # DuckDB's tpcds extension, preinstalled so local TPC-DS generation works offline.
 ENV DUCKDB_EXTENSION_DIRECTORY=/opt/duckdb/extensions
@@ -26,9 +26,9 @@ USER cdsw
 
 ENV ML_RUNTIME_EDITION="helios-ds" \
     ML_RUNTIME_SHORT_VERSION="0.1" \
-    ML_RUNTIME_MAINTENANCE_VERSION="0" \
-    ML_RUNTIME_FULL_VERSION="0.1.0" \
-    ML_RUNTIME_DESCRIPTION="helios-ds: deterministic synthetic asset generator (PyIceberg, DuckDB, FastAPI, MCP)"
+    ML_RUNTIME_MAINTENANCE_VERSION="1" \
+    ML_RUNTIME_FULL_VERSION="0.1.1" \
+    ML_RUNTIME_DESCRIPTION="helios-ds: deterministic synthetic asset generator (PyIceberg, DuckDB, FastAPI, MCP) with pinned dependencies (Q-03)"
 
 LABEL com.cloudera.ml.runtime.edition=$ML_RUNTIME_EDITION \
       com.cloudera.ml.runtime.short-version=$ML_RUNTIME_SHORT_VERSION \
