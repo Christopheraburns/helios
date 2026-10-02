@@ -1,0 +1,95 @@
+# TPC-DS i_color values are the first word of web (X11/CSS) color names
+# ("dodger" is dodger blue, "ghost" is ghost white). This maps each to words an
+# image model draws reliably. DRAFT for review (2026-10-01).
+almond: almond beige
+antique: antique white
+aquamarine: aquamarine
+azure: pale azure blue
+beige: beige
+bisque: bisque peach
+black: black
+blanched: blanched almond cream
+blue: blue
+blush: blush pink
+brown: brown
+burlywood: burlywood tan
+burnished: burnished bronze
+chartreuse: chartreuse green
+chiffon: lemon chiffon yellow
+chocolate: chocolate brown
+coral: coral
+cornflower: cornflower blue
+cornsilk: cornsilk cream
+cream: cream
+cyan: cyan
+dark: dark charcoal
+deep: deep pink
+dim: dim grey
+dodger: dodger blue
+drab: olive drab
+firebrick: firebrick red
+floral: floral white
+forest: forest green
+frosted: frosted silver
+gainsboro: light grey
+ghost: ghost white
+goldenrod: goldenrod yellow
+green: green
+grey: grey
+honeydew: honeydew green
+hot: hot pink
+indian: indian red
+ivory: ivory
+khaki: khaki
+lace: old lace off-white
+lavender: lavender
+lawn: lawn green
+lemon: lemon yellow
+light: light blue
+lime: lime green
+linen: linen
+magenta: magenta
+maroon: maroon
+medium: medium purple
+metallic: metallic silver
+midnight: midnight blue
+mint: mint green
+misty: misty rose pink
+moccasin: moccasin tan
+navajo: navajo white
+navy: navy blue
+olive: olive green
+orange: orange
+orchid: orchid purple
+pale: pale green
+papaya: papaya whip orange
+peach: peach
+peru: peru brown
+pink: pink
+plum: plum purple
+powder: powder blue
+puff: peach puff
+purple: purple
+red: red
+rose: rose red
+rosy: rosy brown
+royal: royal blue
+saddle: saddle brown
+salmon: salmon pink
+sandy: sandy brown
+seashell: seashell white
+sienna: sienna brown
+sky: sky blue
+slate: slate grey
+smoke: white smoke grey
+snow: snow white
+spring: spring green
+steel: steel blue
+tan: tan
+thistle: thistle lilac
+tomato: tomato red
+turquoise: turquoise
+violet: violet
+wheat: wheat beige
+white: white
+yellow: yellow

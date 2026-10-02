@@ -151,7 +151,40 @@ For a corpus generated once or twice, fixing a template and regenerating replace
 
 ## Phase 5: Create — visual slice *(deferred: starts once the text crawler meets its targets)*
 
-- [ ] **V-01** Image generator (Pillow, pinned fonts): product packaging, labels, receipts, shelves, synthetic damage. *Done when:* dimensions and format are correct and pixel/file hashes are stable.
+### Image library groundwork (V-00; added 2026-10-01, runs ahead of Phase 5 on a separate GPU workstation)
+
+Product photos for TPC-DS items, made **once** with Qwen-Image in ComfyUI and frozen as a versioned library. Diffusion output is not byte-for-byte reproducible across GPUs, drivers or ComfyUI versions, so the images are recorded inputs, like the spec's frozen assets; the library version joins the identity of any dataset that uses it. Code and runbook: `apps/helios-ds-generation/images/`.
+
+- [ ] **V-00a** *(Drafted 2026-10-01; needs your review.)* Prompt tables.
+  - **`class_objects.yaml`:** all 100 TPC-DS (category, class) pairs, each with what it looks like (with `{color}`), its packaging (for damage edits), and whether `i_size` applies. Notes: `Sports/guns` becomes a paintball marker, deliberately not a firearm; `birdal` and `earings` are TPC-DS's own spellings.
+  - **`colors.yaml`:** the 92 TPC-DS color words, made drawable (`dodger` → "dodger blue").
+  - Item names and descriptions are random text and are never used.
+
+  *Done when:* reviewed, and the pilot images match their class and color.
+- [x] **V-00b** *(Done 2026-10-01.)* Prompts and manifests: `helios_ds/images.py` and `images/build_manifest.py`.
+  - **Three views per item:** `front` (text to image); `angle` and `damaged` (Qwen-Image-Edit of `front`, so the product stays consistent). `damaged` shows the packaging crushed and torn, the visual evidence for PACKAGING_DAMAGED.
+  - **Stable seeds** per item and view, and deterministic pilot selection.
+  - **Pilot manifest:** `images/manifests/pilot-50.jsonl`, 5 items per category × 3 views = 150 jobs, built from Impala TPC-DS.
+- [x] **V-00c** *(Done 2026-10-01; not yet run against a real ComfyUI.)* Workstation runner, `images/comfyui_runner.py`:
+  - standard library only, for Windows;
+  - drives ComfyUI's HTTP API with API-format workflows and a node mapping (`runner_config.json`); `inspect` helps find node IDs;
+  - uploads the `front` image for edits;
+  - writes each PNG with a JSON sidecar (prompt, seed, workflow file hash, timing, SHA-256);
+  - resumes after interruption, retries, and records failures;
+  - `status` estimates the hours left.
+
+  **Tests:** 8, against a fake ComfyUI.
+- [ ] **V-00d** Pilot run on the workstation: export both workflows in API format, map the node IDs, run `--limit 6`, check, then run the 150 overnight. *Done when:* the 150 pilot images exist, the seconds per image are known, and a sample is reviewed. That decides how far to scale: corpus items first, the full ~9,000 items (~27,000 images) only if needed.
+- [ ] **V-00e** Ingestion Job (Workbench). The workstation has no CDP credentials; images arrive by copy. The Job:
+  - verifies each image against its sidecar;
+  - runs V-00f;
+  - uploads to an S3 library prefix (e.g. `helios-db/source/libraries/tpcds-items/v1/`);
+  - records the library version (manifest, image hashes, model and workflow hashes) in the lakehouse.
+
+  *Done when:* a library version is published and every image resolves by hash.
+- [ ] **V-00f** Quality checks: an automatic check that each image matches its class and color (a vision model's yes or no, recorded), no people, and OCR of any text; plus human review of a sample in the review screen. Failures are regenerated with a new seed.
+
+- [ ] **V-01** Image generator (Pillow, pinned fonts): product packaging, labels, receipts, shelves, synthetic damage. *(2026-10-01: product appearance and damage now come from the frozen V-00 library; Pillow composes scenes, labels and receipts on top, so region-level ground truth (V-02) stays exact.)* *Done when:* dimensions and format are correct and pixel/file hashes are stable.
 - [ ] **V-02** Region-level ground truth (bounding boxes) and the difficulty classes easy, alias, OCR-only, region and context. *Done when:* all regions lie within image bounds and each class is represented.
 - [ ] **V-03** Extend the review screen (R-04) to images, with bounding-box overlays in the viewer. *Done when:* a reviewer can inspect and flag regions.
 
