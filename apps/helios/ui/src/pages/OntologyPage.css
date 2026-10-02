@@ -247,8 +247,6 @@
 
 .class-item.selected {
   background-color: var(--primary-light, #eff6ff);
-  border-left: 3px solid var(--primary, #3b82f6);
-  padding-left: 9px;
   font-weight: 500;
   color: var(--primary, #3b82f6);
 }
@@ -565,4 +563,10 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* Buttons use the app's .button styles; these only remove its top margin. */
+.publish-open,
+.publish-inline {
+  margin-top: 0;
 }

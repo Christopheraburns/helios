@@ -298,3 +298,31 @@ Constraints:
 3. **Claim cue lexicons are operator settings,** in the crawler settings.
 4. **Held-out corpus: yes.** A second, smaller Helios-DS dataset with a different seed, scored alongside the development corpus to expose over-tuning. A different seed changes which customers, items and stores appear, and which phrase variants are chosen; it does not change the phrase banks. So a follow-up variant with alternate phrase banks would test cue-lexicon over-tuning more strictly (Helios-DS task C-12).
 5. **PDF parsing with `pypdf`** for v1. Layout-aware extraction only if table reading proves unreliable.
+
+---
+
+## 9. A parallel LLM crawler, and how both are measured (added 2026-10-02)
+
+To test the claim behind Helios directly, an LLM-based crawler runs alongside the deterministic one on the same corpus, and one harness scores both. The two crawlers share everything except understanding:
+- **Shared:** fetch and verify (step 1), type detection (2), segments and locators (3, 4), the output tables, the ontology and claim vocabulary.
+- **Different:** finding mentions and claims, and resolving mentions to warehouse rows.
+
+| Arm | Steps 5 and 12 (find) | Steps 6 to 10 (resolve) |
+|---|---|---|
+| **A, deterministic** | as in this document | as in this document |
+| **B, LLM only** | an LLM, per segment or case, returns entities, types and claims with exact quotes | only exact keys the LLM quoted; no warehouse reasoning |
+| **C, hybrid** | the LLM, as in B | steps 6 to 10 as in this document |
+
+**Rules for the LLM arms:**
+- **Grounding:** every entity and claim must quote the document. Quotes are mapped back to character offsets; a quote that isn't in the document is dropped and counted as a hallucinated span.
+- **Same knowledge as arm A:** the ontology's classes, definitions and claim vocabulary go in the prompt. Nothing from the ground truth or the golden questions does.
+- **Reproducibility:** temperature 0, versioned prompts, and responses cached by (model, prompt, segment). Provider, model, tokens, cost and latency are recorded on each run, and arm B is run several times to measure variation.
+- **Model:** the Helios project's default provider and model (as shown on the AI Model Provider page).
+- **Fairness:** both arms are tuned on the development corpus and compared on the held-out corpus.
+
+**Evaluation** runs as the signed-in user's SSO principal from the Crawler page, never as the crawler identity, so the crawlers can never see the answer key. It reports every measure in section 6, plus hallucinated spans, cost, latency and variation for the LLM arms.
+
+**What the comparison answers:**
+- **A vs B:** working backwards from the data vs asking an LLM;
+- **B vs C:** whether the LLM's weakness is in reading or in resolving;
+- **A vs C:** whether adding the LLM is worth its cost and variability.

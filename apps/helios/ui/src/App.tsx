@@ -35,6 +35,7 @@ const ModelProviderPage = lazy(() => import("./pages/ModelProviderPage"));
 const MCPManagementPage = lazy(() => import("./pages/MCPManagementPage"));
 const OntologyPage = lazy(() => import("./pages/OntologyPage"));
 const CrawlerPage = lazy(() => import("./pages/CrawlerPage"));
+const DataSourcesPage = lazy(() => import("./pages/DataSourcesPage"));
 const GlossaryTermPage = lazy(() =>
   import("./pages/GlossaryPage").then((module) => ({
     default: module.GlossaryTermPage,
@@ -216,12 +217,7 @@ function ApplicationShell({ client }: AppProps) {
               />
               <Route
                 path="/data-sources"
-                element={
-                  <PlaceholderPage
-                    title="Data Sources"
-                    description="Review the governed data sources available to Helios."
-                  />
-                }
+                element={<DataSourcesPage context={context} />}
               />
               <Route
                 path="/ontology"

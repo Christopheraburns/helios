@@ -28,6 +28,7 @@ from .mcp_settings import DEFAULT_SESSION_MCP_SETTINGS_STORE
 from .model_provider import DEFAULT_SESSION_MODEL_PROVIDER_STORE
 from .review import review_router
 from .crawler import crawler_router
+from .data_sources import data_sources_router
 from .ontology import ontology_router, start_cache_restore
 
 HERE = Path(__file__).parent
@@ -198,6 +199,7 @@ app.include_router(api_router)
 app.include_router(review_router)
 app.include_router(ontology_router)
 app.include_router(crawler_router)
+app.include_router(data_sources_router)
 # Rebuild the on-disk ontology cache from helios_index (CR-0c), off the request path.
 start_cache_restore()
 

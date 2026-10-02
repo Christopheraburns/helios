@@ -1021,6 +1021,53 @@ export interface CrawlRunDetail extends CrawlRunSummary {
   assets: CrawlRunAsset[];
 }
 
+export interface DataSourceType {
+  connector: string;
+  label: string;
+  connection_help: string;
+  scope_schema: Record<string, unknown>;
+}
+
+export interface CrawlSummary {
+  crawl_run_id?: string;
+  status: string;
+  started_at: string;
+  finished_at?: string | null;
+  counts: Record<string, number>;
+}
+
+export interface DataSourceView {
+  id: string;
+  organization_id: string;
+  name: string;
+  connector: string;
+  connection_ref: string;
+  description: string;
+  scope: Record<string, unknown>;
+  crawl: { enabled?: boolean; settings_version?: number | null; schedule?: string };
+  crawlable: boolean;
+  updated_at: string | null;
+  updated_by: string | null;
+  last_crawl?: CrawlSummary | null;
+  recent_crawls?: CrawlSummary[];
+}
+
+export interface DataSourceInput {
+  name: string;
+  connector: string;
+  connection_ref: string;
+  description: string;
+  scope: Record<string, unknown>;
+  crawl: Record<string, unknown>;
+}
+
+export interface DataSourceTestResult {
+  ok: boolean;
+  detail: string;
+  sample: Array<{ asset_id: string; mime_type: string; size_bytes: number | null; semantic_timestamp: string | null }>;
+  tested_as?: string;
+}
+
 export interface CrawlerSettingsVersion {
   version: number;
   content_hash: string;
@@ -1142,6 +1189,13 @@ export interface HeliosApi {
     note: string,
   ): Promise<CrawlerSettingsSaveResult>;
   activateCrawlerSettings?(version: number): Promise<{ version: number }>;
+  dataSourceTypes?(): Promise<DataSourceType[]>;
+  dataSources?(organizationId: string): Promise<DataSourceView[]>;
+  dataSource?(organizationId: string, id: string): Promise<DataSourceView>;
+  createDataSource?(organizationId: string, input: DataSourceInput): Promise<DataSourceView>;
+  updateDataSource?(organizationId: string, id: string, input: DataSourceInput): Promise<DataSourceView>;
+  deleteDataSource?(organizationId: string, id: string): Promise<{ deleted: string }>;
+  testDataSource?(organizationId: string, id: string): Promise<DataSourceTestResult>;
   modelProviderSettings?(): Promise<ModelProviderSettings>;
   updateModelProviderSettings?(
     settings: ModelProviderSettingsWrite,
@@ -1452,6 +1506,34 @@ export class HeliosApiClient implements HeliosApi {
   activateCrawlerSettings(version: number): Promise<{ version: number }> {
     return this.post<{ version: number }>(`/api/v1/crawler/settings/${version}:activate`);
   }
+  dataSourceTypes(): Promise<DataSourceType[]> {
+    return this.get<DataSourceType[]>("/api/v1/data-source-types");
+  }
+
+  dataSources(organizationId: string): Promise<DataSourceView[]> {
+    return this.get<DataSourceView[]>(`/api/v1/organizations/${encodeURIComponent(organizationId)}/data-sources`);
+  }
+
+  dataSource(organizationId: string, id: string): Promise<DataSourceView> {
+    return this.get<DataSourceView>(`/api/v1/organizations/${encodeURIComponent(organizationId)}/data-sources/${encodeURIComponent(id)}`);
+  }
+
+  createDataSource(organizationId: string, input: DataSourceInput): Promise<DataSourceView> {
+    return this.post<DataSourceView>(`/api/v1/organizations/${encodeURIComponent(organizationId)}/data-sources`, input);
+  }
+
+  updateDataSource(organizationId: string, id: string, input: DataSourceInput): Promise<DataSourceView> {
+    return this.put<DataSourceView>(`/api/v1/organizations/${encodeURIComponent(organizationId)}/data-sources/${encodeURIComponent(id)}`, input);
+  }
+
+  deleteDataSource(organizationId: string, id: string): Promise<{ deleted: string }> {
+    return this.delete<{ deleted: string }>(`/api/v1/organizations/${encodeURIComponent(organizationId)}/data-sources/${encodeURIComponent(id)}`);
+  }
+
+  testDataSource(organizationId: string, id: string): Promise<DataSourceTestResult> {
+    return this.post<DataSourceTestResult>(`/api/v1/organizations/${encodeURIComponent(organizationId)}/data-sources/${encodeURIComponent(id)}:test`);
+  }
+
 
 
   updateModelProviderSettings(

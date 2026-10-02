@@ -37,7 +37,14 @@ export default function PublishPanel({ api, organizationId, onPublished, onClose
           setVersion(list[0].version);
         }
       })
-      .catch((err) => setError(message(err, "Failed to load schemas")));
+      .catch((err) => {
+        const text = message(err, "Failed to load schemas");
+        setError(
+          /not found/i.test(text)
+            ? "The Helios API doesn't have the publishing endpoints yet (it answered Not Found). Restart the Helios API Application so it runs the current code, then try again."
+            : text,
+        );
+      });
   }, [api]);
 
   const reset = () => {
@@ -111,7 +118,7 @@ export default function PublishPanel({ api, organizationId, onPublished, onClose
           />
         </label>
         <button
-          className="publish-button"
+          className="button button--secondary publish-inline"
           disabled={busy || !schemaPath || !version.trim()}
           onClick={() =>
             void run(async () => {
@@ -182,7 +189,7 @@ export default function PublishPanel({ api, organizationId, onPublished, onClose
 
           {!published && check.status !== "conflict" && (
             <button
-              className="publish-button publish-button--primary"
+              className="button button--primary publish-inline"
               disabled={busy}
               onClick={() =>
                 void run(async () => {
@@ -202,7 +209,7 @@ export default function PublishPanel({ api, organizationId, onPublished, onClose
                 <strong>Active.</strong>
               ) : (
                 <button
-                  className="publish-button publish-button--primary"
+                  className="button button--primary publish-inline"
                   disabled={busy}
                   onClick={() =>
                     void run(async () => {

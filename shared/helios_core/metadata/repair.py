@@ -4,6 +4,7 @@ Run only after stopping Helios API, MCP, and metadata-writing Jobs:
 
     python -m helios_core.metadata.repair --rebuild-index INDEX_NAME
 """
+
 from __future__ import annotations
 
 import argparse
@@ -79,8 +80,7 @@ def recover_database(path: Path) -> Path:
     wal = Path(f"{path}-wal")
     if wal.exists() and wal.stat().st_size:
         raise RuntimeError(
-            "SQLite WAL is not empty. Stop every Helios Application and Job "
-            f"before recovery: {wal}"
+            f"SQLite WAL is not empty. Stop every Helios Application and Job before recovery: {wal}"
         )
     backup = backup_database(path)
     recovered = path.with_name(f".{path.name}.recovered")
@@ -114,9 +114,7 @@ def recover_database(path: Path) -> Path:
             target.execute(sql)
         for _, name, _ in tables:
             escaped = name.replace('"', '""')
-            columns = source.execute(
-                f'PRAGMA table_info("{escaped}")'
-            ).fetchall()
+            columns = source.execute(f'PRAGMA table_info("{escaped}")').fetchall()
             placeholders = ", ".join("?" for _ in columns)
             insert = f'INSERT INTO "{escaped}" VALUES ({placeholders})'
             cursor = source.execute(f'SELECT * FROM "{escaped}"')
@@ -151,9 +149,7 @@ def recover_database(path: Path) -> Path:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Back up and repair Helios SQLite metadata."
-    )
+    parser = argparse.ArgumentParser(description="Back up and repair Helios SQLite metadata.")
     parser.add_argument(
         "--database",
         default=default_database_path(),

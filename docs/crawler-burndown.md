@@ -214,7 +214,21 @@ The crawler runs as a **Workbench Job in the Helios project** (`apps/helios/`). 
 
 ### Understanding the text
 
-- [ ] **CR-3** Analyzers to segments: email (headers and body), chat (one segment per message), PDF (pages via `pypdf`, keeping text order). *Done when:* every development-corpus asset is segmented, and every ground-truth evidence locator falls inside a crawler segment. That last check runs in the evaluation project.
+- [x] **CR-3** *(Done 2026-10-02, uncommitted; run for real on the development corpus.)*
+  - **`apps/helios/crawler/analyzers.py`:** detects each asset's type from its bytes (a mismatch with the declared type is recorded as `type_mismatch`, not guessed) and splits it into segments with ground-truth-compatible locators:
+    - **email:** the identity headers (From, with display name and address), the subject (with the date), and the plain-text body with LF line endings; an HTML-only body is converted to text if the settings allow;
+    - **chat:** one segment per message, with sender, role, timestamp and thread; only schemas the settings accept;
+    - **PDF:** one segment per page (pypdf, up to the settings' page limit). Page `structure` holds label/value pairs (labels from the settings) and table rows (a run of at least 4 header lines starting at a known label, at least 2 of them known, followed by one value per header).
+  - **Statuses:** `analyzed`, `unsupported` (no analyzer, or disabled in the settings), `type_mismatch`, `no_text` (e.g. a scanned PDF) and `invalid`.
+  - **Segments are written to `helios_index.segments`.** The new column is `structure`, because FIELDS is an Impala reserved word; there's now a reserved-word test for every `helios_index` column.
+  - **Unchanged assets carry their segments forward,** but only when the previous run used the same crawler version (now 0.2.0) and settings; otherwise they are re-analyzed.
+  - **`pypdf==6.19.0`** is added to the Helios dependencies.
+  - **Real run as `srv_helios_crawler` on `1ca99f86…`:** 301 analyzed into 1,003 segments (600 chat messages, 101 email headers, subjects and bodies, 100 PDF pages) in 24 s. On all 100 reports, the item table and all 9 labelled fields were read. A repeat crawl carried everything forward.
+  - **Done-when check,** run as the evaluator (cburns): **all 785 ground-truth evidence passages and all 3,135 mentions fall inside a crawler segment** (email 266 and 918, chat 219 and 814, PDF 300 and 1,403).
+  - **Tests:** 7 analyzer tests; the connector tests now use real sample assets.
+  - The Crawler page shows Analyzed and Segments columns.
+
+  Original task: Analyzers to segments: email (headers and body), chat (one segment per message), PDF (pages via `pypdf`, keeping text order). *Done when:* every development-corpus asset is segmented, and every ground-truth evidence locator falls inside a crawler segment. That last check runs in the evaluation project.
 - [ ] **CR-4** Mention extraction, built backwards from the data:
   - **identifier patterns:** item and customer IDs, ticket numbers, RMA and case numbers, email addresses, "receipt ending in NNNN", money and dates;
   - **a TPC-DS gazetteer** built from the mapping's display, secondary and alias columns: product, store, customer, brand and reason names, salutation plus surname, colour plus class, "<city> store";
@@ -238,7 +252,7 @@ The crawler runs as a **Workbench Job in the Helios project** (`apps/helios/`). 
   - a Helios API client for the gateway (`HELIOS_GRAPH_GATEWAY_URL` plus token). The API currently reads the graph store files directly.
 
   *Done when:* deleting Memgraph's data and reloading from `helios_index` gives the same graph counts.
-- [ ] **CR-8** Scoring in Helios-DS-Evaluation (its own project; reads ground truth and `helios_index`):
+- [ ] **CR-8** *(Rescoped 2026-10-02: the evaluation harness lives in the crawler package and is started from the Helios UI; see "Evaluation harness and LLM crawler" below.)* Scoring (reads ground truth and `helios_index`):
   - mention precision and recall by tier and entity type;
   - entity-resolution accuracy by tier;
   - claim precision and recall;
@@ -254,6 +268,71 @@ The crawler runs as a **Workbench Job in the Helios project** (`apps/helios/`). 
   - **Still to come:** scores (CR-8), segments, mentions and links per asset (CR-3 onward), instance browsing from the Ontology page, a structured settings form, starting a crawl from the UI (via the Workbench Jobs API), and an RBAC permission.
 
   Original task: Visibility in the **Helios UI** (`apps/helios/ui`; all crawler screens live there, none in the Helios-DS dashboard), **including the crawler settings editor** (CR-0e: view versions, edit as a validated form or JSON, save as a new version, activate): a crawl-runs page (run, counts, scores) and instance browsing on the Ontology page (from a class to its entities, then their mentions and evidence). *Done when:* you can go from `Customer` to a customer's linked documents and the passages that mention them.
+
+### Data sources: crawl any location (added 2026-10-02)
+
+The crawler was wired to one location type: a Helios-DS dataset, read through `helios_ds.crawlable_artifacts` with files in one S3 bucket. Everything after "here are an asset's bytes" is location-independent, so locations become pluggable connectors, configured as **data sources** in Helios.
+
+**Decisions (2026-10-02):**
+1. Extend the existing `data_sources` table in Helios's metadata store. It already has organizations, RBAC (`datasource.read` / `datasource.manage`) and links to semantic models. Each crawl run snapshots the source's configuration into `crawl_runs`.
+2. Build both an object-store connector and a "rows as documents" connector.
+3. Do it now.
+
+**Credentials never live in Helios tables.** A data source stores only a reference (a Workbench data connection name, or the Helios Impala settings), resolved by the crawler Job at run time. Ranger and RAZ still decide what the crawler identity may read.
+
+- [x] **DS-1** *(Done 2026-10-02, uncommitted.)* `apps/helios/crawler/connectors/`: a `Connector` base (retried, verified, parallel fetching with warm-up; a `too_large` status; `test()` lists the scope and reads one readable asset) and three connectors. Crawl runs are keyed by data source (`crawl_runs.connector` = type, `source` = data source ID) and snapshot the source's configuration, without secrets. Outcomes that can't change with the same content and settings (`unsupported`, `type_mismatch`, `no_text`, `invalid`) now carry forward with their reason instead of being downloaded again. Crawler 0.3.0. The Job takes `--source <id>` (read from Helios's metadata store; set `HELIOS_METADATA_DB` on the Job if the API uses a non-default path) or `--dataset <id>` as before. Regression on `1ca99f86…`: 301 analyzed, 1,003 segments, as before. Original: Connector interface (`test`, `list(scope)` giving stable native IDs and version tokens, `fetch`) with the Helios-DS reader as the first connector. Crawl runs and assets are keyed by data source; the Job takes `--source`.
+- [x] **DS-2** *(Done 2026-10-02, uncommitted.)* Metadata migration 8 adds `description`, `scope_json`, `crawl_json`, `updated_at` and `updated_by` to `data_sources`; it is applied automatically when the API starts. Scopes are validated per connector type (`helios_core.crawler.sources`). `apps/helios/console/data_sources.py` serves the types (with scope JSON schemas), list (with last crawl), get (with recent crawls), create, update, delete (409 while a model uses the source), and test connection. Reads need `datasource.read` and changes need `datasource.manage`, both at organization level (org admins today). Tests: 6 API tests and 1 repository test. Original: Registry: `data_sources` gains `description`, `scope` (validated per connector type), `crawl` (enabled, settings version, schedule) and `updated_at`/`updated_by`. API: list connector types and their scope schemas, list/get/create/update/delete sources, and test a connection, under `datasource.read` / `datasource.manage`.
+- [x] **DS-3** *(Done 2026-10-02, uncommitted.)* `pages/DataSourcesPage.tsx` replaces the placeholder. It is now organization-level, so it no longer needs a model selected. It lists sources (type, scope, connection, last crawl), has an add and edit form per connector type, Test connection with a sample of assets, Delete, and shows the crawl command per source. Warehouse sources are listed read-only. Tests: 3 form tests. Original: The Data Sources page in the Helios UI (replacing the placeholder): list, add and edit with a form per connector type, Test connection with a sample of assets, Crawl now, last-crawl status.
+- [x] **DS-4** *(Done 2026-10-02, uncommitted; tested live on 20 corpus files in S3.)* Paged listing, include and exclude globs, size limit, ETag plus size as the version token, MIME type from the extension. A plain-text analyzer is added (`text/plain`, `text/markdown`; one segment, with a `max_chars` setting). Original: Object-store connector: S3 or Ozone through a Workbench data connection; bucket and prefix, include and exclude patterns, MIME and size limits; ETag as the version token. Adds a plain-text analyzer.
+- [x] **DS-5** *(Done 2026-10-02, uncommitted; tested live on `tpcds.item` as `srv_helios_crawler`.)* Validated identifiers only; filter values are bound parameters; row order is by key with a row limit. Each row's content is a small JSON document (`application/x-helios-row+json`), versioned by its hash. The row analyzer makes one segment per non-empty text column (`{"column": name}`). Original: Rows-as-documents connector: a lakehouse table through Impala; key, text and timestamp columns and an optional filter, validated as identifiers (no free SQL). Each row is one asset, and each text column one segment.
+- [ ] **DS-6** Start crawls from the UI through the Workbench Jobs API.
+- [ ] **DS-7** Capture source access lists, and filter retrieval by them (with Helios-DS C-06).
+
+### Evaluation harness and LLM crawler (added 2026-10-02)
+
+Two crawlers run side by side on the same corpus and are scored by the same harness, to measure working backwards from the data against asking an LLM. Details: [crawler-analysis.md](crawler-analysis.md), section 9.
+
+**Identities:**
+- Both crawlers run as `srv_helios_crawler` and never see the ground truth.
+- The harness runs as **the signed-in user's SSO principal**, started from the Crawler page through the Helios API, so Ranger decides who may evaluate. It needs Impala proxy delegation (`IMPALA_PROXY_DELEGATION`) so queries run as that user; without it they run as the API's `WORKLOAD_USER`, and each score records which.
+
+**Arms**, each recorded on its crawl run as `strategy`:
+
+| Arm | Finding mentions and claims | Resolving to TPC-DS |
+|---|---|---|
+| A, `deterministic` | rules, dictionaries, alias templates, cue lexicons (CR-4 to CR-6) | case grouping plus joint resolution against the warehouse (CR-5) |
+| B, `llm` | an LLM reads each segment or case and returns entities, types and claims, each with the exact quoted text | exact keys the LLM quoted (IDs, emails) only; no warehouse reasoning |
+| C, `hybrid` | the LLM, as in B | arm A's case grouping and joint resolution |
+
+**LLM:** the project default from the AI Model Provider page (the project's `LLM_PROVIDER`, model and endpoint environment variables, through `helios_core.llm`). Session overrides live only in the API's memory and can't reach a Job. Provider and model are recorded on every run; keys are never stored in tables.
+
+- [ ] **CR-E1** Harness:
+  - the CR-8 metrics: mentions by tier and class; resolution accuracy and wrong definite links; case clustering; claims; evidence locators; golden questions at the retrieval level, including correct "no answer";
+  - plus, for LLM arms: hallucinated spans, tokens, cost and latency per document, and run-to-run variation;
+  - results in a `helios_index.evaluations` table (run, corpus, evaluator principal, metrics, ground-truth dataset);
+  - an **Evaluate** action and a scores view on the Crawler page, comparing arms per dataset.
+
+  *Done when:* a crawl run can be scored from the UI, a user without ground-truth access is refused, and a re-evaluation gives the same numbers.
+- [ ] **CR-E2** `strategy` on `crawl_runs`, plus LLM provenance (provider, model, prompt version and hash, temperature, token and cost totals), and the Crawler page filters by strategy.
+- [ ] **CR-L1** Arm B, the LLM crawler:
+  - prompts that give the ontology classes, definitions and claim vocabulary, and ask for JSON with the exact quoted text for every entity and claim;
+  - temperature 0;
+  - every quote mapped back to character offsets in its segment; quotes not found in the document are dropped and counted as hallucinated;
+  - responses cached by (model, prompt hash, segment hash), so reruns are cheap and identical;
+  - prompts versioned in the crawler settings (CR-0e).
+
+  *Done when:* it crawls the development corpus into `helios_index` with every row grounded to a real span.
+- [ ] **CR-L2** Arm C, hybrid: arm B's extraction feeding arm A's case grouping and joint resolution (needs CR-5). *Done when:* scored on the same corpus as A and B.
+- [ ] **CR-L3** Comparison report: A, B and C side by side on the development and held-out corpora (C-12); arm B run three times for variation. *Done when:* the report exists and is reproducible from recorded runs.
+
+**Order:**
+1. CR-3 (segments, shared by all arms);
+2. CR-E1 and CR-E2, so every later step is measured;
+3. CR-4 to CR-7 for arm A, alongside CR-L1;
+4. CR-L2 after CR-5;
+5. CR-L3.
+
+C-12 (held-out corpus) is needed before CR-L3. CR-10 (the LLM as a last tier inside arm A) stays as a fourth variant.
 
 ### Later
 

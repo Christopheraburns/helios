@@ -36,7 +36,7 @@ const GOOD_STATUSES = new Set(["fetched", "carried_forward", "analyzed"]);
 
 function problemCount(counts: Record<string, number>): number {
   return Object.entries(counts)
-    .filter(([status]) => status !== "listed" && !GOOD_STATUSES.has(status))
+    .filter(([status]) => status !== "listed" && status !== "segments" && !GOOD_STATUSES.has(status))
     .reduce((total, [, n]) => total + n, 0);
 }
 
@@ -139,9 +139,10 @@ function RunsTab({ context }: CrawlerPageProps) {
               <th>Source</th>
               <th>Status</th>
               <th className="num">Listed</th>
-              <th className="num">Fetched</th>
+              <th className="num" title="Fetched, verified and split into segments in this run">Analyzed</th>
               <th className="num">Carried forward</th>
               <th className="num">Problems</th>
+              <th className="num" title="Addressable parts: PDF pages, email parts, chat messages">Segments</th>
               <th>Took</th>
               <th>Ontology</th>
               <th>Settings</th>
@@ -160,11 +161,12 @@ function RunsTab({ context }: CrawlerPageProps) {
                   <span className={`crawler-badge ${statusClass(run.status)}`}>{run.status}</span>
                 </td>
                 <td className="num">{run.counts.listed ?? "—"}</td>
-                <td className="num">{run.counts.fetched ?? 0}</td>
+                <td className="num">{run.counts.analyzed ?? run.counts.fetched ?? 0}</td>
                 <td className="num">{run.counts.carried_forward ?? 0}</td>
                 <td className={`num ${problemCount(run.counts) ? "crawler-problem" : ""}`}>
                   {problemCount(run.counts)}
                 </td>
+                <td className="num">{run.counts.segments ?? "—"}</td>
                 <td className="nowrap">{duration(run)}</td>
                 <td>{run.ontology_version}</td>
                 <td>{run.settings_version ?? "defaults"}</td>

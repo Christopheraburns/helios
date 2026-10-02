@@ -8,9 +8,10 @@ A :class:`DataSource` is the reusable physical connection and owns references to
 its harvested/profiled snapshots.  A :class:`Model` is a semantic interpretation
 that refers to one or more data sources; it never owns or duplicates them.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, Mapping
 
 
@@ -83,6 +84,13 @@ class DataSource:
     connector: str
     connection_ref: str
     snapshot_ids: tuple[str, ...] = ()
+    # Crawling (DS-2): what to crawl (validated per connector type by
+    # helios_core.crawler.sources) and how. Empty for warehouse sources.
+    description: str = ""
+    scope: dict = field(default_factory=dict, hash=False)
+    crawl: dict = field(default_factory=dict, hash=False)
+    updated_at: str | None = None
+    updated_by: str | None = None
 
     def __post_init__(self) -> None:
         _require(self.id, "data source id")
@@ -151,8 +159,7 @@ class Model:
                 source = data_sources[reference.data_source_id]
             except KeyError as exc:
                 raise ValueError(
-                    f"model {self.id!r} references unknown data source "
-                    f"{reference.data_source_id!r}"
+                    f"model {self.id!r} references unknown data source {reference.data_source_id!r}"
                 ) from exc
             if source.organization_id != self.organization_id:
                 raise ValueError(

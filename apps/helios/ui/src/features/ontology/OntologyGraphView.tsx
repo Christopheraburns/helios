@@ -102,9 +102,11 @@ export default function OntologyGraphView({
     () =>
       model.links
         .filter((l) => l.kind === "is_a" || showRanges)
+        // With a class selected, only its own edges are drawn.
+        .filter((l) => selected === null || l.source === selected || l.target === selected)
         .map((l) => {
-          const touchesSelection = selected !== null && (l.source === selected || l.target === selected);
-          const faded = selected !== null && !touchesSelection;
+          const touchesSelection = selected !== null;
+          const faded = false;
           if (l.kind === "is_a") {
             // Drawn parent → child (left to right); the arrowhead sits at the
             // parent, as in UML generalisation.
@@ -122,7 +124,9 @@ export default function OntologyGraphView({
             source: l.source,
             target: l.target,
             type: "default",
-            label: l.multivalued ? `${l.label} *` : l.label,
+            // Attribute names only for the selected class's edges, so labels never
+            // float over unrelated parts of the graph.
+            label: touchesSelection ? (l.multivalued ? `${l.label} *` : l.label) : undefined,
             labelStyle: { fontSize: 11, fill: "#7c2d12" },
             labelBgStyle: { fill: "#fff7ed" },
             markerEnd: { type: MarkerType.ArrowClosed, color: "#ea580c" },

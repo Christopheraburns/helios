@@ -354,4 +354,14 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
             ON agent_trace_runs (semantic_revision_id);
         """,
     ),
+    (
+        8,
+        """
+        ALTER TABLE data_sources ADD COLUMN description TEXT NOT NULL DEFAULT '';
+        ALTER TABLE data_sources ADD COLUMN scope_json TEXT NOT NULL DEFAULT '{}';
+        ALTER TABLE data_sources ADD COLUMN crawl_json TEXT NOT NULL DEFAULT '{}';
+        ALTER TABLE data_sources ADD COLUMN updated_at TEXT;
+        ALTER TABLE data_sources ADD COLUMN updated_by TEXT;
+        """,
+    ),
 )
