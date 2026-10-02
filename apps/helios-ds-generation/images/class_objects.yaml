@@ -1,0 +1,132 @@
+# What each TPC-DS (category, class) looks like, for image prompts.
+# DRAFT for review (2026-10-01; revised after the first pilot images). TPC-DS item names and descriptions are random
+# text, so an item's appearance comes from category, class and color only.
+#
+#   object:    the product, with {color} where its color shows
+#   packaging: what it ships in (used for damaged-packaging edits)
+#   sized:     true if TPC-DS i_size (small/medium/large/...) describes it
+#   label:     "title" prints the TPC-DS product name as the title (books, music):
+#              text that is natural on the product, recorded so OCR can verify it
+#   detail:    a visual cue that makes the product recognisable (cover art)
+#
+# Rows with a missing category or class (45 of 9,000 items) are not imaged.
+
+Books:
+  arts:            {object: "a hardcover art book with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "cover reproduction of a colourful abstract painting"}
+  business:        {object: "a hardcover business book with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "cover graphic of a rising bar chart"}
+  computers:       {object: "a thick paperback computer programming book with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "cover illustration of a laptop and lines of code"}
+  cooking:         {object: "a hardcover cookbook with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "cover photo of a colourful pasta dish"}
+  entertainments:  {object: "a paperback entertainment book with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "cover photo of a theatre stage with red curtains"}
+  fiction:         {object: "a paperback novel with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "cover illustration of a lone figure on a misty road"}
+  history:         {object: "a hardcover history book with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "cover image of an old map and a castle"}
+  home repair:     {object: "a spiral-bound home repair manual with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "cover photo of a hammer, a saw and a toolbox"}
+  mystery:         {object: "a paperback mystery novel with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "cover illustration of a dark alley under a street lamp"}
+  parenting:       {object: "a paperback parenting book with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "cover photo of baby shoes and building blocks"}
+  reference:       {object: "a thick hardcover reference dictionary with a {color} cover", packaging: "a cardboard book box", label: title, detail: "embossed lettering and a gilt-edged spine"}
+  romance:         {object: "a paperback romance novel with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "cover illustration of two silhouettes at sunset"}
+  science:         {object: "a hardcover science textbook with a {color} cover", packaging: "a cardboard book box", label: title, detail: "cover image of a microscope and molecule diagrams"}
+  self-help:       {object: "a paperback self-help book with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "cover image of a sunrise over mountains"}
+  sports:          {object: "a hardcover sports book with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "cover photo of a stadium"}
+  travel:          {object: "a paperback travel guidebook with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "cover photo of a tropical beach and a passport"}
+
+Children:
+  infants:         {object: "a {color} infant bodysuit, neatly folded", packaging: "a clear plastic retail bag", sized: true}
+  newborn:         {object: "a {color} newborn baby blanket, neatly folded", packaging: "a small gift box", sized: true}
+  school-uniforms: {object: "a {color} children's school uniform shirt on a hanger", packaging: "a clear plastic retail bag", sized: true}
+  toddlers:        {object: "a {color} toddler sweatshirt, neatly folded", packaging: "a clear plastic retail bag", sized: true}
+
+Electronics:
+  audio:           {object: "a {color} pair of over-ear headphones", packaging: "a printed retail box"}
+  automotive:      {object: "a {color} car dashboard camera", packaging: "a printed retail box"}
+  camcorders:      {object: "a {color} handheld camcorder", packaging: "a printed retail box"}
+  cameras:         {object: "a {color} compact digital camera", packaging: "a printed retail box"}
+  disk drives:     {object: "a {color} external hard drive", packaging: "a printed retail box"}
+  dvd/vcr players: {object: "a {color} DVD player", packaging: "a printed retail box"}
+  karoke:          {object: "a {color} karaoke machine with a microphone", packaging: "a printed retail box"}
+  memory:          {object: "a {color} USB flash drive and memory card", packaging: "a blister pack"}
+  monitors:        {object: "a computer monitor with a {color} frame", packaging: "a large printed retail box"}
+  musical:         {object: "a {color} electronic keyboard instrument", packaging: "a long printed retail box"}
+  personal:        {object: "a {color} portable media player", packaging: "a small printed retail box"}
+  portable:        {object: "a {color} portable Bluetooth speaker", packaging: "a printed retail box"}
+  scanners:        {object: "a {color} flatbed document scanner", packaging: "a printed retail box"}
+  stereo:          {object: "a {color} bookshelf stereo system", packaging: "a large printed retail box"}
+  televisions:     {object: "a flat-screen television with a {color} frame", packaging: "a large printed retail box"}
+  wireless:        {object: "a {color} wireless router", packaging: "a printed retail box"}
+
+Home:
+  accent:          {object: "a {color} accent throw pillow", packaging: "a cardboard shipping box"}
+  bathroom:        {object: "a set of {color} bath towels, neatly folded", packaging: "a clear plastic retail bag"}
+  bedding:         {object: "a {color} duvet cover set, folded", packaging: "a zippered plastic retail case"}
+  blinds/shades:   {object: "a {color} roller window shade", packaging: "a long cardboard tube box"}
+  curtains/drapes: {object: "a pair of {color} curtain panels, folded", packaging: "a clear plastic retail bag"}
+  decor:           {object: "a {color} decorative ceramic vase", packaging: "a cardboard box with foam padding"}
+  flatware:        {object: "a {color}-handled flatware set of forks, knives and spoons", packaging: "a printed retail box"}
+  furniture:       {object: "a {color} upholstered armchair", packaging: "a large cardboard shipping carton"}
+  glassware:       {object: "a set of {color}-tinted drinking glasses", packaging: "a cardboard box with dividers"}
+  kids:            {object: "a {color} child's storage stool", packaging: "a cardboard shipping box"}
+  lighting:        {object: "a table lamp with a {color} shade", packaging: "a printed retail box"}
+  mattresses:      {object: "a mattress with a {color} cover", packaging: "a roll-packed mattress box"}
+  paint:           {object: "a gallon can of {color} interior paint", packaging: "a cardboard shipping box"}
+  rugs:            {object: "a rolled-up {color} area rug", packaging: "a plastic-wrapped roll"}
+  tables:          {object: "a {color} wooden side table", packaging: "a flat-pack cardboard carton"}
+  wallpaper:       {object: "a roll of {color} patterned wallpaper", packaging: "a shrink-wrapped roll"}
+
+Jewelry:
+  birdal:          {object: "a bridal tiara with {color} accents", packaging: "a jewelry gift box"}   # TPC-DS spells it "birdal"
+  bracelets:       {object: "a {color} beaded bracelet", packaging: "a jewelry gift box"}
+  consignment:     {object: "a vintage brooch with {color} stones", packaging: "a jewelry gift box"}
+  costume:         {object: "a {color} costume jewelry necklace", packaging: "a jewelry gift box"}
+  custom:          {object: "a custom signet ring with a {color} stone", packaging: "a ring box"}
+  diamonds:        {object: "a diamond solitaire ring with a {color} gold band", packaging: "a ring box"}
+  earings:         {object: "a pair of {color} drop earrings", packaging: "a jewelry gift box"}   # TPC-DS spelling
+  estate:          {object: "an antique estate necklace with {color} gems", packaging: "a jewelry gift box"}
+  gold:            {object: "a gold chain necklace with a {color} pendant", packaging: "a jewelry gift box"}
+  jewelry boxes:   {object: "a {color} wooden jewelry box", packaging: "a printed retail box"}
+  loose stones:    {object: "a few loose {color} gemstones on a velvet tray", packaging: "a small gem case"}
+  mens watch:      {object: "a men's wristwatch with a {color} strap", packaging: "a watch box"}
+  pendants:        {object: "a pendant necklace with a {color} stone", packaging: "a jewelry gift box"}
+  rings:           {object: "a ring with a {color} gemstone", packaging: "a ring box"}
+  semi-precious:   {object: "a bracelet of {color} semi-precious stones", packaging: "a jewelry gift box"}
+  womens watch:    {object: "a women's wristwatch with a {color} band", packaging: "a watch box"}
+
+Men:
+  accessories:     {object: "a {color} leather belt and wallet", packaging: "a printed retail box"}
+  pants:           {object: "a pair of {color} men's trousers, neatly folded", packaging: "a clear plastic retail bag", sized: true}
+  shirts:          {object: "a {color} men's button-down shirt, neatly folded", packaging: "a clear plastic retail bag", sized: true}
+  sports-apparel:  {object: "a {color} men's athletic jersey, neatly folded", packaging: "a clear plastic retail bag", sized: true}
+
+Music:
+  classical:       {object: "a classical music CD in a jewel case with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "album art of a violin and sheet music"}
+  country:         {object: "a country music CD in a jewel case with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "album art of a guitar against a prairie sunset"}
+  pop:             {object: "a pop music CD in a jewel case with a {color} cover", packaging: "a padded mailer envelope", label: title, detail: "bright, colourful album art"}
+  rock:            {object: "a rock music vinyl record with a {color} album sleeve", packaging: "a cardboard record mailer", label: title, detail: "bold album art of an electric guitar"}
+
+Shoes:
+  athletic:        {object: "a pair of {color} running shoes", packaging: "a shoe box", sized: true}
+  kids:            {object: "a pair of {color} children's sneakers", packaging: "a shoe box", sized: true}
+  mens:            {object: "a pair of {color} men's leather dress shoes", packaging: "a shoe box", sized: true}
+  womens:          {object: "a pair of {color} women's heeled shoes", packaging: "a shoe box", sized: true}
+
+Sports:
+  archery:         {object: "a {color} recurve bow with arrows", packaging: "a long cardboard shipping box"}
+  athletic shoes:  {object: "a pair of {color} cross-training shoes", packaging: "a shoe box", sized: true}
+  baseball:        {object: "a {color} leather baseball glove with a baseball", packaging: "a printed retail box"}
+  basketball:      {object: "a {color} basketball", packaging: "a printed retail box"}
+  camping:         {object: "a {color} two-person camping tent, packed in its bag", packaging: "a printed retail box"}
+  fishing:         {object: "a {color} fishing rod and reel", packaging: "a long cardboard tube box"}
+  fitness:         {object: "a pair of {color} dumbbells", packaging: "a printed retail box"}
+  football:        {object: "a {color} American football", packaging: "a printed retail box"}
+  golf:            {object: "a {color} golf bag with clubs", packaging: "a tall cardboard shipping box"}
+  guns:            {object: "a {color} paintball marker", packaging: "a printed retail box"}   # deliberately not a firearm
+  hockey:          {object: "a {color} ice hockey stick and puck", packaging: "a long cardboard shipping box"}
+  optics:          {object: "a pair of {color} binoculars", packaging: "a printed retail box"}
+  outdoor:         {object: "a {color} hiking backpack", packaging: "a printed retail box"}
+  pools:           {object: "a {color} inflatable pool float", packaging: "a printed retail box"}
+  sailing:         {object: "a {color} sailing life jacket", packaging: "a clear plastic retail bag"}
+  tennis:          {object: "a {color} tennis racket with tennis balls", packaging: "a printed retail box"}
+
+Women:
+  dresses:         {object: "a {color} women's dress on a hanger", packaging: "a clear plastic garment bag", sized: true}
+  fragrances:      {object: "a perfume bottle with {color} liquid", packaging: "a printed perfume box"}
+  maternity:       {object: "a {color} maternity top, neatly folded", packaging: "a clear plastic retail bag", sized: true}
+  swimwear:        {object: "a {color} women's one-piece swimsuit", packaging: "a clear plastic retail bag", sized: true}

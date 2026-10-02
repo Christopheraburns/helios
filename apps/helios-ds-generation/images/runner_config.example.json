@@ -1,0 +1,33 @@
+{
+  "_comment": "Copy to runner_config.json and set the node IDs from `python comfyui_runner.py inspect <workflow>`. Paths are relative to this file.",
+  "server": "http://127.0.0.1:8188",
+  "output_dir": "output/tpcds-items-v1",
+  "timeout_seconds": 900,
+  "poll_seconds": 2,
+  "attempts": 2,
+  "workflows": {
+    "generate": {
+      "file": "workflows/qwen_image_api.json",
+      "output_node": "60",
+      "inputs": {
+        "prompt": ["6", "text"],
+        "negative_prompt": ["7", "text"],
+        "seed": ["3", "seed"],
+        "width": ["58", "width"],
+        "height": ["58", "height"],
+        "filename_prefix": ["60", "filename_prefix"]
+      }
+    },
+    "edit": {
+      "file": "workflows/qwen_image_edit_api.json",
+      "output_node": "9",
+      "inputs": {
+        "image": ["78", "image"],
+        "prompt": ["76", "prompt"],
+        "negative_prompt": ["77", "prompt"],
+        "seed": ["3", "seed"],
+        "filename_prefix": ["9", "filename_prefix"]
+      }
+    }
+  }
+}
