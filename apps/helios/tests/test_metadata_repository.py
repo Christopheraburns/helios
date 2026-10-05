@@ -454,3 +454,12 @@ def test_data_sources_keep_crawl_scope_and_can_be_deleted_when_unused(repository
     assert repository.delete_data_source("corpus") is True
     assert repository.data_source("corpus") is None
     assert repository.delete_data_source("corpus") is False
+
+
+def test_ping_answers_without_scanning_and_reports_an_unreadable_file(tmp_path):
+    repository = SQLiteMetadataRepository(tmp_path / "helios.db")
+    repository.migrate()
+    assert repository.ping() == ("ok",)
+
+    (tmp_path / "broken.db").write_bytes(b"not a database" * 100)
+    assert SQLiteMetadataRepository(tmp_path / "broken.db").ping() != ("ok",)

@@ -125,6 +125,21 @@ class SQLiteMetadataRepository:
     def is_healthy(self) -> bool:
         return self.integrity_check() == ("ok",)
 
+    def ping(self) -> tuple[str, ...]:
+        """("ok",) if the database opens and answers a query. For health endpoints:
+        unlike integrity_check, the cost does not grow with the size of the file."""
+        try:
+            if self.path == ":memory:":
+                with self._connection() as connection:
+                    connection.execute("SELECT 1 FROM schema_migrations LIMIT 1").fetchall()
+            else:
+                uri = Path(self.path).resolve().as_uri() + "?mode=ro"
+                with sqlite3.connect(uri, uri=True, timeout=10) as connection:
+                    connection.execute("SELECT 1 FROM schema_migrations LIMIT 1").fetchall()
+            return ("ok",)
+        except sqlite3.Error as exc:
+            return (f"{type(exc).__name__}: {exc}",)
+
     def schema_version(self) -> int:
         with self._connection() as connection:
             row = connection.execute(

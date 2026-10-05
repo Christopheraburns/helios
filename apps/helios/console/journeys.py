@@ -301,11 +301,7 @@ UNSTRUCTURED_CRAWL_JOURNEY = Journey(
             ),
             route="/crawler",
             done=_crawl_run_exists,
-            doc_slug="ontology-deployment",
-            external_note=(
-                "Crawls run as a Workbench Job: "
-                "python -m apps.helios.crawler crawl --dataset <id>"
-            ),
+            doc_slug="crawler-guide",
         ),
         Step(
             id="review-crawl",
@@ -316,7 +312,7 @@ UNSTRUCTURED_CRAWL_JOURNEY = Journey(
             ),
             route="/crawler",
             done=_last_crawl_succeeded,
-            doc_slug="ontology-deployment",
+            doc_slug="crawler-guide",
         ),
     ),
 )

@@ -126,13 +126,23 @@ export default function PrimaryNavigation({
           ? [
               {
                 label: "Review",
-                to: "/canvas",
                 icon: "review" as const,
                 requiresModel: true,
                 requiredAction: "model.edit",
-                params: { review_run_id: reviewRunId },
                 badge: unresolvedReviewItems,
-                activeParam: "review_run_id",
+                // With decisions waiting, open the list of them; otherwise the
+                // Canvas in review mode.
+                ...(unresolvedReviewItems > 0
+                  ? {
+                      to: `/models/runs/${encodeURIComponent(reviewRunId)}`,
+                      params: { review_focus: "pending" },
+                      activeParam: "review_focus",
+                    }
+                  : {
+                      to: "/canvas",
+                      params: { review_run_id: reviewRunId },
+                      activeParam: "review_run_id",
+                    }),
               },
             ]
           : []),
@@ -234,10 +244,12 @@ export default function PrimaryNavigation({
   };
 
   const linkClassName = (item: NavigationItem, routeActive: boolean) => {
-    const paramActive = currentSearch.has("review_run_id");
+    const reviewing =
+      (item.to === "/canvas" && currentSearch.has("review_run_id")) ||
+      (item.to === "/models" && currentSearch.has("review_focus"));
     const active = item.activeParam
       ? routeActive && currentSearch.has(item.activeParam)
-      : routeActive && !(item.to === "/canvas" && paramActive);
+      : routeActive && !reviewing;
     return `primary-nav__link${active ? " primary-nav__link--active" : ""}`;
   };
 

@@ -1,11 +1,14 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   AuthorizationError,
   type CrawlEvaluation,
   type CrawlEvaluationNumbers,
+  type CrawlLaunch,
+  type CrawlLaunches,
   type CrawlRunDetail,
   type CrawlRunSummary,
+  type CrawlTarget,
   type CrawlerSettingsSaveResult,
   type CrawlerSettingsState,
 } from "../api/client";
@@ -59,11 +62,37 @@ function duration(run: CrawlRunSummary): string {
 // Asset statuses that mean the asset was usable in the run.
 const GOOD_STATUSES = new Set(["fetched", "carried_forward", "analyzed"]);
 
+// Asset statuses that mean a document could not be read or analyzed. A run's
+// counts also hold totals of what was found (mentions, claims, ...), which are
+// not problems.
+const PROBLEM_STATUSES = [
+  "integrity_failed",
+  "missing",
+  "fetch_failed",
+  "too_large",
+  "unsupported",
+  "type_mismatch",
+  "no_text",
+  "invalid",
+];
+
 function problemCount(counts: Record<string, number>): number {
-  return Object.entries(counts)
-    .filter(([status]) => status !== "listed" && status !== "segments" && !GOOD_STATUSES.has(status))
-    .reduce((total, [, n]) => total + n, 0);
+  return PROBLEM_STATUSES.reduce((total, status) => total + (counts[status] ?? 0), 0);
 }
+
+// What the analysis produced, in the order the pipeline produces it.
+const FOUND_COUNTS: { key: string; label: string }[] = [
+  { key: "segments", label: "segments" },
+  { key: "mentions", label: "mentions" },
+  { key: "entities", label: "entities" },
+  { key: "links_sameas", label: "definite links" },
+  { key: "links_possible", label: "possible links" },
+  { key: "relationships", label: "relationships" },
+  { key: "cases", label: "cases" },
+  { key: "cases_resolved", label: "cases matched to a warehouse row" },
+  { key: "claims", label: "claims" },
+  { key: "claim_evidence", label: "evidence passages" },
+];
 
 function statusClass(status: string): string {
   if (status === "SUCCEEDED" || GOOD_STATUSES.has(status)) return "crawler-badge--ok";
@@ -86,8 +115,9 @@ export default function CrawlerPage({ context }: CrawlerPageProps) {
       <div className="crawler-header">
         <h1>Crawler</h1>
         <p className="crawler-subtitle">
-          What the crawler read, what it found, and the settings it runs with. Crawls run as a
-          Workbench Job (<code>python -m apps.helios.crawler crawl --dataset &lt;id&gt;</code>).
+          What the crawler read, what it found, and the settings it runs with. Start a crawl on
+          the Runs tab; it runs in the background as a Workbench Job.{" "}
+          <Link to="/docs/helios/crawler-guide">Read the guide</Link>
         </p>
         <div className="crawler-tabs" role="tablist">
           {TABS.map((t) => (
@@ -132,6 +162,30 @@ function RunsTab({ context }: CrawlerPageProps) {
     void load();
   }, [load]);
 
+  const [launches, setLaunches] = useState<CrawlLaunches | null>(null);
+  const loadLaunches = useCallback(async () => {
+    try {
+      setLaunches((await crawlerClient().crawlLaunches?.()) ?? null);
+    } catch {
+      setLaunches(null); // the runs table still works without launch status
+    }
+  }, [crawlerClient]);
+
+  useEffect(() => {
+    void loadLaunches();
+  }, [loadLaunches]);
+
+  // While a crawl is starting or running, keep its status and the runs table current.
+  const crawling = (launches?.launches ?? []).some((l) => l.active);
+  useEffect(() => {
+    if (!crawling) return;
+    const timer = window.setInterval(() => {
+      void loadLaunches();
+      void load();
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [crawling, load, loadLaunches]);
+
   const sources = useMemo(() => Array.from(new Set((runs ?? []).map((r) => r.source))).sort(), [runs]);
   const shown = (runs ?? []).filter((r) => !source || r.source === source);
 
@@ -152,13 +206,28 @@ function RunsTab({ context }: CrawlerPageProps) {
             ))}
           </select>
         </label>
-        <button className="crawler-button" onClick={() => void load()}>
+        <button
+          className="crawler-button"
+          onClick={() => {
+            void load();
+            void loadLaunches();
+          }}
+        >
           Refresh
         </button>
       </div>
 
+      <StartCrawl
+        context={context}
+        launches={launches}
+        onStarted={() => {
+          void loadLaunches();
+          void load();
+        }}
+      />
+
       {shown.length === 0 ? (
-        <div className="crawler-empty">No crawl runs yet. Run the crawler Job to create one.</div>
+        <div className="crawler-empty">No crawl runs yet. Use Start crawl above to create one.</div>
       ) : (
         <table className="crawler-table">
           <thead>
@@ -174,6 +243,7 @@ function RunsTab({ context }: CrawlerPageProps) {
               <th>Took</th>
               <th>Ontology</th>
               <th>Settings</th>
+              <th title="The user the crawl connected as">Ran as</th>
               <th title="Latest evaluation: direct-mention recall and claim recall">Score</th>
             </tr>
           </thead>
@@ -199,6 +269,17 @@ function RunsTab({ context }: CrawlerPageProps) {
                 <td className="nowrap">{duration(run)}</td>
                 <td>{run.ontology_version}</td>
                 <td>{run.settings_version ?? "defaults"}</td>
+                <td className="nowrap">
+                  {run.actor}
+                  {run.isolated === false && (
+                    <span
+                      className="crawler-badge crawler-badge--problem crawler-badge--inline"
+                      title="This crawl did not connect as the crawler machine user, so its access to the ground truth was not restricted."
+                    >
+                      not isolated
+                    </span>
+                  )}
+                </td>
                 <td className="nowrap crawler-score">{scoreLabel(run.latest_evaluation?.summary)}</td>
               </tr>
             ))}
@@ -207,6 +288,134 @@ function RunsTab({ context }: CrawlerPageProps) {
       )}
 
       {selected && <RunDetail context={context} crawlRunId={selected} />}
+    </div>
+  );
+}
+
+const launchTarget = (launch: CrawlLaunch) => launch.source_id ?? launch.dataset_id ?? "unknown";
+
+/** Starts a crawl (a run of the Workbench crawl Job) and shows crawls in progress. */
+function StartCrawl({
+  context,
+  launches,
+  onStarted,
+}: CrawlerPageProps & { launches: CrawlLaunches | null; onStarted: () => void }) {
+  const { crawlerClient } = context;
+  const [targets, setTargets] = useState<CrawlTarget[]>([]);
+  const [targetKey, setTargetKey] = useState("");
+  const [datasetId, setDatasetId] = useState("");
+  const [full, setFull] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const loaded = (await crawlerClient().crawlTargets?.()) ?? [];
+        if (!active) return;
+        setTargets(loaded);
+        setTargetKey(loaded.length ? `${loaded[0].kind}:${loaded[0].id}` : "other");
+      } catch {
+        if (active) setTargetKey("other");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [crawlerClient]);
+
+  if (!launches) return null;
+  if (!launches.available) {
+    return (
+      <div className="crawler-start crawler-start--unavailable">
+        Crawls can't be started from here: {launches.reason}
+      </div>
+    );
+  }
+
+  const chosen: CrawlTarget | null =
+    targetKey === "other"
+      ? datasetId.trim()
+        ? { kind: "dataset", id: datasetId.trim(), label: datasetId.trim(), connector: "helios_ds" }
+        : null
+      : targets.find((t) => `${t.kind}:${t.id}` === targetKey) ?? null;
+  const active = launches.launches.filter((l) => l.active);
+  const alreadyRunning = chosen ? active.some((l) => launchTarget(l) === chosen.id) : false;
+  const lastFinished = launches.launches.find((l) => !l.active);
+
+  const start = async () => {
+    if (!chosen) return;
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const launched = await crawlerClient().startCrawl!(chosen, full);
+      setFeedback({
+        kind: "ok",
+        text: `Crawl requested (Workbench job run ${launched.job_run_id}). It appears below once its container has started.`,
+      });
+      onStarted();
+    } catch (err) {
+      setFeedback({ kind: "error", text: message(err, "The crawl could not be started") });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="crawler-start">
+      <div className="crawler-start__form">
+        <label>
+          Crawl{" "}
+          <select value={targetKey} onChange={(e) => setTargetKey(e.target.value)}>
+            {targets.map((t) => (
+              <option key={`${t.kind}:${t.id}`} value={`${t.kind}:${t.id}`}>
+                {t.kind === "dataset" ? `Helios-DS dataset ${short(t.id, 13)}` : t.label}
+              </option>
+            ))}
+            <option value="other">Another Helios-DS dataset…</option>
+          </select>
+        </label>
+        {targetKey === "other" && (
+          <input
+            aria-label="Helios-DS dataset ID"
+            placeholder="Dataset ID"
+            value={datasetId}
+            maxLength={128}
+            onChange={(e) => setDatasetId(e.target.value)}
+          />
+        )}
+        <label title="Re-read and re-analyze every document, even if unchanged since the last crawl">
+          <input type="checkbox" checked={full} onChange={(e) => setFull(e.target.checked)} /> Full
+          re-crawl
+        </label>
+        <button
+          className="crawler-button crawler-button--primary"
+          disabled={busy || !chosen || alreadyRunning}
+          onClick={() => void start()}
+        >
+          {busy ? "Starting…" : "Start crawl"}
+        </button>
+      </div>
+      {active.map((l) => (
+        <div className="crawler-start__status" role="status" key={l.job_run_id}>
+          <span className="crawler-badge crawler-badge--running">{l.status.replace("ENGINE_", "")}</span>{" "}
+          Crawl of {short(launchTarget(l), 13)} requested {when(l.created_at)}
+          {l.requested_by ? ` by ${l.requested_by.split(":").pop()}` : ""} (job run {l.job_run_id})
+        </div>
+      ))}
+      {!active.length && lastFinished && !lastFinished.status.endsWith("SUCCEEDED") && (
+        <div className="crawler-start__status">
+          <span className="crawler-badge crawler-badge--problem">{lastFinished.status.replace("ENGINE_", "")}</span>{" "}
+          The last crawl job run ({lastFinished.job_run_id}) did not succeed. Its log is under
+          Jobs → {launches.job_name} in Workbench.
+        </div>
+      )}
+      {feedback && (
+        <div className={feedback.kind === "error" ? "crawler-error" : "crawler-start__status"} role="status">
+          {feedback.text}
+        </div>
+      )}
     </div>
   );
 }
@@ -262,6 +471,18 @@ function RunDetail({ context, crawlRunId }: CrawlerPageProps & { crawlRunId: str
         <dd>
           {run.crawler_version} / {run.ontology_version} / {run.settings_version ?? "built-in defaults"}{" "}
           <span className="mono muted">{short(run.settings_hash, 10)}</span>
+        </dd>
+        <dt>Found</dt>
+        <dd>
+          {FOUND_COUNTS.filter((c) => run.counts[c.key] != null)
+            .map((c) => `${run.counts[c.key].toLocaleString()} ${c.label}`)
+            .join(" · ") || "—"}
+        </dd>
+        <dt>Problems</dt>
+        <dd>
+          {PROBLEM_STATUSES.filter((s) => run.counts[s])
+            .map((s) => `${run.counts[s]} ${s.replace(/_/g, " ")}`)
+            .join(" · ") || "None"}
         </dd>
         <dt>Request</dt>
         <dd className="mono">{JSON.stringify(run.settings)}</dd>
@@ -421,19 +642,43 @@ const SUMMARY_COLUMNS: { key: string; label: string; title: string }[] = [
 
 type Cells = Record<string, Record<string, number | null>>;
 
+// Short headings for the detail tables; the tooltip says what is counted.
+const METRIC_COLUMNS: Record<string, { label: string; title: string }> = {
+  truth_total: { label: "Expected", title: "How many the ground truth has" },
+  truth_found: { label: "Found", title: "How many of those the crawler found" },
+  recall: { label: "Recall", title: "Found ÷ expected" },
+  class_correct_rate: { label: "Right class", title: "Share of found mentions given the right ontology class" },
+  crawler_total: { label: "Produced", title: "How many the crawler produced" },
+  crawler_matched: { label: "Correct", title: "How many of those match the ground truth" },
+  precision: { label: "Precision", title: "Correct ÷ produced" },
+  found: { label: "Found", title: "Truth mentions the crawler found" },
+  correct: { label: "Correct", title: "Linked to the right entity" },
+  wrong: { label: "Wrong", title: "Linked to the wrong entity" },
+  possibly_only: { label: "Possible", title: "Only a tentative (PossiblySameAs) link" },
+  unresolved: { label: "No link", title: "Found but not linked to any entity" },
+  accuracy: { label: "Accuracy", title: "Correct ÷ found" },
+  links: { label: "Links", title: "Definite (SameAs) links made this way" },
+  total: { label: "Total", title: "Golden questions of this kind" },
+  passed: { label: "Passed", title: "Questions whose entities, documents, claims and evidence were all found" },
+  pass_rate: { label: "Pass rate", title: "Passed ÷ total" },
+  crawler_pairs: { label: "Produced", title: "Document pairs the crawler put in the same case" },
+  truth_pairs: { label: "Expected", title: "Document pairs that belong to the same case" },
+  pairs_correct: { label: "Correct", title: "Pairs the crawler grouped correctly" },
+};
+
 function MetricTable({ title, rows, columns }: { title: string; rows: Cells | undefined; columns: string[] }) {
   const entries = Object.entries(rows ?? {});
   if (entries.length === 0) return null;
   return (
     <section className="crawler-metric">
       <h3>{title}</h3>
-      <table className="crawler-table">
+      <table className="crawler-table crawler-metric__table">
         <thead>
           <tr>
             <th />
             {columns.map((c) => (
-              <th key={c} className="num">
-                {c.replace(/_/g, " ")}
+              <th key={c} className="num" title={METRIC_COLUMNS[c]?.title}>
+                {METRIC_COLUMNS[c]?.label ?? c.replace(/_/g, " ")}
               </th>
             ))}
           </tr>
@@ -441,7 +686,7 @@ function MetricTable({ title, rows, columns }: { title: string; rows: Cells | un
         <tbody>
           {entries.map(([name, cell]) => (
             <tr key={name}>
-              <td>{name}</td>
+              <td>{name.replace(/:(?=\S)/, ": ")}</td>
               {columns.map((c) => (
                 <td key={c} className="num">
                   {typeof cell[c] === "number" && !Number.isInteger(cell[c]) ? pct(cell[c]) : (cell[c] ?? "—")}

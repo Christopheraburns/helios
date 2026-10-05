@@ -121,20 +121,35 @@ def clear(review: dict, section: str | None = None) -> None:
         review[s] = {}
 
 
+def model_rejected(section: str, element: dict) -> bool:
+    """A relationship candidate the proposer itself turned down (llm_rejected)."""
+    return section == "relationships" and not element.get("accepted")
+
+
+def effective_decision(review: dict, section: str, element_id: str, element: dict) -> str:
+    """The reviewer's decision, else what publishing does with the element anyway:
+    a model-rejected relationship is left out unless the reviewer overturns it, so it
+    counts as rejected rather than as work waiting for the reviewer."""
+    decision = review.get(section, {}).get(element_id, {}).get("decision")
+    if decision:
+        return decision
+    return "reject" if model_rejected(section, element) else "pending"
+
+
 def summary(review: dict, proposal: dict) -> dict:
     """Decision counts per section, including pending, for the review page header."""
     totals = {
-        "datasets": [dataset_id(d) for d in proposal["datasets"]],
-        "fields": [field_id(d, f) for d in proposal["datasets"] for f in d["fields"]],
-        "relationships": [relationship_id(r) for r in proposal["relationships"]],
-        "metrics": [metric_id(m) for m in proposal["metrics"]],
-        "glossary_terms": [term_id(t) for t in proposal["glossary_terms"]],
+        "datasets": [(dataset_id(d), d) for d in proposal["datasets"]],
+        "fields": [(field_id(d, f), f) for d in proposal["datasets"] for f in d["fields"]],
+        "relationships": [(relationship_id(r), r) for r in proposal["relationships"]],
+        "metrics": [(metric_id(m), m) for m in proposal["metrics"]],
+        "glossary_terms": [(term_id(t), t) for t in proposal["glossary_terms"]],
     }
     out = {}
-    for s, ids in totals.items():
-        c = {"accept": 0, "reject": 0, "edit": 0, "pending": 0, "total": len(ids)}
-        for i in ids:
-            c[review.get(s, {}).get(i, {}).get("decision", "pending")] += 1
+    for s, elements in totals.items():
+        c = {"accept": 0, "reject": 0, "edit": 0, "pending": 0, "total": len(elements)}
+        for i, element in elements:
+            c[effective_decision(review, s, i, element)] += 1
         out[s] = c
     return out
 

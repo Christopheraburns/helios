@@ -20,6 +20,8 @@ import {
   ErrorState,
   LoadingState,
 } from "../components/AsyncState";
+import ExplainResult from "../components/ExplainResult";
+import SearchEvidenceResult from "../components/SearchEvidenceResult";
 import { ApplicationContextState } from "../hooks/useApplicationContext";
 
 interface TalkPageProps {
@@ -144,6 +146,30 @@ function QueryResult({ turn }: { turn: ConversationTurn }) {
       ) : null}
     </section>
   );
+}
+
+function UnstructuredResults({ turn }: { turn: ConversationTurn }) {
+  const unstructuredResults = [];
+
+  for (const item of turn.tool_trace) {
+    const result = item.result && typeof item.result === "object"
+      ? (item.result as Record<string, unknown>)
+      : null;
+
+    if (item.tool === "search_evidence" && result && !result.error) {
+      unstructuredResults.push(
+        <SearchEvidenceResult key={`search-${item.tool}`} result={result as any} />
+      );
+    }
+
+    if (item.tool === "explain" && result && !result.error) {
+      unstructuredResults.push(
+        <ExplainResult key={`explain-${item.tool}`} result={result as any} />
+      );
+    }
+  }
+
+  return unstructuredResults.length > 0 ? <>{unstructuredResults}</> : null;
 }
 
 function ToolActivity({
@@ -629,6 +655,7 @@ export default function TalkPage({ context }: TalkPageProps) {
                       <div className="talk-message__content">{item.content}</div>
                       {item.role === "assistant" && turns[item.id] ? (
                         <>
+                          <UnstructuredResults turn={turns[item.id]} />
                           <QueryResult turn={turns[item.id]} />
                           <ToolActivity
                             turn={turns[item.id]}

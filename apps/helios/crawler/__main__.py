@@ -47,6 +47,17 @@ def source_snapshot(source: Any) -> dict[str, Any]:
     }
 
 
+def crawl_request() -> dict[str, Any]:
+    """Who asked for this crawl and the Workbench run doing it, when the API started it."""
+    request = {
+        "requested_by": os.environ.get("HELIOS_CRAWL_REQUESTED_BY"),
+        "engine_id": os.environ.get("CDSW_ENGINE_ID")
+        if os.environ.get("HELIOS_CRAWL_REQUESTED_BY")
+        else None,
+    }
+    return {key: value for key, value in request.items() if value}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m apps.helios.crawler")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -170,6 +181,7 @@ def main(argv: list[str] | None = None) -> int:
         crawler_settings=settings,
         full=args.full,
         source_snapshot=source_snapshot(source),
+        request=crawl_request(),
         gazetteer=gazetteer,
         resolution=resolution,
         warehouse_cursor=connection.cursor,

@@ -1034,7 +1034,9 @@ def _proposal_collection(
     query_text = (query or "").casefold()
     for element_id, item in rows:
         audit = review.get(section, {}).get(element_id)
-        item_decision = (audit or {}).get("decision", "pending")
+        item_decision = review_store.effective_decision(
+            review, section, element_id, item
+        )
         if decision and item_decision != decision:
             continue
         if query_text and query_text not in json.dumps(
@@ -1660,7 +1662,9 @@ def _can_manage_organization(
 @api_router.get("/healthz")
 def api_health(request: Request) -> JSONResponse:
     repository: MetadataRepository = request.app.state.metadata_repository
-    findings = repository.integrity_check()
+    # Integrity is checked at startup; a full check here scans the whole file on
+    # every page load.
+    findings = repository.ping()
     if findings != ("ok",):
         return JSONResponse(
             {
@@ -1668,7 +1672,7 @@ def api_health(request: Request) -> JSONResponse:
                 "components": {
                     "metadata_repository": {
                         "status": "unavailable",
-                        "message": "metadata integrity check failed",
+                        "message": "metadata repository is not readable",
                     }
                 },
             },

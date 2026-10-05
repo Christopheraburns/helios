@@ -70,6 +70,15 @@ const ALLOWLIST = [
     order: 50,
   },
   {
+    source: "docs/crawler-guide.md",
+    slug: "crawler-guide",
+    title: "The Crawler: a first-time user's guide",
+    project: "helios",
+    navGroup: "Console guides",
+    audience: "user",
+    order: 55,
+  },
+  {
     source: "docs/talk-to-your-data-architecture.md",
     slug: "talk-to-your-data",
     title: "Talk to Your Data architecture",

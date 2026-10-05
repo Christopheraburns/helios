@@ -113,7 +113,9 @@ def test_empty_state_has_nothing_done():
     assert semantic["review-proposals"]["params"] == {}
     assert semantic["review-proposals"]["note"] is None
     crawl = by_id(journeys["unstructured-crawl"]["steps"])
-    assert crawl["run-crawl"]["status"] == "external"
+    # Crawls are started on the Crawler page, so this is an ordinary step.
+    assert crawl["run-crawl"]["status"] == "todo"
+    assert crawl["run-crawl"]["doc_slug"] == "crawler-guide"
 
 
 def test_full_state_is_all_done():

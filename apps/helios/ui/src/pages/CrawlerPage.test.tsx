@@ -120,6 +120,65 @@ describe("CrawlerPage", () => {
     expect(api.crawlRun).toHaveBeenCalledWith("crawl_abc");
   });
 
+  it("counts unreadable documents as problems, not what the analysis found", async () => {
+    const counts = { listed: 301, analyzed: 299, no_text: 2, segments: 1003, mentions: 4297, claims: 403, claims_unanchored: 217 };
+    renderPage({
+      crawlRuns: vi.fn().mockResolvedValue([{ ...RUN, counts }]),
+      crawlRun: vi.fn().mockResolvedValue({ ...RUN, counts, asset_counts: { by_status: {}, by_class: {} }, assets: [] }),
+    });
+    const row = (await screen.findByText("SUCCEEDED")).closest("tr")!;
+    expect(row.querySelector(".crawler-problem")).toHaveTextContent(/^2$/);
+    fireEvent.click(row);
+    expect(await screen.findByText("1,003 segments · 4,297 mentions · 403 claims")).toBeInTheDocument();
+    expect(screen.getByText("2 no text")).toBeInTheDocument();
+  });
+
+  it("starts a crawl through the API and shows it in progress", async () => {
+    const target = { kind: "dataset", id: RUN.source, label: "Helios-DS dataset", connector: "helios_ds" };
+    const launch = {
+      job_run_id: "run-9",
+      status: "ENGINE_SCHEDULING",
+      active: true,
+      created_at: "2026-10-05T16:00:00+00:00",
+      finished_at: null,
+      source_id: null,
+      dataset_id: RUN.source,
+      full: false,
+      requested_by: "cloudera-workbench:alice",
+    };
+    const crawlLaunches = vi
+      .fn()
+      .mockResolvedValueOnce({ available: true, reason: null, job_name: "helios-crawl", launches: [] })
+      .mockResolvedValue({ available: true, reason: null, job_name: "helios-crawl", launches: [launch] });
+    const startCrawl = vi.fn().mockResolvedValue(launch);
+    renderPage({
+      crawlRuns: vi.fn().mockResolvedValue([{ ...RUN, actor: "cburns", isolated: false }]),
+      crawlTargets: vi.fn().mockResolvedValue([target]),
+      crawlLaunches,
+      startCrawl,
+    });
+
+    expect(await screen.findByText("not isolated")).toBeInTheDocument();
+    const button = await screen.findByRole("button", { name: "Start crawl" });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+
+    await waitFor(() => expect(startCrawl).toHaveBeenCalledWith(target, false));
+    expect(await screen.findByText(/job run run-9\)\. It appears below/)).toBeInTheDocument();
+    expect(await screen.findByText("SCHEDULING")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Start crawl" })).toBeDisabled());
+  });
+
+  it("says why crawls cannot be started when Workbench is unavailable", async () => {
+    renderPage({
+      crawlRuns: vi.fn().mockResolvedValue([RUN]),
+      crawlTargets: vi.fn().mockResolvedValue([]),
+      crawlLaunches: vi.fn().mockResolvedValue({ available: false, reason: "no Workbench project", launches: [] }),
+    });
+    expect(await screen.findByText(/Crawls can't be started from here: no Workbench project/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start crawl" })).not.toBeInTheDocument();
+  });
+
   it("shows the latest score per run and evaluates a run against its dataset", async () => {
     const api = {
       crawlRuns: vi.fn().mockResolvedValue([{ ...RUN, latest_evaluation: { ...EVALUATION, metrics: undefined } }]),
