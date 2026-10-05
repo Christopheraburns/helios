@@ -991,7 +991,7 @@ def _json(v):
 @server.custom_route("/healthz", methods=["GET"])
 async def healthz(_: Request) -> JSONResponse:
     try:
-        metadata_findings = metadata_repository.integrity_check()
+        metadata_findings = metadata_repository.ping()
         if metadata_findings != ("ok",):
             return JSONResponse(
                 {
@@ -1000,7 +1000,7 @@ async def healthz(_: Request) -> JSONResponse:
                     "components": {
                         "metadata_repository": {
                             "status": "unavailable",
-                            "message": "metadata integrity check failed",
+                            "message": "metadata repository is not readable",
                         }
                     },
                 },
@@ -1081,6 +1081,156 @@ def _request_caller(headers: dict[str, str]) -> MCPCaller | None:
     return None
 
 
+# CR-11: Unstructured data tools for semantic search over crawled documents
+
+
+@server.tool(
+    description=(
+        "Search crawled documents for segments matching a semantic query. "
+        "Returns document excerpts with their locators (page number, email part, etc.). "
+        "Use this to ground an answer in evidence from unstructured data. "
+        "Optionally filter by asset type (document, message) or crawl run."
+    )
+)
+def search_evidence(
+    query: str,
+    limit: int = 10,
+    asset_type: str | None = None,
+) -> dict:
+    """Search for document segments by semantic similarity to a query.
+
+    Args:
+        query: Natural language search, e.g. "customer complained about damage"
+        limit: Max segments to return (1-100)
+        asset_type: Optional filter: "document", "message", or None for all
+
+    Returns:
+        Segments sorted by relevance, each with text and locators for finding it.
+    """
+    try:
+        from apps.helios.crawler.embeddings import search_segments
+    except ImportError:
+        return _error(
+            "embeddings_unavailable",
+            "Embeddings are not available. Run a crawl to index documents.",
+        )
+
+    safe_limit = min(max(limit, 1), 100)
+    try:
+        filters = {}
+        if asset_type:
+            filters["asset_type"] = asset_type
+
+        segments = search_segments(query, limit=safe_limit, filter_dict=filters)
+        return {
+            "segments": [
+                {
+                    "segment_id": seg["segment_id"],
+                    "asset_id": seg["asset_id"],
+                    "text": seg["text"],
+                    "locators": seg["locators"],
+                    "relevance": round(1.0 - seg["score"], 3),  # Convert distance to similarity
+                }
+                for seg in segments
+            ],
+            "query": query,
+            "count": len(segments),
+        }
+    except Exception as exc:
+        return _error(
+            "search_failed",
+            f"Semantic search failed: {exc}",
+        )
+
+
+@server.tool(
+    description=(
+        "Get claims and evidence about an entity from crawled documents. "
+        "Shows what documents say about a customer, product, store, or return: "
+        "claims extracted, supporting evidence passages, and related documents."
+    )
+)
+def explain(
+    entity_key: str,
+    entity_class: str | None = None,
+) -> dict:
+    """Explain an entity by showing what documents say about it.
+
+    Args:
+        entity_key: The entity identifier, e.g., "customer:54201", "item:142857"
+        entity_class: Optional: Customer, Item, Brand, Store, Sale, Return, Reason
+
+    Returns:
+        Claims about the entity with evidence passages, document excerpts, and related entities.
+    """
+    from helios_core.index import IndexStore
+
+    try:
+        index = IndexStore()
+    except Exception:
+        return _error(
+            "index_unavailable",
+            "The index is not available.",
+        )
+
+    try:
+        # Find all mentions of this entity
+        mentions = index.query(
+            "helios_index.entity_links",
+            filters={"external_id": entity_key} if entity_key else None,
+            limit=1000,
+        )
+
+        # Find claims involving this entity
+        claims = index.query(
+            "helios_index.claims",
+            filters={"subject_external_id": entity_key},
+            limit=100,
+        )
+
+        # Get evidence for those claims
+        evidence_segments = {}
+        for claim in claims:
+            for seg_id in claim.get("evidence_segment_ids", []):
+                if seg_id not in evidence_segments:
+                    segs = index.query("helios_index.segments", filters={"segment_id": seg_id})
+                    if segs:
+                        evidence_segments[seg_id] = segs[0]
+
+        return {
+            "entity": {
+                "key": entity_key,
+                "class": entity_class,
+            },
+            "mentions_count": len(mentions),
+            "claims_count": len(claims),
+            "claims": [
+                {
+                    "predicate": claim.get("predicate"),
+                    "object": claim.get("object"),
+                    "evidence": [
+                        {
+                            "segment_id": seg_id,
+                            "text": evidence_segments.get(seg_id, {}).get("text", ""),
+                            "locators": evidence_segments.get(seg_id, {}).get("locators"),
+                        }
+                        for seg_id in claim.get("evidence_segment_ids", [])
+                    ],
+                }
+                for claim in claims
+            ],
+        }
+    except Exception as exc:
+        return _error(
+            "explain_failed",
+            f"Could not explain entity: {exc}",
+        )
+
+
+# One failed-authentication audit event per client per minute; the rest are counted.
+_auth_failure_limiter = audit.RepeatLimiter(interval=60.0)
+
+
 async def app(scope, receive, send):
     """Bearer-token gate around the MCP app; /healthz stays open."""
     context_token = None
@@ -1093,17 +1243,21 @@ async def app(scope, receive, send):
             k.decode().lower(): v.decode()
             for k, v in scope.get("headers", [])
         }
+        client = (scope.get("client") or ("unknown",))[0]
         if not _TOKEN:
-            audit.emit(
-                metadata_repository,
-                component="mcp",
-                event_type="mcp.transport",
-                action="authenticate",
-                outcome="error",
-                severity="error",
-                http_status=503,
-                summary="MCP authentication is not configured",
-            )
+            repeats = _auth_failure_limiter.allow(f"error:{client}")
+            if repeats is not None:
+                audit.emit(
+                    metadata_repository,
+                    component="mcp",
+                    event_type="mcp.transport",
+                    action="authenticate",
+                    outcome="error",
+                    severity="error",
+                    http_status=503,
+                    summary="MCP authentication is not configured",
+                    details={"repeats_not_recorded": repeats},
+                )
             resp = JSONResponse(
                 {"error": "mcp_authentication_not_configured"},
                 status_code=503,
@@ -1111,16 +1265,19 @@ async def app(scope, receive, send):
             await resp(scope, receive, send)
             return
         if headers.get("authorization") != f"Bearer {_TOKEN}":
-            audit.emit(
-                metadata_repository,
-                component="mcp",
-                event_type="mcp.transport",
-                action="authenticate",
-                outcome="denied",
-                severity="warning",
-                http_status=401,
-                summary="MCP bearer authentication failed",
-            )
+            repeats = _auth_failure_limiter.allow(f"denied:{client}")
+            if repeats is not None:
+                audit.emit(
+                    metadata_repository,
+                    component="mcp",
+                    event_type="mcp.transport",
+                    action="authenticate",
+                    outcome="denied",
+                    severity="warning",
+                    http_status=401,
+                    summary="MCP bearer authentication failed",
+                    details={"repeats_not_recorded": repeats},
+                )
             resp = JSONResponse({"error": "unauthorized"}, status_code=401)
             await resp(scope, receive, send)
             return
