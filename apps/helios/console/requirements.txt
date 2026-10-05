@@ -1,9 +1,12 @@
 # Direct dependencies for the Helios API Application on PBJ Python 3.12.
 # Install into the project-local directory documented in docs/ui-deployment.md.
+lancedb==1.0.4  # CR-11: vector DB for segment embeddings
+sentence-transformers==3.0.1  # CR-11: local embedding model (all-MiniLM-L6-v2)
 fastapi==0.141.1
 httpx==0.28.1
 impyla==0.24.0
 pypdf==6.19.0  # crawler: PDF text extraction (CR-3)
+rapidfuzz==3.14.6  # crawler: typo-tolerant name matching (CR-5)
 Jinja2==3.1.6
 jsonschema==4.23.0
 mcp==2.2.0

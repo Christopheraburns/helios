@@ -38,6 +38,7 @@ from helios_core.ontology.mapping import ResolutionConfig
 
 from .analyzers import Segment, analyze_asset
 from .claims import extract_claims
+from .embeddings import embed_segments, save_embeddings
 from .connectors import Connector, Fetched, SourceAsset, plan_incremental
 from .gazetteer import Gazetteer
 from .mentions import extract_mentions
@@ -136,6 +137,7 @@ def crawl(
     analyze: Analyzer | None = None,
     full: bool = False,
     source_snapshot: dict | None = None,
+    request: dict | None = None,
     gazetteer: Gazetteer | None = None,
     resolution: ResolutionConfig | None = None,
     warehouse_cursor: Callable[[], Any] | None = None,
@@ -153,7 +155,11 @@ def crawl(
         ontology_version=ontology_version,
         crawler_version=CRAWLER_VERSION,
         actor=actor,
-        settings={"data_source": source_snapshot or {}, "full": full},
+        settings={
+            "data_source": source_snapshot or {},
+            "full": full,
+            **({"request": request} if request else {}),
+        },
         settings_version=settings.version if settings else None,
         settings_hash=settings_hash,
     )
@@ -206,6 +212,28 @@ def crawl(
                 rows.append(_asset_row(run, asset, before.status, detail))
         index.append(ASSETS, rows)
         index.append(SEGMENTS, segments)
+        
+        # CR-11: Embed segments for semantic search
+        try:
+            from .embeddings import embed_segments, save_embeddings
+            segment_dicts = [
+                {
+                    "segment_id": seg.segment_id,
+                    "asset_id": seg.asset_id,
+                    "text": seg.text,
+                    "locators": seg.locators.model_dump(),
+                }
+                for seg in segments
+            ]
+            embeddings = embed_segments(run.crawl_run_id, segment_dicts)
+            if embeddings:
+                saved = save_embeddings(embeddings)
+                run.notes.setdefault("embeddings", {})["saved"] = saved
+        except ImportError:
+            pass  # Embedding dependencies not installed
+        except Exception as e:
+            # Log but don't fail the crawl
+            run.notes.setdefault("embeddings", {})["error"] = str(e)
         index.append(MENTIONS, mentions)
         resolution_counts: dict[str, int] = {}
         if gazetteer is not None and resolution is not None:
