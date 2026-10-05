@@ -614,6 +614,11 @@ def _proposal_graph(
                     "match_ratio": relationship.get("match_ratio"),
                     "distinct_values": relationship.get("distinct_values"),
                     "unmatched_values": relationship.get("unmatched"),
+                    **(
+                        {"model_rejected": True}
+                        if review_store.model_rejected("relationships", relationship)
+                        else {}
+                    ),
                 },
             )
         )
@@ -843,7 +848,9 @@ def _apply_review_states(
         if not section or not element_id:
             return element
         entry = review.get(section, {}).get(element_id, {})
-        decision = entry.get("decision", "pending")
+        decision = entry.get("decision") or (
+            "reject" if element.metadata.get("model_rejected") else "pending"
+        )
         audit = _compact(
             {
                 "review_decision": decision,

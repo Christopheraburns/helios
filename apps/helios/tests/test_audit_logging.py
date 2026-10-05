@@ -399,3 +399,21 @@ def test_job_audit_records_success_and_failure_without_error_contents(
     failed = next(item for item in events if item.outcome == "error")
     assert failed.details["error_type"] == "RuntimeError"
     assert "private failure text" not in str(failed.details)
+
+
+def test_repeat_limiter_passes_one_event_per_interval_and_counts_the_rest():
+    limiter = audit.RepeatLimiter(interval=60.0)
+
+    assert limiter.allow("denied:10.0.0.1", now=0.0) == 0
+    assert limiter.allow("denied:10.0.0.1", now=1.0) is None
+    assert limiter.allow("denied:10.0.0.1", now=59.0) is None
+    assert limiter.allow("denied:10.0.0.2", now=59.0) == 0  # another client is not affected
+    assert limiter.allow("denied:10.0.0.1", now=61.0) == 2
+    assert limiter.allow("denied:10.0.0.1", now=200.0) == 0
+
+
+def test_repeat_limiter_stays_bounded():
+    limiter = audit.RepeatLimiter(interval=60.0, max_keys=3)
+    for client in range(10):
+        assert limiter.allow(f"denied:{client}", now=0.0) == 0
+    assert len(limiter._state) <= 3

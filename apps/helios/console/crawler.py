@@ -6,6 +6,9 @@
     POST /api/v1/crawler/settings                      validate and save a new version
     POST /api/v1/crawler/settings/{version}:activate   use it for the next crawls
     GET  /api/v1/crawler/runs                          crawl runs, newest first
+    POST /api/v1/crawler/runs                          start a crawl (a run of the Workbench Job)
+    GET  /api/v1/crawler/launches                      the crawl Job's latest runs and their status
+    GET  /api/v1/crawler/targets                       what can be crawled
     GET  /api/v1/crawler/runs/{crawl_run_id}           one run with its assets
     POST /api/v1/crawler/runs/{crawl_run_id}:evaluate  score the run against a dataset (CR-8)
     GET  /api/v1/crawler/runs/{crawl_run_id}/evaluations   latest score per dataset
@@ -22,6 +25,10 @@ delegation on, the ground-truth queries run as that user (``evaluator_mode``
 "proxy"), so Ranger decides who may evaluate; otherwise they run as the API's
 WORKLOAD_USER ("workload_user"). The crawler identity never reads the truth.
 
+Crawls are never run in the API process: POST /runs starts a run of the
+``helios-crawl`` Workbench Job (see ``crawl_jobs``), which is the only way a
+crawl starts, whether from the Crawler page, a script or a schedule.
+
 Projection pushes one run's helios_index rows, table by table in reference
 order, to the Helios Graph gateway (``HELIOS_GRAPH_GATEWAY_URL`` and
 ``HELIOS_GRAPH_TOKEN``); the lakehouse stays canonical and Memgraph is a
@@ -31,6 +38,7 @@ disposable copy that can be dropped and re-projected at any time.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from apps.helios.crawler import evaluate as harness
@@ -43,7 +51,7 @@ from helios_core.index import ontology_versions, runs
 from helios_core.index.records import AssetRecord
 from pydantic import BaseModel, ValidationError
 
-from . import ontology
+from . import crawl_jobs, ontology
 from .graph_client import GraphGatewayClient, GraphGatewayError, GraphGatewayUnavailable
 
 LOGGER = logging.getLogger(__name__)
@@ -223,6 +231,10 @@ def _latest_evaluations_by_run(store) -> dict[str, Any]:
 
 def _run_view(run: Any, evaluation: Any = None) -> dict[str, Any]:
     return {
+        "requested_by": ((run.settings or {}).get("request") or {}).get("requested_by"),
+        # False when the crawl connected as someone other than the crawler machine
+        # user, who may be able to read what the crawler must not (CR-0d).
+        "isolated": run.actor == crawl_jobs.crawler_identity(),
         "latest_evaluation": (
             _evaluation_view(evaluation, metrics=False) if evaluation is not None else None
         ),
@@ -491,3 +503,147 @@ def run_projection(crawl_run_id: str) -> dict[str, Any]:
     if state is None:
         raise HTTPException(status_code=404, detail=f"crawl run {crawl_run_id} is not projected")
     return state
+
+
+# --- starting crawls (Workbench Job) ----------------------------------------------
+
+_TARGET_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+class StartCrawlRequest(BaseModel):
+    """Exactly one of ``source_id`` (a data source registered in Helios) or
+    ``dataset_id`` (a READY Helios-DS dataset)."""
+
+    source_id: str | None = None
+    dataset_id: str | None = None
+    full: bool = False
+
+
+def _principal(request: Request):
+    from apps.helios.console.api import principal_from_request
+
+    principal = principal_from_request(request)
+    if principal is None:
+        raise HTTPException(status_code=401, detail="authenticated principal is required")
+    return principal
+
+
+def _workbench():
+    try:
+        return crawl_jobs.workbench()
+    except crawl_jobs.WorkbenchUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"crawls cannot be started: {exc}")
+
+
+def _crawlable_source(request: Request, source_id: str):
+    from helios_core.crawler.sources import is_crawlable
+
+    source = request.app.state.metadata_repository.data_source(source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail=f"data source {source_id} not found")
+    if not is_crawlable(source.connector):
+        raise HTTPException(
+            status_code=422,
+            detail=f"data source {source.name!r} uses connector {source.connector!r}, which is not crawlable",
+        )
+    if not source.crawl.get("enabled", True):
+        raise HTTPException(
+            status_code=422, detail=f"crawling is disabled for data source {source.name!r}"
+        )
+    return source
+
+
+@crawler_router.post("/runs", status_code=202)
+def start_crawl(body: StartCrawlRequest, request: Request) -> dict[str, Any]:
+    """Start a crawl as a run of the Workbench Job. The crawl appears in
+    GET /runs once the Job's container is up and has recorded it."""
+    principal = _principal(request)
+    if bool(body.source_id) == bool(body.dataset_id):
+        raise HTTPException(status_code=422, detail="give exactly one of source_id or dataset_id")
+    target = body.source_id or body.dataset_id or ""
+    if not _TARGET_ID.match(target):
+        raise HTTPException(status_code=422, detail="not a valid source or dataset ID")
+    if body.source_id:
+        _crawlable_source(request, body.source_id)
+    client, project_id = _workbench()
+    try:
+        for existing in crawl_jobs.launches(client, project_id, limit=20):
+            if existing["active"] and target in (existing["source_id"], existing["dataset_id"]):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"a crawl of {target} is already {existing['status']} "
+                        f"(Workbench job run {existing['job_run_id']})"
+                    ),
+                )
+        launched = crawl_jobs.launch(
+            client,
+            project_id,
+            source_id=body.source_id,
+            dataset_id=body.dataset_id,
+            full=body.full,
+            requested_by=principal.id,
+        )
+    except HTTPException:
+        raise
+    except crawl_jobs.WorkbenchUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"crawls cannot be started: {exc}")
+    except Exception as exc:  # noqa: BLE001 - cmlapi errors carry the Workbench reason
+        LOGGER.exception("failed to start a crawl of %s", target)
+        raise HTTPException(status_code=502, detail=f"Workbench refused to start the crawl: {exc}")
+    LOGGER.info("crawl of %s started by %s: job run %s", target, principal.id, launched["job_run_id"])
+    return launched
+
+
+@crawler_router.get("/launches")
+def list_launches(request: Request, limit: int = 10) -> dict[str, Any]:
+    """The crawl Job's latest runs: what was asked for and whether it is still going."""
+    _principal(request)
+    try:
+        client, project_id = crawl_jobs.workbench()
+        launches = crawl_jobs.launches(client, project_id, limit=max(1, min(limit, 50)))
+    except crawl_jobs.WorkbenchUnavailable as exc:
+        return {"available": False, "reason": str(exc), "launches": []}
+    except Exception as exc:  # noqa: BLE001
+        LOGGER.exception("failed to list crawl job runs")
+        return {"available": False, "reason": f"Workbench API error: {exc}", "launches": []}
+    return {
+        "available": True,
+        "reason": None,
+        "job_name": crawl_jobs.job_name(),
+        "crawler_identity": crawl_jobs.crawler_identity(),
+        "launches": launches,
+    }
+
+
+@crawler_router.get("/targets")
+def list_targets(request: Request) -> list[dict[str, Any]]:
+    """What a crawl can be started on: crawlable data sources the caller's
+    organizations have registered, and Helios-DS datasets crawled before."""
+    from helios_core.crawler.sources import is_crawlable
+
+    principal = _principal(request)
+    repository = request.app.state.metadata_repository
+    targets: dict[tuple[str, str], dict[str, Any]] = {}
+    for organization_id in sorted({g.organization_id for g in repository.grants_for_principal(principal.id)}):
+        for source in repository.data_sources_for_organization(organization_id):
+            if is_crawlable(source.connector) and source.crawl.get("enabled", True):
+                targets[("source", source.id)] = {
+                    "kind": "source",
+                    "id": source.id,
+                    "label": source.name,
+                    "connector": source.connector,
+                }
+    for run in runs.runs(_store()):
+        registered = (run.settings or {}).get("data_source", {}).get("organization_id")
+        if run.connector.startswith("helios_ds") and registered in (None, "unregistered"):
+            targets.setdefault(
+                ("dataset", run.source),
+                {
+                    "kind": "dataset",
+                    "id": run.source,
+                    "label": f"Helios-DS dataset {run.source}",
+                    "connector": "helios_ds",
+                },
+            )
+    return list(targets.values())

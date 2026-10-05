@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import {
@@ -40,8 +40,16 @@ export default function ReviewWorkspace({
   const location = useLocation();
   const [summary, setSummary] = useState<ReviewSummary>();
   const [collection, setCollection] = useState<ProposalCollection>();
+  // "?review_focus=pending" (the navigation's pending badge) opens on what is
+  // still waiting for a decision.
+  const focusPending =
+    new URLSearchParams(location.search).get("review_focus") === "pending";
+  const focusApplied = useRef(false);
+  const workspaceRef = useRef<HTMLElement>(null);
   const [section, setSection] = useState<ReviewSection>("datasets");
-  const [decision, setDecision] = useState<ReviewDecision | "">("");
+  const [decision, setDecision] = useState<ReviewDecision | "">(
+    focusPending ? "pending" : "",
+  );
   const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -91,6 +99,16 @@ export default function ReviewWorkspace({
       setLoading(false);
     });
   }, [loadCollection, refreshSummary]);
+
+  useEffect(() => {
+    if (!focusPending || focusApplied.current || !summary) return;
+    focusApplied.current = true;
+    const firstPending = sections.find(
+      (item) => summary.sections[item].pending > 0,
+    );
+    if (firstPending) setSection(firstPending);
+    workspaceRef.current?.scrollIntoView?.({ block: "start" });
+  }, [focusPending, summary]);
 
   async function afterMutation(nextSummary: ReviewSummary, message: string) {
     setSummary(nextSummary);
@@ -231,7 +249,7 @@ export default function ReviewWorkspace({
   );
 
   return (
-    <section className="review-workspace" aria-labelledby="review-title">
+    <section className="review-workspace" aria-labelledby="review-title" ref={workspaceRef}>
       <div className="review-workspace__header">
         <div>
           <p className="section-eyebrow">Human review</p>

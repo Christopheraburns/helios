@@ -33,6 +33,15 @@ def configured_api_url() -> str:
     return api_url
 
 
+def cache_control(path: str) -> str:
+    """Build files under /assets/ carry a content hash in their name and never
+    change; everything else (index.html above all) names the current build and
+    must be revalidated, or a browser keeps running a build that is gone."""
+    if path.startswith("/assets/"):
+        return "public, max-age=31536000, immutable"
+    return "no-cache"
+
+
 class HeliosUIHandler(SimpleHTTPRequestHandler):
     """Serve the Vite build with a fallback for client-side routes."""
 
@@ -65,8 +74,18 @@ class HeliosUIHandler(SimpleHTTPRequestHandler):
 
         requested = DIST / path.lstrip("/")
         if not requested.exists() or requested.is_dir():
+            if path.startswith("/assets/"):
+                # A file from an earlier build. Answering with index.html would
+                # hand the browser HTML where it expects a script.
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
             self.path = "/index.html"
         super().do_GET()
+
+    def end_headers(self) -> None:
+        if not any(b"cache-control" in line.lower() for line in self._headers_buffer):
+            self.send_header("Cache-Control", cache_control(urlparse(self.path).path))
+        super().end_headers()
 
 
 def main() -> None:

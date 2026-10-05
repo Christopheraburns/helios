@@ -60,6 +60,11 @@ export default function MarkdownView({ markdown }: MarkdownViewProps) {
         </h3>
       );
     },
+    h4: ({ children }) => (
+      <h4 id={slugifyHeading(String(children))} className="docs-heading docs-heading--4">
+        {children}
+      </h4>
+    ),
     pre: ({ children }) => {
       const chart = mermaidChartFromPre(children);
       if (chart !== null) {

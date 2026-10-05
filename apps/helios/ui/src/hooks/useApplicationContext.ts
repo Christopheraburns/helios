@@ -382,8 +382,8 @@ export function useApplicationContext(
     async function load() {
       try {
         const api = client();
-        await api.health();
-        const [diagnosticResult, organizationResult] = await Promise.all([
+        const [, diagnosticResult, organizationResult] = await Promise.all([
+          api.health(),
           api.diagnostics(),
           api.organizations(),
         ]);

@@ -118,15 +118,15 @@ def test_health_is_ready_without_application_identity(connectivity_client):
     }
 
 
-def test_health_fails_when_metadata_integrity_is_unavailable(
+def test_health_fails_when_metadata_is_unreadable(
     connectivity_client,
     monkeypatch,
 ):
     repository = connectivity_client.app.state.metadata_repository
     monkeypatch.setattr(
         repository,
-        "integrity_check",
-        lambda **_kwargs: ("database disk image is malformed",),
+        "ping",
+        lambda: ("database disk image is malformed",),
     )
 
     response = connectivity_client.get("/api/v1/healthz")

@@ -348,26 +348,65 @@
   margin-top: 8px;
 }
 
-.crawler-scores th.num {
+/* Only the summary table's own headings; the detail tables nested in it wrap. */
+.crawler-scores > thead th.num {
   white-space: nowrap;
 }
 
 .crawler-scores-detail > td {
   background: var(--bg-secondary, #f9fafb);
+  padding: 12px 14px 16px;
 }
 
 .crawler-evaluation-detail {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-  gap: 16px;
-  margin-top: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr));
+  gap: 14px;
+  margin-top: 10px;
+  align-items: start;
+}
+
+/* A card per table. min-width: 0 keeps a wide table inside its own grid cell
+   (it scrolls) instead of spilling over the next card. */
+.crawler-metric {
+  min-width: 0;
+  overflow-x: auto;
+  padding: 10px 12px;
+  background: var(--bg-primary, #ffffff);
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 6px;
 }
 
 .crawler-metric h3 {
-  margin: 0 0 4px;
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+}
+
+.crawler-metric__table {
+  margin-bottom: 0;
+}
+
+.crawler-metric__table th {
+  white-space: nowrap;
+  text-transform: none;
   font-size: 12px;
-  text-transform: uppercase;
-  color: var(--text-secondary, #6b7280);
+  vertical-align: bottom;
+}
+
+.crawler-metric__table th.num,
+.crawler-metric__table td.num {
+  width: 1%;
+  padding-left: 14px;
+}
+
+.crawler-metric__table td:first-child {
+  white-space: nowrap;
+}
+
+.crawler-metric__table tr:last-child td {
+  border-bottom: none;
 }
 
 .crawler-metric ul {
@@ -378,7 +417,45 @@
 
 .crawler-diagnostics {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr));
+  gap: 14px;
   grid-column: 1 / -1;
+}
+
+.crawler-diagnostics .crawler-metric ul:empty::after {
+  content: "None";
+  color: var(--text-secondary, #6b7280);
+  margin-left: -18px;
+}
+
+.crawler-start {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.crawler-start--unavailable {
+  color: #64748b;
+}
+
+.crawler-start__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.crawler-start__form input:not([type="checkbox"]) {
+  min-width: 300px;
+  padding: 4px 6px;
+}
+
+.crawler-start__status {
+  margin-top: 8px;
+}
+
+.crawler-badge--inline {
+  margin-left: 6px;
 }

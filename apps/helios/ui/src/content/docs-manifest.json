@@ -60,6 +60,18 @@
     "bundlePath": "./docs/helios__console-runs.md"
   },
   {
+    "id": "helios/crawler-guide",
+    "project": "helios",
+    "slug": "crawler-guide",
+    "title": "The Crawler: a first-time user's guide",
+    "navGroup": "Console guides",
+    "audience": "user",
+    "order": 55,
+    "sourcePath": "docs/crawler-guide.md",
+    "excerpt": "The Crawler: a guide for first-time users This guide explains what the Helios Crawler does, how to run it, and how to tell whether it did a good job. It assumes you have never worked with data systems. You do not need to know how your comp…",
+    "bundlePath": "./docs/helios__crawler-guide.md"
+  },
+  {
     "id": "helios/talk-to-your-data",
     "project": "helios",
     "slug": "talk-to-your-data",

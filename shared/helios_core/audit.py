@@ -59,6 +59,30 @@ CLIENT_EVENT_ACTIONS = frozenset(
 _CORRELATION_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 _FAILURE_LOG_INTERVAL_SECONDS = 60.0
 _failure_lock = threading.Lock()
+
+
+class RepeatLimiter:
+    """Lets one event per ``key`` through every ``interval`` seconds and counts the
+    rest, so a client retrying in a loop cannot fill the audit log. ``allow``
+    returns None to drop the event, else how many were dropped since the last one."""
+
+    def __init__(self, interval: float = 60.0, max_keys: int = 1024) -> None:
+        self._interval = interval
+        self._max_keys = max_keys
+        self._lock = threading.Lock()
+        self._state: dict[str, tuple[float, int]] = {}
+
+    def allow(self, key: str, now: float | None = None) -> int | None:
+        now = time.monotonic() if now is None else now
+        with self._lock:
+            last, suppressed = self._state.get(key, (None, 0))
+            if last is not None and now - last < self._interval:
+                self._state[key] = (last, suppressed + 1)
+                return None
+            if len(self._state) >= self._max_keys and key not in self._state:
+                self._state.clear()
+            self._state[key] = (now, 0)
+            return suppressed
 _failure_signature: tuple[str, str] | None = None
 _failure_last_logged = 0.0
 _failure_suppressed = 0

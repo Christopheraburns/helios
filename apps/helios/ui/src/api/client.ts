@@ -1096,6 +1096,38 @@ export interface CrawlRunSummary {
   counts: Record<string, number>;
   error: string | null;
   latest_evaluation: CrawlEvaluationSummary | null;
+  /** Who asked for the crawl, when it was started through the API. */
+  requested_by?: string | null;
+  /** False when the crawl did not connect as the crawler machine user. */
+  isolated?: boolean;
+}
+
+/** One run of the Workbench crawl Job: a crawl that was asked for. */
+export interface CrawlLaunch {
+  job_run_id: string;
+  status: string;
+  active: boolean;
+  created_at: string | null;
+  finished_at: string | null;
+  source_id: string | null;
+  dataset_id: string | null;
+  full: boolean;
+  requested_by: string | null;
+}
+
+export interface CrawlLaunches {
+  available: boolean;
+  reason: string | null;
+  job_name?: string;
+  crawler_identity?: string;
+  launches: CrawlLaunch[];
+}
+
+export interface CrawlTarget {
+  kind: "source" | "dataset";
+  id: string;
+  label: string;
+  connector: string;
 }
 
 /** The headline numbers of an evaluation (CR-8); null where undefined (nothing to score). */
@@ -1305,6 +1337,9 @@ export interface HeliosApi {
   ontologyClass?(version: string, className: string): Promise<OntologyClassDetail>;
   crawlRuns?(source?: string): Promise<CrawlRunSummary[]>;
   crawlRun?(crawlRunId: string): Promise<CrawlRunDetail>;
+  startCrawl?(target: CrawlTarget, full: boolean): Promise<CrawlLaunch>;
+  crawlLaunches?(): Promise<CrawlLaunches>;
+  crawlTargets?(): Promise<CrawlTarget[]>;
   evaluateCrawlRun?(crawlRunId: string, datasetId: string): Promise<CrawlEvaluation>;
   crawlRunEvaluations?(crawlRunId: string): Promise<CrawlEvaluation[]>;
   crawlerEvaluations?(dataset?: string): Promise<CrawlEvaluation[]>;
@@ -1614,6 +1649,21 @@ export class HeliosApiClient implements HeliosApi {
 
   crawlRun(crawlRunId: string): Promise<CrawlRunDetail> {
     return this.get<CrawlRunDetail>(`/api/v1/crawler/runs/${encodeURIComponent(crawlRunId)}`);
+  }
+
+  startCrawl(target: CrawlTarget, full: boolean): Promise<CrawlLaunch> {
+    return this.post<CrawlLaunch>("/api/v1/crawler/runs", {
+      ...(target.kind === "source" ? { source_id: target.id } : { dataset_id: target.id }),
+      full,
+    });
+  }
+
+  crawlLaunches(): Promise<CrawlLaunches> {
+    return this.get<CrawlLaunches>("/api/v1/crawler/launches");
+  }
+
+  crawlTargets(): Promise<CrawlTarget[]> {
+    return this.get<CrawlTarget[]>("/api/v1/crawler/targets");
   }
 
   evaluateCrawlRun(crawlRunId: string, datasetId: string): Promise<CrawlEvaluation> {

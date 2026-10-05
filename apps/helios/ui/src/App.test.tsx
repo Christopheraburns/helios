@@ -1191,7 +1191,7 @@ describe("Helios application shell", () => {
     expect(within(navigation).getByRole("link", { name: "Review 2 pending" }))
       .toHaveAttribute(
         "href",
-        "/canvas?organization=north&model=north-model&review_run_id=run-1",
+        "/models/runs/run-1?organization=north&model=north-model&review_focus=pending",
       );
     expect(
       await screen.findByRole("heading", { name: "Helios health" }),

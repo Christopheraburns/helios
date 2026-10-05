@@ -3733,6 +3733,32 @@ a:focus-visible {
 .talk-answer-path span { margin-top: 4px; color: var(--slate-600); font-size: 0.68rem; line-height: 1.4; }
 .talk-loading-overlay { position: absolute; inset: 0; padding: 32px; text-align: center; background: rgb(255 255 255 / 80%); }
 
+/* CR-11: Unstructured results (evidence segments and entity explanations) */
+.talk-result--evidence, .talk-result--explain { border: 1px solid var(--cyan-200); background: var(--cyan-50); border-radius: 8px; }
+.talk-segments { display: grid; gap: 10px; }
+.talk-segment { padding: 10px 12px; background: #fff; border-radius: 6px; border-left: 3px solid var(--cyan-600); }
+.talk-segment__header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; font-size: 0.75rem; }
+.talk-segment__locator { color: var(--slate-500); font-weight: 600; text-transform: uppercase; }
+.talk-segment__relevance { color: var(--cyan-700); font-weight: 600; }
+.talk-segment__text { margin: 0; font-size: 0.9rem; line-height: 1.5; color: var(--text-primary, #111827); }
+.talk-segment__id { display: block; margin-top: 6px; color: var(--slate-400); font-family: ui-monospace, monospace; font-size: 0.7rem; }
+
+.talk-entity-summary { display: flex; gap: 16px; padding: 8px 0; font-size: 0.88rem; }
+.talk-entity-summary strong { color: var(--text-primary, #111827); }
+.talk-entity-summary span { color: var(--slate-600); }
+
+.talk-claims { display: grid; gap: 8px; }
+.talk-claim { padding: 0; margin: 0; border: none; background: transparent; }
+.talk-claim__summary { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 8px 10px; background: #fff; border-radius: 6px; cursor: pointer; border: 1px solid var(--slate-200); }
+.talk-claim__summary:hover { background: var(--slate-50); }
+.talk-claim__count { margin-left: auto; color: var(--slate-500); font-size: 0.75rem; font-weight: normal; white-space: nowrap; }
+.talk-claim__summary strong { font-size: 0.9rem; color: var(--text-primary, #111827); }
+.talk-claim__summary .muted { font-size: 0.85rem; }
+.talk-claim__evidence { display: grid; gap: 8px; padding: 10px 0; }
+.talk-evidence { padding: 8px 10px; background: var(--slate-50); border-radius: 5px; border-left: 2px solid var(--slate-400); }
+.talk-evidence__locator { display: block; font-size: 0.7rem; color: var(--slate-500); font-weight: 600; text-transform: uppercase; margin-bottom: 4px; }
+.talk-evidence__text { margin: 0; font-size: 0.85rem; line-height: 1.4; color: var(--text-primary, #111827); }
+
 @media (max-width: 800px) {
   .talk-page { min-height: auto; }
   .talk-page__header { align-items: start; }
@@ -3820,6 +3846,7 @@ a:focus-visible {
 .docs-markdown .docs-heading--1 { margin: 0 0 16px; font-size: 1.5rem; }
 .docs-markdown .docs-heading--2 { margin: 28px 0 12px; padding-top: 8px; font-size: 1.2rem; border-top: 1px solid var(--slate-200); }
 .docs-markdown .docs-heading--3 { margin: 20px 0 8px; font-size: 1.05rem; }
+.docs-markdown .docs-heading--4 { margin: 18px 0 6px; font-size: 0.95rem; }
 .docs-markdown p { margin: 0 0 14px; }
 .docs-markdown ul, .docs-markdown ol { margin: 0 0 14px; padding-left: 1.4rem; }
 .docs-markdown blockquote { margin: 0 0 14px; padding: 10px 14px; color: var(--slate-700); background: var(--slate-50); border-left: 3px solid var(--cyan-600); border-radius: 0 6px 6px 0; }
