@@ -305,6 +305,7 @@ function StartCrawl({
   const [targetKey, setTargetKey] = useState("");
   const [datasetId, setDatasetId] = useState("");
   const [full, setFull] = useState(false);
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
@@ -349,7 +350,7 @@ function StartCrawl({
     setBusy(true);
     setFeedback(null);
     try {
-      const launched = await crawlerClient().startCrawl!(chosen, full);
+      const launched = await crawlerClient().startCrawl!(chosen, full, note || undefined);
       setFeedback({
         kind: "ok",
         text: `Crawl requested (Workbench job run ${launched.job_run_id}). It appears below once its container has started.`,
@@ -389,6 +390,13 @@ function StartCrawl({
           <input type="checkbox" checked={full} onChange={(e) => setFull(e.target.checked)} /> Full
           re-crawl
         </label>
+        <input
+          placeholder="Note (optional)"
+          title="Label or description for this crawl"
+          value={note}
+          maxLength={200}
+          onChange={(e) => setNote(e.target.value)}
+        />
         <button
           className="crawler-button crawler-button--primary"
           disabled={busy || !chosen || alreadyRunning}
@@ -484,6 +492,12 @@ function RunDetail({ context, crawlRunId }: CrawlerPageProps & { crawlRunId: str
             .map((s) => `${run.counts[s]} ${s.replace(/_/g, " ")}`)
             .join(" · ") || "None"}
         </dd>
+        {run.note && (
+          <>
+            <dt>Note</dt>
+            <dd>{run.note}</dd>
+          </>
+        )}
         <dt>Request</dt>
         <dd className="mono">{JSON.stringify(run.settings)}</dd>
       </dl>

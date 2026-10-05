@@ -1100,6 +1100,8 @@ export interface CrawlRunSummary {
   requested_by?: string | null;
   /** False when the crawl did not connect as the crawler machine user. */
   isolated?: boolean;
+  /** User-provided label or note for this crawl. */
+  note?: string | null;
 }
 
 /** One run of the Workbench crawl Job: a crawl that was asked for. */
@@ -1337,7 +1339,7 @@ export interface HeliosApi {
   ontologyClass?(version: string, className: string): Promise<OntologyClassDetail>;
   crawlRuns?(source?: string): Promise<CrawlRunSummary[]>;
   crawlRun?(crawlRunId: string): Promise<CrawlRunDetail>;
-  startCrawl?(target: CrawlTarget, full: boolean): Promise<CrawlLaunch>;
+  startCrawl?(target: CrawlTarget, full: boolean, note?: string): Promise<CrawlLaunch>;
   crawlLaunches?(): Promise<CrawlLaunches>;
   crawlTargets?(): Promise<CrawlTarget[]>;
   evaluateCrawlRun?(crawlRunId: string, datasetId: string): Promise<CrawlEvaluation>;
@@ -1651,10 +1653,11 @@ export class HeliosApiClient implements HeliosApi {
     return this.get<CrawlRunDetail>(`/api/v1/crawler/runs/${encodeURIComponent(crawlRunId)}`);
   }
 
-  startCrawl(target: CrawlTarget, full: boolean): Promise<CrawlLaunch> {
+  startCrawl(target: CrawlTarget, full: boolean, note?: string): Promise<CrawlLaunch> {
     return this.post<CrawlLaunch>("/api/v1/crawler/runs", {
       ...(target.kind === "source" ? { source_id: target.id } : { dataset_id: target.id }),
       full,
+      ...(note ? { note } : {}),
     });
   }
 
