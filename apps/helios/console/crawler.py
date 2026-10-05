@@ -517,6 +517,7 @@ class StartCrawlRequest(BaseModel):
     source_id: str | None = None
     dataset_id: str | None = None
     full: bool = False
+    note: str | None = None
 
 
 def _principal(request: Request):
@@ -583,6 +584,7 @@ def start_crawl(body: StartCrawlRequest, request: Request) -> dict[str, Any]:
             dataset_id=body.dataset_id,
             full=body.full,
             requested_by=principal.id,
+            note=body.note,
         )
     except HTTPException:
         raise

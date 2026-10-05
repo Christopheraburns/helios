@@ -21,6 +21,7 @@ so a settings change always takes effect.
 
 from __future__ import annotations
 
+import os
 from collections import Counter
 from collections.abc import Callable
 from typing import Any
@@ -163,6 +164,10 @@ def crawl(
         settings_version=settings.version if settings else None,
         settings_hash=settings_hash,
     )
+    # CR-11: User-provided note for labeling this crawl
+    note = os.environ.get("HELIOS_CRAWL_NOTE")
+    if note:
+        run.note = note
     try:
         assets = connector.list_assets()
         previous = None if full else previous_run(index, source_id, settings_hash)

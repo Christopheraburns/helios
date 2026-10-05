@@ -142,6 +142,7 @@ def launch(
     dataset_id: str | None,
     full: bool,
     requested_by: str,
+    note: str | None = None,
 ) -> dict[str, Any]:
     job = ensure_job(client, project_id)
     environment = {
@@ -149,6 +150,7 @@ def launch(
         "HELIOS_CRAWL_FULL": "1" if full else "0",
         **({"HELIOS_CRAWL_SOURCE": source_id} if source_id else {}),
         **({"HELIOS_CRAWL_DATASET": dataset_id} if dataset_id else {}),
+        **({"HELIOS_CRAWL_NOTE": note} if note else {}),
     }
     run = client.create_job_run(
         {"project_id": project_id, "job_id": job.id, "environment": environment},
@@ -163,4 +165,5 @@ def launch(
         "dataset_id": dataset_id,
         "full": full,
         "requested_by": requested_by,
+        "note": note,
     }
