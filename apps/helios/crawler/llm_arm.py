@@ -51,7 +51,7 @@ from helios_core.index.records import (
 from helios_core.ontology.mapping import ResolutionConfig
 
 from .cases import Rules
-from .claims import SHAPES, Unit, evidence_locator
+from .claims import Unit, evidence_locator
 from .gazetteer import Gazetteer, normalise
 from .mentions import Found, _record
 from .resolution import EntityBook, Link, Reader, Reading, Resolution, derive_relationships
@@ -76,8 +76,22 @@ class Vocabulary:
     predicates: dict[str, tuple[str, str, str]]  # predicate -> (definition, subject, object)
 
 
-def load_vocabulary(directory: Path, classes: Sequence[str], predicates: Sequence[str]) -> Vocabulary:
-    """Definitions from the ontology's LinkML files, read as plain YAML."""
+def claim_shapes(settings: CrawlerSettings) -> dict[str, tuple[str, str]]:
+    """Claim type -> (subject class, object class), for the types that have both
+    a definition and cue phrases in the settings."""
+    return {
+        name: (rule.subject.class_name, rule.object.class_name)
+        for name, rule in settings.claims.predicates.items()
+        if name in settings.claims.cues
+    }
+
+
+def load_vocabulary(
+    directory: Path, classes: Sequence[str], shapes: dict[str, tuple[str, str]]
+) -> Vocabulary:
+    """Definitions from the ontology's LinkML files, read as plain YAML; the
+    claims' subject and object classes from the settings (``claim_shapes``)."""
+    predicates = list(shapes)
     import yaml
 
     class_text: dict[str, str] = {}
@@ -98,9 +112,7 @@ def load_vocabulary(directory: Path, classes: Sequence[str], predicates: Sequenc
     return Vocabulary(
         {name: class_text.get(name, "") for name in sorted(classes)},
         {
-            name: (predicate_text.get(name, ""), *SHAPES[name])
-            for name in sorted(predicates)
-            if name in SHAPES
+            name: (predicate_text.get(name, ""), *shapes[name]) for name in sorted(predicates)
         },
     )
 
@@ -394,6 +406,7 @@ def build_claims(
     raw: Sequence[RawClaim],
     links: dict[str, Link],
     book_id: Any,
+    shapes: dict[str, tuple[str, str]],
 ) -> tuple[list[ClaimRecord], list[ClaimEvidenceRecord], int]:
     """Claims whose subject and object resolved to the classes the predicate
     declares; the rest are counted as unanchored."""
@@ -402,7 +415,7 @@ def build_claims(
     unanchored = 0
     for item in raw:
         subject, obj = links.get(item.subject), links.get(item.obj)
-        shape = SHAPES[item.predicate]
+        shape = shapes.get(item.predicate)
         if subject is None or obj is None or (subject.class_name, obj.class_name) != shape:
             unanchored += 1
             continue
@@ -473,7 +486,8 @@ def run_arm(
     resolution, links = resolve_exact(run, assets, segments, mentions, gazetteer, config, settings)
     raw = [c for asset_id in sorted(extracted) for c in extracted[asset_id].claims]
     claims, evidence, unanchored = build_claims(
-        run, raw, links, lambda link: ids.entity_id(link.class_name, link.target)
+        run, raw, links, lambda link: ids.entity_id(link.class_name, link.target),
+        claim_shapes(settings),
     )
     totals = extractor.totals()
     totals["llm_claims_unanchored"] = totals.get("llm_claims_unanchored", 0) + unanchored

@@ -50,6 +50,26 @@ const LABEL_KINDS: Record<string, string> = {
   value: "A value",
 };
 
+const FIND_STEPS: Record<string, string> = {
+  in_unit: "named in the same sentence or message",
+  case: "the entity the case is about",
+  author: "the document's author",
+  single_in_document: "the only one in the document",
+  single_in_case: "the only one in the case",
+};
+
+/** A find step as the chip shows it: a name, or "case_edge:<relationship>". */
+export function stepText(step: unknown): string {
+  if (typeof step === "string") return step;
+  const edge = (step as { case_edge?: string } | null)?.case_edge;
+  return edge ? `case_edge:${edge}` : "";
+}
+
+export function stepValue(text: string): string | { case_edge: string } {
+  const [kind, edge] = text.split(":", 2);
+  return kind === "case_edge" && edge ? { case_edge: edge.trim() } : text.trim();
+}
+
 /** A copy of ``root`` with the value at ``path`` replaced. */
 export function setAt(root: Settings, path: (string | number)[], value: unknown): Settings {
   if (path.length === 0) return value as Settings;
@@ -208,6 +228,42 @@ function Section({ title, help, children }: { title: string; help?: string; chil
   );
 }
 
+/** A name typed or picked, then added: a new class entry, a new kind of claim. */
+function AddNamed({ what, options, onAdd }: { what: string; options: string[]; onAdd: (name: string) => void }) {
+  const [adding, setAdding] = useState("");
+  const listId = useId();
+  const add = () => {
+    const name = adding.trim();
+    if (name) onAdd(name);
+    setAdding("");
+  };
+  return (
+    <div className="settings-add">
+      <input
+        aria-label={`New ${what}`}
+        list={listId}
+        value={adding}
+        placeholder={`Add a ${what}`}
+        onChange={(event) => setAdding(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            add();
+          }
+        }}
+      />
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
+      <button type="button" className="crawler-button" onClick={add} disabled={!adding.trim()}>
+        Add
+      </button>
+    </div>
+  );
+}
+
 /** Rules keyed by a name (a class, a claim type), each a list of phrases. */
 function KeyedPhrases({
   title,
@@ -311,6 +367,8 @@ export default function SettingsForm({ settings, vocabulary, onChange, onTry }: 
   const about = settings.about ?? {};
   const resolution = settings.resolution ?? {};
   const claims = settings.claims ?? {};
+  const predicates: Record<string, Settings> = claims.predicates ?? {};
+  const speakers: Settings[] = claims.speakers ?? [];
   const llm = settings.llm ?? {};
 
   return (
@@ -575,6 +633,134 @@ export default function SettingsForm({ settings, vocabulary, onChange, onTry }: 
 
       {tab === "claims" && (
         <>
+          <Section
+            title="Kinds of claim"
+            help="What each claim is about (its subject) and what it points to (its object), and where to look for each, in order. Without a definition here, cue phrases state nothing."
+          >
+            {Object.keys(predicates).length === 0 && <p className="muted">No kinds of claim yet.</p>}
+            {Object.entries(predicates).map(([name, definition]) => (
+              <div className="settings-rule" key={name}>
+                <div className="settings-keyed__header">
+                  <strong>{name}</strong>
+                  <button
+                    type="button"
+                    className="crawler-button"
+                    aria-label={`Remove claim ${name}`}
+                    onClick={() => {
+                      const rest = { ...predicates };
+                      delete rest[name];
+                      set(["claims", "predicates"], rest);
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+                {(["subject", "object"] as const).map((role) => (
+                  <div className="settings-rule__row" key={role}>
+                    <Field label={role === "subject" ? "Subject class" : "Object class"}>
+                      <ClassInput
+                        label={`${name} ${role} class`}
+                        value={definition[role]?.class}
+                        classes={classes}
+                        onChange={(v) => set(["claims", "predicates", name, role, "class"], v ?? "")}
+                      />
+                    </Field>
+                    <Field label="Where to look, in order">
+                      <Chips
+                        label={`${name} ${role} find`}
+                        mono
+                        values={(definition[role]?.find ?? []).map(stepText)}
+                        options={[...Object.keys(FIND_STEPS), "case_edge:"]}
+                        placeholder="in_unit, case, case_edge:<relationship> …"
+                        onChange={(v) => set(["claims", "predicates", name, role, "find"], v.map(stepValue))}
+                      />
+                    </Field>
+                  </div>
+                ))}
+                <div className="settings-rule__row">
+                  <Field label="Speakers who cannot make this claim">
+                    <Chips
+                      label={`${name} blocked speakers`}
+                      values={definition.blocked_speakers ?? []}
+                      onChange={(v) => set(["claims", "predicates", name, "blocked_speakers"], v)}
+                    />
+                  </Field>
+                  <Toggle
+                    label="An unidentified speaker needs a strong cue"
+                    checked={definition.unknown_speaker_needs_strong_cue ?? false}
+                    onChange={(v) => set(["claims", "predicates", name, "unknown_speaker_needs_strong_cue"], v)}
+                  />
+                </div>
+              </div>
+            ))}
+            <AddNamed
+              what="kind of claim"
+              options={(vocabulary?.predicates ?? []).filter((name) => !(name in predicates))}
+              onAdd={(name) =>
+                set(["claims", "predicates"], {
+                  ...predicates,
+                  [name]: {
+                    subject: { class: "", find: ["in_unit", "single_in_document"] },
+                    object: { class: "", find: ["in_unit", "single_in_document"] },
+                    blocked_speakers: [],
+                    unknown_speaker_needs_strong_cue: false,
+                  },
+                })
+              }
+            />
+            <details className="crawler-help">
+              <summary>The places a claim can look</summary>
+              <ul>
+                {Object.entries(FIND_STEPS).map(([step, text]) => (
+                  <li key={step}>
+                    <code>{step}</code>: {text}
+                  </li>
+                ))}
+                <li>
+                  <code>case_edge:&lt;relationship&gt;</code>: related to the case’s entity by that relationship,
+                  for example <code>case_edge:PartyTo</code>
+                </li>
+              </ul>
+            </details>
+            <Field label="Classes a case can be about" help="The case’s own entity is one of these">
+              <Chips label="case classes" values={claims.case_classes ?? []} options={classes} onChange={(v) => set(["claims", "case_classes"], v)} />
+            </Field>
+          </Section>
+
+          <Section title="Who is speaking" help="The first rule that fits a part of a document decides; with none, the speaker is unknown.">
+            {speakers.map((rule, index) => (
+              <div className="settings-rule settings-rule--compact" key={index}>
+                <div className="settings-rule__row">
+                  <Field label="Part of a document">
+                    <input aria-label={`Speaker rule ${index + 1} segment`} value={rule.segment ?? ""} placeholder="message, email_body, page" onChange={(event) => set(["claims", "speakers", index, "segment"], event.target.value)} />
+                  </Field>
+                  <Field label="Has the field">
+                    <input aria-label={`Speaker rule ${index + 1} field`} value={rule.field ?? ""} placeholder="(any)" onChange={(event) => set(["claims", "speakers", index, "field"], event.target.value.trim() || null)} />
+                  </Field>
+                  <Field label="Author is a">
+                    <ClassInput label={`Speaker rule ${index + 1} author class`} value={rule.author_class} classes={classes} onChange={(v) => set(["claims", "speakers", index, "author_class"], v)} />
+                  </Field>
+                  <Field label="Speaker">
+                    <input aria-label={`Speaker rule ${index + 1} speaker`} value={rule.speaker ?? ""} onChange={(event) => set(["claims", "speakers", index, "speaker"], event.target.value)} />
+                  </Field>
+                </div>
+                {rule.field && (
+                  <Field label="With one of these values" help="Leave empty for any value">
+                    <Chips label={`speaker rule ${index + 1} values`} values={rule.values ?? []} onChange={(v) => set(["claims", "speakers", index, "values"], v)} />
+                  </Field>
+                )}
+                <div className="settings-rule__actions">
+                  <button type="button" className="crawler-button" aria-label={`Remove speaker rule ${index + 1}`} onClick={() => set(["claims", "speakers"], without(speakers, index))}>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+            <button type="button" className="crawler-button" onClick={() => set(["claims", "speakers"], [...speakers, { segment: "message", field: null, values: [], author_class: null, speaker: "" }])}>
+              Add a speaker rule
+            </button>
+          </Section>
+
           <KeyedPhrases
             title="Cue phrases per claim"
             what="claim type"
@@ -584,13 +770,26 @@ export default function SettingsForm({ settings, vocabulary, onChange, onTry }: 
             onChange={(next) => set(["claims", "cues"], next)}
             onTry={(key) => onTry({ type: "claim", predicate: key }, `Claim ${key.replace(/_/g, " ").toLowerCase()}`)}
           />
-          <Section title="Words that cancel a cue">
+          <Section title="Words that weaken or cancel a cue">
+            <Field label="One-word cues too general to stand alone" help="They count only when the sentence names the claim’s subject">
+              <Chips label="weak words" values={claims.weak_words ?? []} onChange={(v) => set(["claims", "weak_words"], v)} />
+            </Field>
             <Field label="Negations" help="Just before a cue: “not damaged”">
               <Chips label="negations" values={claims.negations ?? []} onChange={(v) => set(["claims", "negations"], v)} />
             </Field>
             <Field label="Hedges" help="Earlier in the same clause: “if it was approved”">
               <Chips label="hedges" values={claims.hedges ?? []} onChange={(v) => set(["claims", "hedges"], v)} />
             </Field>
+            <Field label="Abbreviations" help="Their full stop does not end a sentence: mr, dr, inc">
+              <Chips label="abbreviations" values={claims.abbreviations ?? []} onChange={(v) => set(["claims", "abbreviations"], v)} />
+            </Field>
+            <div className="settings-grid">
+              <NumberInput label="Words before a cue a negation reaches" value={claims.negation_window} onChange={(v) => set(["claims", "negation_window"], v)} />
+              <NumberInput label="Words a * may stand for" value={claims.gap_words} onChange={(v) => set(["claims", "gap_words"], v)} />
+              <NumberInput label="Confidence: strong cue" step={0.01} value={claims.confidence?.strong} onChange={(v) => set(["claims", "confidence", "strong"], v)} />
+              <NumberInput label="Confidence: medium cue" step={0.01} value={claims.confidence?.medium} onChange={(v) => set(["claims", "confidence", "medium"], v)} />
+              <NumberInput label="Confidence: weak cue" step={0.01} value={claims.confidence?.weak} onChange={(v) => set(["claims", "confidence", "weak"], v)} />
+            </div>
           </Section>
         </>
       )}

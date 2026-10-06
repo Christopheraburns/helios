@@ -225,6 +225,100 @@ cases:
   date_window_days: 30
   max_hub_documents: 6
 claims:
+  predicates:
+    PACKAGING_DAMAGED:
+      subject:
+        class: Item
+        find:
+        - case_edge: Contains
+        - in_unit
+        - single_in_document
+        - single_in_case
+      object:
+        class: Return
+        find:
+        - case
+        - in_unit
+        - single_in_document
+      blocked_speakers: []
+      unknown_speaker_needs_strong_cue: false
+    RETURN_REASON:
+      subject:
+        class: Return
+        find:
+        - case
+        - in_unit
+        - single_in_document
+      object:
+        class: Reason
+        find:
+        - in_unit
+        - case_edge: HasReason
+        - single_in_document
+        - single_in_case
+      blocked_speakers: []
+      unknown_speaker_needs_strong_cue: false
+    REFUND_REQUESTED:
+      subject:
+        class: Customer
+        find:
+        - case_edge: PartyTo
+        - in_unit
+        - author
+        - single_in_document
+        - single_in_case
+      object:
+        class: Return
+        find:
+        - case
+        - in_unit
+        - single_in_document
+      blocked_speakers: []
+      unknown_speaker_needs_strong_cue: false
+    REFUND_APPROVED:
+      subject:
+        class: Return
+        find:
+        - case
+        - in_unit
+        - single_in_document
+      object:
+        class: Customer
+        find:
+        - case_edge: PartyTo
+        - in_unit
+        - author
+        - single_in_document
+        - single_in_case
+      blocked_speakers:
+      - customer
+      unknown_speaker_needs_strong_cue: true
+  case_classes:
+  - Return
+  speakers:
+  - segment: message
+    field: role
+    values:
+    - customer
+    - buyer
+    - shopper
+    author_class: null
+    speaker: customer
+  - segment: message
+    field: role
+    values: []
+    author_class: null
+    speaker: staff
+  - segment: email_body
+    field: null
+    values: []
+    author_class: Customer
+    speaker: customer
+  - segment: page
+    field: null
+    values: []
+    author_class: null
+    speaker: staff
   cues:
     PACKAGING_DAMAGED:
     - damaged
@@ -355,6 +449,15 @@ claims:
     - 'disposition: * refund'
     - full refund of
     - refund of
+  weak_words:
+  - damage
+  - damaged
+  - receive
+  - refund
+  - reason
+  - approved
+  - approval
+  - broken
   negations: [not, 'no', never, without, isn't, wasn't, weren't, don't, didn't, doesn't, hasn't, haven't,
     won't, wouldn't, couldn't, can't, cannot, neither, nor]
   hedges:
@@ -366,6 +469,13 @@ claims:
   - perhaps
   - possibly
   - should
+  negation_window: 3
+  gap_words: 4
+  abbreviations: [mr, mrs, ms, dr, 'no', st, vs, etc, jr, sr, inc, ltd, approx]
+  confidence:
+    strong: 0.95
+    medium: 0.85
+    weak: 0.7
 llm:
   prompt_version: llm-1
   instructions: |-

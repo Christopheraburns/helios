@@ -88,17 +88,14 @@ def llm_extractor(settings: Any, classes: list[str]) -> Any:
     the reason printed."""
     from helios_core.llm import llm_from_env
 
-    from .claims import SHAPES
-    from .llm_arm import LlmExtractor, load_vocabulary
+    from .llm_arm import LlmExtractor, claim_shapes, load_vocabulary
 
     llm = llm_from_env()
     if llm is None:
         print("The llm strategy needs the project's LLM (LLM_PROVIDER and its key).")
         return None
     llm.timeout = max(llm.timeout, float(os.environ.get("HELIOS_CRAWL_LLM_TIMEOUT_SECONDS", "120")))
-    vocabulary = load_vocabulary(
-        REPO_ROOT / "ontology", classes, [p for p in settings.claims.cues if p in SHAPES]
-    )
+    vocabulary = load_vocabulary(REPO_ROOT / "ontology", classes, claim_shapes(settings))
     cache = os.environ.get("HELIOS_LLM_CACHE") or str(REPO_ROOT / "state" / "llm_cache")
     extractor = LlmExtractor(llm, settings, vocabulary, cache)
     print(

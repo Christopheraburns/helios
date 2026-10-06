@@ -100,7 +100,8 @@ def _ontology_vocabulary(store) -> tuple[set[str], set[str]] | None:
             predicates = {
                 n.key.split("#", 1)[1]
                 for n in graph.nodes
-                if n.label == "EnumValue" and n.key.startswith("RetailClaimPredicate#")
+                # Claim vocabularies are enums named <Domain>ClaimPredicate in the ontology.
+                if n.label == "EnumValue" and n.key.split("#", 1)[0].endswith("ClaimPredicate")
             }
             return classes, predicates
     return None

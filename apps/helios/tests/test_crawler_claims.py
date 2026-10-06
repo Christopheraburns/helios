@@ -12,7 +12,6 @@ import pytest
 import test_crawler_resolution as resolution_fixtures
 from apps.helios.crawler.analyzers import analyze_asset
 from apps.helios.crawler.claims import (
-    SHAPES,
     compile_cue,
     cue_strength,
     extract_claims,
@@ -132,7 +131,7 @@ def test_sentences_keep_exact_offsets_and_do_not_split_abbreviations():
         "The return slip says: Package was damaged.\nInspected by Arjun V., returns desk.\n"
         "Disposition: refund of $4.85 issued; item quarantined.\n"
     )
-    sentences = [text[s:e] for s, e in sentence_spans(text)]
+    sentences = [text[s:e] for s, e in sentence_spans(text, RETAIL_SETTINGS.claims.abbreviations)]
     assert sentences == [
         "Hello,",
         "Mrs. Raymond brought it back.",
@@ -193,7 +192,8 @@ def test_cues_match_whole_words_case_insensitively_with_gaps():
     assert cue_strength("disposition:") == "strong"
     assert cue_strength("approve it") == "medium"
     assert cue_strength("crushed") == "medium"
-    assert cue_strength("damage") == "weak"
+    assert cue_strength("damage", RETAIL_SETTINGS.claims.weak_words) == "weak"
+    assert cue_strength("damage") == "medium"  # the engine itself calls no word weak
 
 
 def test_negations_and_hedges_block_a_cue_in_their_clause():
@@ -234,7 +234,7 @@ def test_the_worked_example_yields_all_four_predicates(world):
     assert asset == "a-chat" and excerpt.endswith("refund of $42.00 approved.")
     assert all(c.extractor == "cues" and c.object_value is None for c in world.claims.values())
     assert reason.confidence == 0.95 and damaged.confidence == 0.85
-    assert {c.predicate for c in world.claims.values()} == set(SHAPES)
+    assert {c.predicate for c in world.claims.values()} == set(RETAIL_SETTINGS.claims.predicates)
 
 
 def test_evidence_locators_follow_the_segment_conventions(world):
@@ -448,7 +448,7 @@ def test_crawl_writes_claims_and_evidence(warehouse, gazetteer, tmp_path):
     assert first.counts["claims"] == len(claims) == 5
     assert first.counts["claim_evidence"] == len(evidence) == 7
     assert first.counts["claims_unanchored"] >= 1
-    assert {c.predicate for c in claims} == set(SHAPES)
+    assert {c.predicate for c in claims} == set(RETAIL_SETTINGS.claims.predicates)
     assert {e.claim_id for e in evidence} == {c.claim_id for c in claims}
     assert all(
         c.ontology_version == "0.2.0" and c.crawl_run_id == first.crawl_run_id for c in claims
@@ -468,5 +468,6 @@ def test_default_cue_lexicons_name_only_retail_predicates():
     from helios_core.crawler.settings import ontology_problems
 
     classes = {"Customer", "Item", "Brand", "Store", "Reason", "Sale", "Return"}
-    assert ontology_problems(RETAIL_SETTINGS, classes, set(SHAPES)) == []
-    assert set(RETAIL_SETTINGS.claims.cues) == set(SHAPES)
+    classes |= {"Contains", "HasReason", "PartyTo"}  # relationship types the claim rules follow
+    assert ontology_problems(RETAIL_SETTINGS, classes, set(RETAIL_SETTINGS.claims.predicates)) == []
+    assert set(RETAIL_SETTINGS.claims.cues) == set(RETAIL_SETTINGS.claims.predicates)

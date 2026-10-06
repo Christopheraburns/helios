@@ -44,6 +44,8 @@ def test_the_preset_is_exactly_the_rules_that_used_to_be_built_in():
             assert [{k: v for k, v in p.items() if k != "key_name"} for p in now["patterns"]] == before
         elif section == "cases":
             assert {k: v for k, v in now["cases"].items() if k != "max_hub_documents"} == before
+        elif section == "claims":  # the cue words; the kinds of claim were in code
+            assert {k: now["claims"][k] for k in before} == before
         else:
             assert now[section] == before, section
     moved_from_code = set(now) - set(SCHEMA_1)
@@ -272,3 +274,118 @@ def test_the_database_comes_from_the_mapping():
     assert resolution_config(named).database == "warehouse_eu"
     bad = SourceMapping.model_validate({**document, "database": "a; drop"})
     assert any("not a plain database name" in p for p in mapping_problems(bad))
+
+
+# --- CG-5: claims are settings, not code ----------------------------------------------
+
+
+def test_a_schema_1_claims_section_keeps_its_cue_words_and_gains_the_claim_definitions():
+    edited = json.loads(json.dumps(SCHEMA_1))
+    edited["claims"]["cues"]["REFUND_APPROVED"] = ["refund signed off"]
+    read = CrawlerSettings.model_validate(edited)
+    assert read.claims.cues["REFUND_APPROVED"] == ["refund signed off"]  # its own words win
+    assert read.claims.predicates == RETAIL_SETTINGS.claims.predicates  # what the code used to know
+    assert read.claims.weak_words == RETAIL_SETTINGS.claims.weak_words
+    assert read.claims.speakers == RETAIL_SETTINGS.claims.speakers
+
+
+def _claims(tmp_path, warehouse, gazetteer, settings):  # noqa: F811
+    index = duckdb_index_store()
+    index.ensure_tables()
+    run = crawl(
+        index, _connector(tmp_path / str(id(settings))), "ds-1", actor="test",
+        ontology_version="0.2.0", settings=None, settings_hash=settings.content_hash(),
+        crawler_settings=settings, gazetteer=gazetteer, resolution=CONFIG,
+        warehouse_cursor=warehouse.cursor,
+    )
+    found = index.read("helios_index.claims", {"crawl_run_id": run.crawl_run_id})
+    return sorted(c.predicate for c in found), run.counts
+
+
+def _with_claims(**changes):
+    document = RETAIL_SETTINGS.model_dump(mode="json", by_alias=True)
+    document["claims"].update(changes)
+    return CrawlerSettings.model_validate(document)
+
+
+def test_which_claims_exist_and_who_may_make_them_come_from_the_settings(
+    tmp_path, warehouse, gazetteer  # noqa: F811
+):
+    baseline, counts = _claims(tmp_path, warehouse, gazetteer, RETAIL_SETTINGS)
+    assert set(baseline) == set(RETAIL_SETTINGS.claims.predicates) and counts["claims"] == len(baseline)
+
+    # Cue words alone state nothing: without a definition a kind of claim does not exist.
+    definitions = RETAIL_SETTINGS.model_dump(mode="json", by_alias=True)["claims"]["predicates"]
+    only_damage = {"PACKAGING_DAMAGED": definitions["PACKAGING_DAMAGED"]}
+    found, _ = _claims(tmp_path, warehouse, gazetteer, _with_claims(predicates=only_damage))
+    assert set(found) == {"PACKAGING_DAMAGED"}
+    assert _claims(tmp_path, warehouse, gazetteer, _with_claims(predicates={}))[0] == []
+
+    # Where a role looks is a setting. Told to look only at the case's own entity, a claim
+    # is found while the settings say what a case is about, and not once they stop saying so.
+    case_only = json.loads(json.dumps(definitions))
+    for definition in case_only.values():
+        for role in (definition["subject"], definition["object"]):
+            if role["class"] == "Return":
+                role["find"] = ["case"]
+    found, _ = _claims(tmp_path, warehouse, gazetteer, _with_claims(predicates=case_only))
+    assert found  # the case's entity is known
+    found, counts = _claims(
+        tmp_path, warehouse, gazetteer, _with_claims(predicates=case_only, case_classes=[])
+    )
+    assert found == [] and counts["claims_unanchored"] > 0
+
+    # Refusing every speaker a kind of claim silences it.
+    silenced = json.loads(json.dumps(definitions))
+    silenced["REFUND_APPROVED"]["blocked_speakers"] = ["customer", "staff", "unknown"]
+    found, _ = _claims(tmp_path, warehouse, gazetteer, _with_claims(predicates=silenced))
+    assert "REFUND_APPROVED" not in found and "REFUND_REQUESTED" in found
+
+
+def test_speaker_rules_and_role_finding_are_generic():
+    from types import SimpleNamespace
+
+    from apps.helios.crawler.claims import Context
+    from helios_core.crawler.settings import Claims
+
+    rules = Claims.model_validate(
+        {
+            "case_classes": ["Visit"],
+            "speakers": [
+                {"segment": "message", "field": "role", "values": ["patient"], "speaker": "patient"},
+                {"segment": "message", "field": "role", "speaker": "clinician"},
+                {"segment": "page", "speaker": "clinic"},
+            ],
+        }
+    )
+    context = Context({}, [], [], [], [], [], rules)
+
+    def unit(segment_type, **structure):
+        return SimpleNamespace(segment=SimpleNamespace(segment_type=segment_type, structure=structure, asset_id="a"))
+
+    assert context.voice(unit("message", role="Patient")) == "patient"
+    assert context.voice(unit("message", role="nurse")) == "clinician"
+    assert context.voice(unit("message")) == "unknown"  # no role recorded
+    assert context.voice(unit("page")) == "clinic"
+    assert context.voice(unit("email_body")) == "unknown"  # no rule for emails here
+    assert Context({}, [], [], [], [], []).voice(unit("page")) == "unknown"  # no rules at all
+
+    with pytest.raises(ValueError):
+        Claims.model_validate({"predicates": {"X": {"subject": {"class": "A", "find": ["anywhere"]}, "object": {"class": "B", "find": ["in_unit"]}}}})
+    with pytest.raises(ValueError):
+        Claims.model_validate({"predicates": {"X": {"subject": {"class": "A", "find": []}, "object": {"class": "B", "find": ["in_unit"]}}}})
+
+
+def test_text_rules_come_from_the_settings():
+    from apps.helios.crawler.claims import blocked, compile_cue, cue_strength, sentence_spans
+
+    text = "Seen by Dr. Lee. Approx. two weeks."
+    assert [text[s:e] for s, e in sentence_spans(text)] == ["Seen by Dr.", "Lee.", "Approx.", "two weeks."]
+    assert [text[s:e] for s, e in sentence_spans(text, ["dr", "approx"])] == ["Seen by Dr. Lee.", "Approx. two weeks."]
+    assert cue_strength("approved") == "medium" and cue_strength("approved", ["approved"]) == "weak"
+    assert compile_cue("refund * approved", 1).search("refund was approved")
+    assert not compile_cue("refund * approved", 1).search("refund was finally approved")
+    sentence = "it was not at all really approved"
+    at = sentence.index("approved")
+    assert not blocked(sentence, at, ["not"], [], window=3)  # "not" is four words back
+    assert blocked(sentence, at, ["not"], [], window=4)
