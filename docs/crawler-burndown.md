@@ -2,6 +2,8 @@
 
 Plan for the first Helios crawler. **How it analyzes an asset, step by step, and what is configurable: [crawler-analysis.md](crawler-analysis.md).** It indexes the Helios-DS development corpus (PDF, email, chat), resolves what the documents mention to TPC-DS entities through the ontology, extracts claims, writes `helios_index` in the lakehouse, and projects the result into Memgraph. Its output is scored against the hidden ground truth and the golden questions.
 
+**Status (2026-10-06):** since the status below, crawls start from the UI (DS-6), crawled passages are embedded and searchable from Talk to Your Data (CR-11, built; golden questions not yet scored), the answer path shows a document lane, and the Ontology page browses from a class to its entities, documents and passages (CR-9). DS-6 and CR-11 are in commit `83ac412`; the CR-9 instance browsing is uncommitted. CR-E2 and CR-L1 followed the same day (uncommitted): the LLM crawler ran on the development corpus and was scored. Next: CR-L2 (hybrid), then C-12 and CR-L3.
+
 **Status (2026-10-02):** the deterministic arm (A) is complete end to end on the development corpus: fetch, segments, mentions, joint resolution, claims, Memgraph projection and the scoring harness (CR-0 to CR-8). Every gate is met; see the table under CR-8. Inputs were ready from the start:
 - **Development corpus:** `1ca99f86-e6a0-57fc-8311-cadcac4c8302`, READY. It has 101 return stories and 301 artifacts.
   - Ground truth: 794 entities and 3,135 mentions (2,131 direct, 698 alias, 306 contextual), 403 claims, 785 evidence passages.
@@ -284,12 +286,17 @@ The crawler runs as a **Workbench Job in the Helios project** (`apps/helios/`). 
   - golden questions at the retrieval level: for each question, are its required entities linked and its required evidence segments indexed? No-answer questions must have no linked documents.
 
   Results are written to a scores table and shown as a report. *Done when:* a scored report for crawl run × development corpus exists and is reproducible.
-- [ ] **CR-9** *(First slice done 2026-10-01, uncommitted, tested on real runs.)* A **Crawler** page in the Helios UI (Build → Crawler, `/crawler`, `pages/CrawlerPage.tsx`):
+- [x] **CR-9** *(Done 2026-10-06. First slice 2026-10-01; instance browsing 2026-10-06, uncommitted, checked against the real index through the API but not viewed in a browser.)* A **Crawler** page in the Helios UI (Build → Crawler, `/crawler`, `pages/CrawlerPage.tsx`):
   - **Runs tab:** every crawl, newest first, with status, listed, fetched, carried forward, problems, duration, and ontology and settings versions; a source filter. Clicking a run shows its facts and request, asset counts by status and class (clickable filters), search, and each asset's status and problem detail.
   - **Settings tab:** the active version (or built-in defaults), version history with Edit and Activate, and a JSON editor with Format and a note. "Validate and save" lists the API's validation problems inline, then offers to activate the new version. There is help on what each section means.
   - **API:** `GET /api/v1/crawler/runs[?source=]` and `GET /api/v1/crawler/runs/{id}`.
   - **Tests:** 2 page tests and 1 API test.
-  - **Still to come:** scores (CR-8), segments, mentions and links per asset (CR-3 onward), instance browsing from the Ontology page, a structured settings form, starting a crawl from the UI (via the Workbench Jobs API), and an RBAC permission.
+  - **Scores and starting crawls** arrived with CR-8 and DS-6: the Scores tab, "Start crawl" with an optional note, and the note shown on each run.
+  - **Instance browsing (2026-10-06):** selecting a class on the Ontology page shows "Found in documents": the entities of that class and its subclasses from each source's latest successful crawl, most-documented first, with search by name or key. Selecting an entity shows its warehouse keys, related entities, claims, and each linked document with the passages that mention it; the mentions are highlighted.
+    - `shared/helios_core/index/browse.py`; `GET /api/v1/crawler/entities?classes=&q=&limit=` and `GET /api/v1/crawler/entities/{id}?run=`; `features/ontology/ClassInstances.tsx`.
+    - Measured on the development corpus: 116 customers; an entity's detail takes about 3 seconds the first time and 0.5 seconds after (a finished run's tables are kept in memory).
+    - Tests: 2 index tests and 3 component tests.
+  - **Not done, moved out of CR-9:** a structured settings form (JSON editor only), an RBAC permission for the crawler pages, and segments and mentions per asset on the Crawler page.
 
   Original task: Visibility in the **Helios UI** (`apps/helios/ui`; all crawler screens live there, none in the Helios-DS dashboard), **including the crawler settings editor** (CR-0e: view versions, edit as a validated form or JSON, save as a new version, activate): a crawl-runs page (run, counts, scores) and instance browsing on the Ontology page (from a class to its entities, then their mentions and evidence). *Done when:* you can go from `Customer` to a customer's linked documents and the passages that mention them.
 
@@ -309,7 +316,7 @@ The crawler was wired to one location type: a Helios-DS dataset, read through `h
 - [x] **DS-3** *(Done 2026-10-02, uncommitted.)* `pages/DataSourcesPage.tsx` replaces the placeholder. It is now organization-level, so it no longer needs a model selected. It lists sources (type, scope, connection, last crawl), has an add and edit form per connector type, Test connection with a sample of assets, Delete, and shows the crawl command per source. Warehouse sources are listed read-only. Tests: 3 form tests. Original: The Data Sources page in the Helios UI (replacing the placeholder): list, add and edit with a form per connector type, Test connection with a sample of assets, Crawl now, last-crawl status.
 - [x] **DS-4** *(Done 2026-10-02, uncommitted; tested live on 20 corpus files in S3.)* Paged listing, include and exclude globs, size limit, ETag plus size as the version token, MIME type from the extension. A plain-text analyzer is added (`text/plain`, `text/markdown`; one segment, with a `max_chars` setting). Original: Object-store connector: S3 or Ozone through a Workbench data connection; bucket and prefix, include and exclude patterns, MIME and size limits; ETag as the version token. Adds a plain-text analyzer.
 - [x] **DS-5** *(Done 2026-10-02, uncommitted; tested live on `tpcds.item` as `srv_helios_crawler`.)* Validated identifiers only; filter values are bound parameters; row order is by key with a row limit. Each row's content is a small JSON document (`application/x-helios-row+json`), versioned by its hash. The row analyzer makes one segment per non-empty text column (`{"column": name}`). Original: Rows-as-documents connector: a lakehouse table through Impala; key, text and timestamp columns and an optional filter, validated as identifiers (no free SQL). Each row is one asset, and each text column one segment.
-- [ ] **DS-6** Start crawls from the UI through the Workbench Jobs API.
+- [x] **DS-6** *(Done 2026-10-05, commits `023467d` and `83ac412`.)* Start crawls from the UI through the Workbench Jobs API. "Start crawl" on the Crawler page picks a registered source or a READY Helios-DS dataset, offers a full re-crawl and an optional note (up to 200 characters, stored with the crawl request), and runs the `helios-crawl` Job (`POST /api/v1/crawler/runs`, `console/crawl_jobs.py`, `jobs/crawl.py`). A second crawl of the same target waits for the first. Recent launches and their Job status are listed.
 - [ ] **DS-7** Capture source access lists, and filter retrieval by them (with Helios-DS C-06).
 
 ### Evaluation harness and LLM crawler (added 2026-10-02)
@@ -337,8 +344,13 @@ Two crawlers run side by side on the same corpus and are scored by the same harn
   - an **Evaluate** action and a scores view on the Crawler page, comparing arms per dataset.
 
   *Done when:* a crawl run can be scored from the UI, a user without ground-truth access is refused, and a re-evaluation gives the same numbers.
-- [ ] **CR-E2** `strategy` on `crawl_runs`, plus LLM provenance (provider, model, prompt version and hash, temperature, token and cost totals), and the Crawler page filters by strategy.
-- [ ] **CR-L1** Arm B, the LLM crawler:
+- [x] **CR-E2** *(Done 2026-10-06, uncommitted.)* `strategy` on `crawl_runs`, plus LLM provenance (provider, model, prompt version and hash, temperature, token and cost totals), and the Crawler page filters by strategy.
+  - **Where it is recorded:** in the run's `settings` JSON (`strategy`, and `llm` with provider, model, temperature, prompt version and prompt hash), not as new columns, so no table change is needed and older runs read as `deterministic`. Totals are in the run's `counts` (`llm_calls`, `llm_cached`, `llm_tokens_in`, `llm_tokens_out`, `llm_ms`, `llm_hallucinated_spans`, `llm_claims_unanchored`, `llm_failed`, and `llm_cost_microusd` when prices are set in the settings). No key or endpoint is stored.
+  - **Starting one:** `--strategy` on the crawler command, `HELIOS_CRAWL_STRATEGY` for the Job, `strategy` on `POST /api/v1/crawler/runs`, and a Strategy choice on "Start crawl".
+  - **Crawler page:** a Strategy filter, an LLM label on the run, and the model, prompt and usage in the run detail.
+  - **Scorecard:** `run.llm` carries the model, tokens, cost, time per document and the hallucinated-span rate (the CR-E1 measures that were waiting). Run-to-run variation waits for CR-L3.
+  - **Rules that follow from it:** a crawl reuses only a previous run of the same strategy; search, embeddings and ontology browsing use the latest *deterministic* crawl only.
+- [x] **CR-L1** Arm B, the LLM crawler:
   - prompts that give the ontology classes, definitions and claim vocabulary, and ask for JSON with the exact quoted text for every entity and claim;
   - temperature 0;
   - every quote mapped back to character offsets in its segment; quotes not found in the document are dropped and counted as hallucinated;
@@ -346,6 +358,24 @@ Two crawlers run side by side on the same corpus and are scored by the same harn
   - prompts versioned in the crawler settings (CR-0e).
 
   *Done when:* it crawls the development corpus into `helios_index` with every row grounded to a real span.
+
+  **Done 2026-10-06, uncommitted** (`apps/helios/crawler/llm_arm.py`; crawler version 0.7.0).
+  - **How it works:** one call per document (all its segments), on the project's default model. The prompt is the settings' `llm.instructions` (versioned as `llm.prompt_version`) plus the class definitions and claim vocabulary read from the ontology files. Replies are cached in `state/llm_cache` by provider, model, prompt hash and document text. A quote is located in the segment the model named, else anywhere in the document; one that is nowhere is dropped and counted.
+  - **Resolution, as arm B is defined:** a quoted business key (customer ID, email address, item or store ID) naming exactly one warehouse row; a quoted RMA or case number is its own Return entity. No names, no case grouping, no warehouse queries. A claim needs a subject and object that resolved.
+  - **Run on the development corpus** (`crawl_da9ce15c813d4ff49762f71fe3fc79cb`, Mistral medium, 7 min 49 s): 301 documents, 3,840 mentions, 817 definite links, 332 entities, 30 claims. All 3,840 mentions and 34 evidence passages match their span exactly. 231 of 5,090 returned items (4.5%) quoted text that was not in the document and were dropped. 214,765 tokens in, 183,564 out; 2.9 s per document.
+  - **Scored** (evaluation `5b9881f7`), next to the deterministic run:
+
+    | Measure | Deterministic | LLM (arm B) |
+    |---|---|---|
+    | Mention recall: direct / alias / contextual | 99.7% / 100% / 100% | 92.3% / 95.6% / 80.7% |
+    | Mention precision | 92.8% | 72.9% |
+    | Mentions resolved to the right row | 99.8% | 10.1% |
+    | Definite-link precision | 100% | 39.2% |
+    | Claims: precision / recall | 100% / 100% | 0% / 0% |
+    | Golden questions (retrieval level) | 100% | 16.7% |
+
+  - **Reading the table:** every link judged wrong is a Return linked to an entity made from its RMA number, which has no warehouse key, so the harness cannot match it; customers, items and stores have no wrong links. The same cause gives zero claims: each claim involves a Return. This is arm B's intended limit (no warehouse reasoning), and what CR-L2 is for.
+  - **Not done:** a second run to confirm the cache gives identical rows on the real corpus (covered by a test only); prices are unset, so no cost is reported; the prompt has had no tuning.
 - [ ] **CR-L2** Arm C, hybrid: arm B's extraction feeding arm A's case grouping and joint resolution (needs CR-5). *Done when:* scored on the same corpus as A and B.
 - [ ] **CR-L3** Comparison report: A, B and C side by side on the development and held-out corpora (C-12); arm B run three times for variation. *Done when:* the report exists and is reproducible from recorded runs.
 
@@ -361,7 +391,16 @@ C-12 (held-out corpus) is needed before CR-L3. CR-10 (the LLM as a last tier ins
 ### Later
 
 - [ ] **CR-10** `model_assisted` tier: an LLM for leftover contextual references and borderline candidates, through `helios_core.llm`, measured as the gain over CR-5. *Done when:* scored with and without it on the same corpus.
-- [ ] **CR-11** Retrieval for question answering: segment embeddings in LanceDB, plus an MCP tool (`search_evidence`, `explain`) that joins structured and unstructured results. Golden questions are then answered end to end, not just at the retrieval level.
+- [ ] **CR-11** *(Built 2026-10-05 and 2026-10-06, commit `83ac412`; open only for scoring the golden questions.)* Retrieval for question answering: segment embeddings in LanceDB, plus an MCP tool (`search_evidence`, `explain`) that joins structured and unstructured results. Golden questions are then answered end to end, not just at the retrieval level.
+  - **Embeddings:** `shared/helios_core/index/evidence.py`. The crawl embeds its passages at the end of a run (`all-MiniLM-L6-v2`, local) into `state/evidence.lance`; each source keeps its latest crawl only. A passage is a whole email (body under its subject and sender), a window of six chat messages, or a PDF page; subject and sender lines are not passages. A failed embedding is counted on the run (`embedding_failed`) and does not fail it. Development corpus: 334 passages from 1,003 segments.
+  - **Tools:** `search_evidence` (by meaning, one passage per document, with the linked entities and their warehouse keys) and `entity_claims` (replaces the planned `explain`). Both need `query.execute` and are audited. The MCP server loads the model at startup.
+  - **Joining:** the assistant uses a passage's keys as filters in `run_query`. Seen working once on Mistral medium (three customers from emails, then their return totals).
+  - **UI:** passages and claims are shown under the answer in Talk; the answer path has a document lane and a link for keys carried into the query (`console/trace_documents.py`).
+  - **Dependencies:** `lancedb` 0.39.0 and `sentence-transformers` 6.1.0, installed by hand; optional.
+  - **Open:**
+    - the 60 golden questions have not been run, so there is no end-to-end score;
+    - document text is not filtered per user (needs DS-7);
+    - the delegated credential lasts 60 seconds, so a question whose tool calls take longer fails.
 - [ ] **CR-12** Images (after the text crawler meets its targets; Helios-DS Phase 5).
 
 ---

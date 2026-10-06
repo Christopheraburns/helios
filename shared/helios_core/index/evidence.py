@@ -326,10 +326,13 @@ def _run_rows(store: IndexStore, crawl_run_id: str) -> tuple[list[Any], list[Any
 
 
 def latest_runs(store: IndexStore) -> list[CrawlRunRecord]:
-    """Each source's latest successful crawl, newest first."""
+    """Each source's latest successful deterministic crawl, newest first. Other
+    strategies (the LLM crawler) are experiments to be scored, and do not feed
+    search or browsing."""
     seen: dict[str, CrawlRunRecord] = {}
     for run in runs.runs(store):
-        if run.status == "SUCCEEDED" and run.source not in seen:
+        strategy = (run.settings or {}).get("strategy") or "deterministic"
+        if run.status == "SUCCEEDED" and strategy == "deterministic" and run.source not in seen:
             seen[run.source] = run
     return list(seen.values())
 

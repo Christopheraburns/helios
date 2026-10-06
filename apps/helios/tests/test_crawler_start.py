@@ -94,17 +94,20 @@ def test_starting_a_crawl_creates_the_job_once_and_runs_it(client, workbench):
     assert environment["HELIOS_CRAWL_FULL"] == "0"
     assert "HELIOS_CRAWL_SOURCE" not in environment
     assert "HELIOS_CRAWL_NOTE" not in environment and body["note"] is None
+    assert "HELIOS_CRAWL_STRATEGY" not in environment and body["strategy"] == "deterministic"
 
     workbench.runs[0].status = "ENGINE_SUCCEEDED"
     again = client.post(
         "/api/v1/crawler/runs",
-        json={"dataset_id": DATASET, "full": True, "note": "  after the pattern fix "},
+        json={"dataset_id": DATASET, "full": True, "note": "  after the pattern fix ", "strategy": "llm"},
         headers=ALICE,
     )
     assert again.status_code == 202 and len(workbench.created_jobs) == 1
     assert json.loads(workbench.runs[0].environment)["HELIOS_CRAWL_FULL"] == "1"
     assert json.loads(workbench.runs[0].environment)["HELIOS_CRAWL_NOTE"] == "after the pattern fix"
     assert again.json()["note"] == "after the pattern fix"
+    assert json.loads(workbench.runs[0].environment)["HELIOS_CRAWL_STRATEGY"] == "llm"
+    assert again.json()["strategy"] == "llm"
 
 
 def test_a_second_crawl_of_the_same_target_waits_for_the_first(client, workbench):
@@ -122,6 +125,7 @@ def test_a_second_crawl_of_the_same_target_waits_for_the_first(client, workbench
         {"dataset_id": "x; rm -rf /"},
         {"dataset_id": "a" * 200},
         {"dataset_id": DATASET, "note": "n" * 201},
+        {"dataset_id": DATASET, "strategy": "hybrid"},
     ],
 )
 def test_bad_requests_start_nothing(client, workbench, body):
@@ -160,4 +164,5 @@ def test_launches_and_targets_describe_what_was_and_can_be_crawled(client, workb
     [listed] = client.get("/api/v1/crawler/runs").json()
     assert listed["requested_by"] == "cloudera-workbench:alice"
     assert listed["note"] == "baseline"
+    assert listed["strategy"] == "deterministic" and listed["llm"] is None
     assert listed["isolated"] is False  # ran as cburns, not the crawler machine user

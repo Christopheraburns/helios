@@ -142,6 +142,37 @@ class Claims(_Model):
     hedges: list[str] = Field(default_factory=list)
 
 
+class LlmExtraction(_Model):
+    """The LLM crawler (strategy ``llm``, CR-L1). The instructions are the
+    versioned part of its prompt; the ontology classes, claim vocabulary and
+    reply format are added from the ontology at run time. The model itself is
+    the project's default provider, not a setting."""
+
+    prompt_version: str = Field("llm-1", pattern=r"^[A-Za-z0-9._-]{1,40}$")
+    instructions: str = Field(
+        "You read retail customer-service documents (emails, chat threads and PDF "
+        "return reports) and list what they mention.\n"
+        "- List every reference to an entity of the classes below: names, IDs, email "
+        "addresses, ticket, case and return-authorization numbers, and phrases such as "
+        "\"the item\" or \"this return\".\n"
+        "- Quote each reference exactly as it appears, character for character, and "
+        "keep the quote as short as the reference itself.\n"
+        "- List a claim only when the text states it. Its quote is the sentence or "
+        "message that states it; its subject and object are entities you listed.\n"
+        "- Never include anything that is not written in the document.",
+        min_length=1,
+        max_length=8000,
+    )
+    max_asset_chars: int = Field(
+        24_000, ge=500, le=400_000, description="Longer documents are cut, and counted"
+    )
+    concurrency: int = Field(2, ge=1, le=16, description="Documents sent to the model at once")
+    input_price_per_million: float | None = Field(
+        None, ge=0, description="USD per million input tokens, to report cost; unset = no cost"
+    )
+    output_price_per_million: float | None = Field(None, ge=0)
+
+
 # --- the settings document --------------------------------------------------------
 
 
@@ -155,6 +186,7 @@ class CrawlerSettings(_Model):
     )
     cases: CaseLinking
     claims: Claims
+    llm: LlmExtraction = Field(default_factory=LlmExtraction)
 
     @model_validator(mode="after")
     def _consistent(self) -> CrawlerSettings:
@@ -169,6 +201,7 @@ class CrawlerSettings(_Model):
 
     def canonical_json(self) -> str:
         return json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+
 
     def content_hash(self) -> str:
         return hashlib.sha256(self.canonical_json().encode()).hexdigest()

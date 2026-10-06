@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
@@ -163,9 +163,12 @@ describe("CrawlerPage", () => {
     const button = await screen.findByRole("button", { name: "Start crawl" });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.change(screen.getByLabelText("Note for this crawl"), { target: { value: " after the pattern fix " } });
+    fireEvent.change(screen.getByLabelText("Crawl strategy"), { target: { value: "llm" } });
     fireEvent.click(button);
 
-    await waitFor(() => expect(startCrawl).toHaveBeenCalledWith(target, false, "after the pattern fix"));
+    await waitFor(() =>
+      expect(startCrawl).toHaveBeenCalledWith(target, false, "after the pattern fix", "llm"),
+    );
     expect(await screen.findByText(/job run run-9\)\. It appears below/)).toBeInTheDocument();
     expect(await screen.findByText("SCHEDULING")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Start crawl" })).toBeDisabled());
@@ -249,5 +252,84 @@ describe("CrawlerPage", () => {
     fireEvent.change(screen.getByLabelText("Crawler settings JSON"), { target: { value: "{ not json" } });
     fireEvent.click(screen.getByText("Validate and save"));
     expect(await screen.findByText(/Not valid JSON/)).toBeTruthy();
+  });
+
+  it("labels LLM crawls, filters by strategy and shows the model and its usage", async () => {
+    const llmRun = {
+      ...RUN,
+      crawl_run_id: "crawl_llm",
+      strategy: "llm" as const,
+      llm: { provider: "mistral", model: "mistral-medium-latest", temperature: 0, prompt_version: "llm-1", prompt_hash: "abcdef0123456789" },
+      counts: {
+        ...RUN.counts,
+        llm_calls: 290,
+        llm_cached: 11,
+        llm_tokens_in: 210000,
+        llm_tokens_out: 190000,
+        llm_hallucinated_spans: 7,
+        llm_claims_unanchored: 12,
+      },
+    };
+    const api = {
+      crawlRuns: vi.fn().mockResolvedValue([RUN, llmRun]),
+      crawlerSettings: vi.fn(),
+      crawlRun: vi.fn().mockResolvedValue({ ...llmRun, asset_counts: { by_status: {}, by_class: {} }, assets: [] }),
+    };
+    renderPage(api);
+
+    const badge = await screen.findByTitle("mistral mistral-medium-latest");
+    expect(badge).toHaveTextContent("LLM");
+    expect(screen.getAllByRole("row")).toHaveLength(3); // header and two runs
+    fireEvent.change(screen.getByLabelText("Filter by strategy"), { target: { value: "deterministic" } });
+    expect(screen.getAllByRole("row")).toHaveLength(2);
+    fireEvent.change(screen.getByLabelText("Filter by strategy"), { target: { value: "llm" } });
+    expect(screen.getAllByRole("row")).toHaveLength(2);
+
+    fireEvent.click(screen.getByTitle("mistral mistral-medium-latest"));
+    expect(await screen.findByText(/301 documents read \(11 from cache\)/)).toHaveTextContent(
+      "7 quotes not in the documents (dropped)",
+    );
+    expect(screen.getByText(/each document read by an AI model/)).toHaveTextContent(
+      "mistral mistral-medium-latest, prompt llm-1",
+    );
+  });
+
+  it("adds the LLM measures to the Scores tab when an LLM crawl has been scored", async () => {
+    const llm = {
+      provider: "mistral",
+      model: "mistral-medium-latest",
+      prompt_version: "llm-1",
+      documents: 301,
+      cached: 0,
+      failed: 0,
+      tokens_in: 214765,
+      tokens_out: 183564,
+      cost_usd: null,
+      ms_per_document: 2864,
+      hallucinated_spans: 231,
+      hallucinated_span_rate: 0.0454,
+    };
+    const scored = { ...EVALUATION, evaluation_id: "eval-llm", crawl_run_id: "crawl_llm", strategy: "llm", metrics: { ...EVALUATION.metrics, run: { llm } } };
+    const api = { crawlerEvaluations: vi.fn().mockResolvedValue([EVALUATION, scored]), crawlRuns: vi.fn(), crawlerSettings: vi.fn() };
+    renderPage(api, "scores");
+
+    expect(await screen.findByRole("columnheader", { name: "Not in doc." })).toBeInTheDocument();
+    const rows = screen.getAllByRole("row");
+    expect(rows).toHaveLength(3);
+    const rulesCells = within(rows[1]).getAllByRole("cell").slice(-4).map((cell) => cell.textContent);
+    expect(rulesCells).toEqual(["—", "—", "—", "—"]);
+    const llmCells = within(rows[2]).getAllByRole("cell").slice(-4).map((cell) => cell.textContent);
+    expect(llmCells).toEqual(["4.5%", "398,329", "2.9", "—"]);
+
+    fireEvent.click(rows[2]);
+    expect(await screen.findByText(/231 quotes not\s+in the documents were dropped/)).toBeInTheDocument();
+    expect(screen.getByText(/links only on exact keys the model quoted/)).toBeInTheDocument();
+  });
+
+  it("shows no LLM columns when only rules crawls have been scored", async () => {
+    const api = { crawlerEvaluations: vi.fn().mockResolvedValue([EVALUATION]), crawlRuns: vi.fn(), crawlerSettings: vi.fn() };
+    renderPage(api, "scores");
+    await screen.findByRole("columnheader", { name: "Strategy" });
+    expect(screen.queryByRole("columnheader", { name: "Not in doc." })).not.toBeInTheDocument();
   });
 });

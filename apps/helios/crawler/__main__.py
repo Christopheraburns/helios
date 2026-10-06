@@ -59,10 +59,13 @@ def crawl_request() -> dict[str, Any]:
     return {key: value for key, value in request.items() if value}
 
 
-def embed_hook(development_index: bool) -> Any:
+def embed_hook(development_index: bool, strategy: str = "deterministic") -> Any:
     """The step that makes a run's segments searchable, or None with the reason printed."""
     import importlib.util
 
+    if strategy != "deterministic":
+        print(f"embeddings: off (a {strategy} crawl is an experiment; it does not feed search)")
+        return None
     if development_index:
         print("embeddings: off (a development index must not replace the searchable set)")
         return None
@@ -79,6 +82,31 @@ def embed_hook(development_index: bool) -> Any:
     return embed_run
 
 
+def llm_extractor(settings: Any, classes: list[str]) -> Any:
+    """The LLM crawler's extractor on the project's default model, or None with
+    the reason printed."""
+    from helios_core.llm import llm_from_env
+
+    from .claims import SHAPES
+    from .llm_arm import LlmExtractor, load_vocabulary
+
+    llm = llm_from_env()
+    if llm is None:
+        print("The llm strategy needs the project's LLM (LLM_PROVIDER and its key).")
+        return None
+    llm.timeout = max(llm.timeout, float(os.environ.get("HELIOS_CRAWL_LLM_TIMEOUT_SECONDS", "120")))
+    vocabulary = load_vocabulary(
+        REPO_ROOT / "ontology", classes, [p for p in settings.claims.cues if p in SHAPES]
+    )
+    cache = os.environ.get("HELIOS_LLM_CACHE") or str(REPO_ROOT / "state" / "llm_cache")
+    extractor = LlmExtractor(llm, settings, vocabulary, cache)
+    print(
+        f"llm: {llm.provider} {llm.model}, prompt {settings.llm.prompt_version} "
+        f"({extractor.prompt_hash[:12]}), cache {cache}"
+    )
+    return extractor
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m apps.helios.crawler")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -87,6 +115,12 @@ def main(argv: list[str] | None = None) -> int:
     which.add_argument("--source", help="a data source ID registered in Helios")
     which.add_argument("--dataset", help="a READY Helios-DS dataset ID (unregistered)")
     crawl_cmd.add_argument("--full", action="store_true", help="re-fetch and re-analyze everything")
+    crawl_cmd.add_argument(
+        "--strategy",
+        choices=["deterministic", "llm"],
+        default="deterministic",
+        help="how the text is understood: rules and the warehouse (default), or the project's LLM",
+    )
     crawl_cmd.add_argument(
         "--s3-connection",
         default=os.environ.get("HELIOS_CRAWLER_S3_CONNECTION", "S3 Object Store"),
@@ -191,6 +225,13 @@ def main(argv: list[str] | None = None) -> int:
             f"gazetteer: {len(gazetteer.forms)} forms for {', '.join(gazetteer.classes)} "
             f"(mapping {resolution.model} for ontology {resolution.ontology_version})"
         )
+    extractor = None
+    if args.strategy == "llm":
+        extractor = llm_extractor(settings, classes) if gazetteer is not None else None
+        if extractor is None:
+            if gazetteer is None:
+                print("The llm strategy needs an ontology mapping for the active ontology version.")
+            return 2
     run = crawl(
         index,
         connector,
@@ -206,7 +247,9 @@ def main(argv: list[str] | None = None) -> int:
         gazetteer=gazetteer,
         resolution=resolution,
         warehouse_cursor=connection.cursor,
-        embed=embed_hook(bool(args.index_duckdb)),
+        embed=embed_hook(bool(args.index_duckdb), args.strategy),
+        strategy=args.strategy,
+        llm=extractor,
     )
     print(f"{run.crawl_run_id}: {run.status} {run.counts}")
     return 0 if run.status == "SUCCEEDED" else 1

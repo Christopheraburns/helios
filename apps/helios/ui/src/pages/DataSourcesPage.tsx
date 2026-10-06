@@ -74,6 +74,19 @@ function formFrom(source?: DataSourceView, connector = "helios_ds"): Form {
   };
 }
 
+/** What is still missing before a data source can be saved, in the form's words. */
+export function missingFields(input: DataSourceInput): string[] {
+  const scope = input.scope as Record<string, unknown>;
+  const blank = (value: unknown) => !String(value ?? "").trim();
+  const missing: string[] = [];
+  if (blank(input.name)) missing.push("Name");
+  if (blank(input.connection_ref)) missing.push("Connection");
+  if (input.connector === "helios_ds" && blank(scope.dataset_id)) missing.push("Dataset ID");
+  if (input.connector === "object_store" && blank(scope.bucket)) missing.push("Bucket");
+  if (input.connector === "table_rows" && blank(scope.table)) missing.push("Table");
+  return missing;
+}
+
 export function inputFrom(form: Form): DataSourceInput {
   const kind = String(form.connector);
   const number = (key: string) => Number(form[key]);
@@ -155,10 +168,16 @@ function SourceForm({
   const type = types.find((t) => t.connector === kind);
 
   const submit = async () => {
+    const input = inputFrom(form);
+    const missing = missingFields(input);
+    if (missing.length) {
+      setError(`Fill in ${missing.join(", ")} before saving.`);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await onSave(inputFrom(form));
+      await onSave(input);
     } catch (err) {
       setError(message(err, "Saving failed"));
     } finally {

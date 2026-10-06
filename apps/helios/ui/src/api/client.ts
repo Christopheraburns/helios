@@ -131,6 +131,64 @@ export interface TraceDetail {
   semantic_evidence?: SemanticTraceEvidence;
 }
 
+/** An entity the crawler found in documents (CR-9 instance browsing). */
+export interface CrawlEntity {
+  entity_id: string;
+  class: string;
+  name: string;
+  keys: string[];
+  source: string;
+  crawl_run_id: string;
+  documents?: number;
+}
+
+export interface CrawlEntityMention {
+  surface_form: string;
+  start: number | null;
+  end: number | null;
+  resolved_by: string;
+  link_type: string;
+}
+
+export interface CrawlEntityDocument {
+  asset_id: string;
+  name: string;
+  class: string;
+  mime_type: string;
+  timestamp: string | null;
+  /** About (the document's subject) or Mentions. */
+  relationship: string;
+  passages: Array<{
+    segment_id: string;
+    segment_type: string;
+    locator: Record<string, unknown>;
+    text: string;
+    mentions: CrawlEntityMention[];
+  }>;
+}
+
+export interface CrawlEntityDetail {
+  entity: CrawlEntity;
+  documents_total: number;
+  documents: CrawlEntityDocument[];
+  related: Array<{
+    relationship: string;
+    direction: "in" | "out";
+    entity_id: string;
+    class: string;
+    name: string;
+  }>;
+  claims_total: number;
+  claims: Array<{
+    predicate: string;
+    subject: { name: string; class: string } | null;
+    object: { name: string; class: string } | null;
+    object_value: string | null;
+    evidence_count: number;
+    evidence: Array<{ asset_id: string; excerpt: string }>;
+  }>;
+}
+
 /** One passage the document tools returned for an answer. */
 export interface TraceDocumentPassage {
   id: string;
@@ -1101,6 +1159,20 @@ function apiErrorMessage(payload: unknown): string | null {
   }
   const detail = payload.detail;
   if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    // The API framework's own check of the request: one entry per rejected field.
+    const problems = detail
+      .filter((item): item is { loc?: unknown[]; msg?: unknown } => Boolean(item) && typeof item === "object")
+      .map((item) => {
+        const field = (Array.isArray(item.loc) ? item.loc : [])
+          .filter((part) => part !== "body" && part !== "query")
+          .join(".");
+        const text = typeof item.msg === "string" ? item.msg : "is not valid";
+        const reason = /at least 1 character|field required/i.test(text) ? "is required" : text;
+        return field ? `${field.replace(/_/g, " ")}: ${reason}` : reason;
+      });
+    return problems.length ? `The request was not accepted.\n• ${problems.join("\n• ")}` : null;
+  }
   if (
     detail &&
     typeof detail === "object" &&
@@ -1146,7 +1218,19 @@ export interface CrawlRunSummary {
   isolated?: boolean;
   /** User-provided label or note for this crawl. */
   note?: string | null;
+  /** How the text was understood: "deterministic" (rules and the warehouse) or "llm". */
+  strategy?: CrawlStrategy;
+  /** An LLM crawl's model and prompt. */
+  llm?: {
+    provider: string;
+    model: string;
+    temperature: number;
+    prompt_version: string;
+    prompt_hash: string;
+  } | null;
 }
+
+export type CrawlStrategy = "deterministic" | "llm";
 
 /** One run of the Workbench crawl Job: a crawl that was asked for. */
 export interface CrawlLaunch {
@@ -1160,6 +1244,7 @@ export interface CrawlLaunch {
   full: boolean;
   requested_by: string | null;
   note?: string | null;
+  strategy?: CrawlStrategy;
 }
 
 export interface CrawlLaunches {
@@ -1383,8 +1468,19 @@ export interface HeliosApi {
   ontologyGraph?(version: string): Promise<OntologyGraphPayload>;
   ontologyClass?(version: string, className: string): Promise<OntologyClassDetail>;
   crawlRuns?(source?: string): Promise<CrawlRunSummary[]>;
+  crawlEntities?(
+    classes: string[],
+    query?: string,
+    limit?: number,
+  ): Promise<{ total: number; entities: CrawlEntity[] }>;
+  crawlEntity?(entityId: string, crawlRunId: string): Promise<CrawlEntityDetail>;
   crawlRun?(crawlRunId: string): Promise<CrawlRunDetail>;
-  startCrawl?(target: CrawlTarget, full: boolean, note?: string): Promise<CrawlLaunch>;
+  startCrawl?(
+    target: CrawlTarget,
+    full: boolean,
+    note?: string,
+    strategy?: CrawlStrategy,
+  ): Promise<CrawlLaunch>;
   crawlLaunches?(): Promise<CrawlLaunches>;
   crawlTargets?(): Promise<CrawlTarget[]>;
   evaluateCrawlRun?(crawlRunId: string, datasetId: string): Promise<CrawlEvaluation>;
@@ -1694,15 +1790,36 @@ export class HeliosApiClient implements HeliosApi {
     return this.get<CrawlRunSummary[]>(`/api/v1/crawler/runs${query}`);
   }
 
+  crawlEntities(
+    classes: string[],
+    query = "",
+    limit = 50,
+  ): Promise<{ total: number; entities: CrawlEntity[] }> {
+    const params = new URLSearchParams({ classes: classes.join(","), q: query, limit: String(limit) });
+    return this.get(`/api/v1/crawler/entities?${params}`);
+  }
+
+  crawlEntity(entityId: string, crawlRunId: string): Promise<CrawlEntityDetail> {
+    return this.get<CrawlEntityDetail>(
+      `/api/v1/crawler/entities/${encodeURIComponent(entityId)}?run=${encodeURIComponent(crawlRunId)}`,
+    );
+  }
+
   crawlRun(crawlRunId: string): Promise<CrawlRunDetail> {
     return this.get<CrawlRunDetail>(`/api/v1/crawler/runs/${encodeURIComponent(crawlRunId)}`);
   }
 
-  startCrawl(target: CrawlTarget, full: boolean, note?: string): Promise<CrawlLaunch> {
+  startCrawl(
+    target: CrawlTarget,
+    full: boolean,
+    note?: string,
+    strategy?: CrawlStrategy,
+  ): Promise<CrawlLaunch> {
     return this.post<CrawlLaunch>("/api/v1/crawler/runs", {
       ...(target.kind === "source" ? { source_id: target.id } : { dataset_id: target.id }),
       full,
       ...(note ? { note } : {}),
+      ...(strategy && strategy !== "deterministic" ? { strategy } : {}),
     });
   }
 

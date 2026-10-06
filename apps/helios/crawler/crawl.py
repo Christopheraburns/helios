@@ -15,8 +15,13 @@ objects (``claims``), after resolution. ``analyze`` still receives each verified
 asset with its segments and mentions, for anything that plugs in per asset.
 
 An unchanged asset is carried forward, segments included, only if the previous
-run used the same crawler version and settings; otherwise it is analyzed again,
-so a settings change always takes effect.
+run used the same crawler version, settings and strategy; otherwise it is
+analyzed again, so a settings change always takes effect.
+
+``strategy`` (CR-E2) says how the text is understood and is recorded on the run:
+``deterministic`` is everything above; ``llm`` (arm B, ``llm_arm``) shares
+steps 1 to 3 and replaces the rest with a model's reading, grounded to exact
+spans and resolved by exact keys only.
 """
 
 from __future__ import annotations
@@ -43,10 +48,12 @@ from .analyzers import Segment, analyze_asset
 from .claims import extract_claims
 from .connectors import Connector, Fetched, SourceAsset, plan_incremental
 from .gazetteer import Gazetteer
+from .llm_arm import LlmExtractor, run_arm
 from .mentions import extract_mentions
 from .resolution import resolve
 
-CRAWLER_VERSION = "0.6.0"
+CRAWLER_VERSION = "0.7.0"
+STRATEGIES = ("deterministic", "llm")
 ASSETS = "helios_index.assets"
 SEGMENTS = "helios_index.segments"
 MENTIONS = "helios_index.mentions"
@@ -88,10 +95,24 @@ def _asset_row(
     )
 
 
-def previous_run(index: IndexStore, source: str, settings_hash: str) -> CrawlRunRecord | None:
-    """The last successful crawl of ``source`` whose results can be reused: same
-    crawler version and settings as this one."""
-    last = runs.latest_succeeded(index, source)
+def strategy_of(run: CrawlRunRecord) -> str:
+    """Runs from before CR-E2 recorded no strategy; they were deterministic."""
+    return str((run.settings or {}).get("strategy") or "deterministic")
+
+
+def previous_run(
+    index: IndexStore, source: str, settings_hash: str, strategy: str = "deterministic"
+) -> CrawlRunRecord | None:
+    """The last successful crawl of ``source`` with this strategy, if its results
+    can be reused: same crawler version and settings as this one."""
+    last = next(
+        (
+            r
+            for r in runs.runs(index)
+            if r.source == source and r.status == "SUCCEEDED" and strategy_of(r) == strategy
+        ),
+        None,
+    )
     if (
         last is None
         or last.crawler_version != CRAWLER_VERSION
@@ -149,13 +170,20 @@ def crawl(
     resolution: ResolutionConfig | None = None,
     warehouse_cursor: Callable[[], Any] | None = None,
     embed: Embed | None = None,
+    strategy: str = "deterministic",
+    llm: LlmExtractor | None = None,
 ) -> CrawlRunRecord:
     """Crawl one data source with ``connector``. ``full`` re-fetches and re-analyzes
     everything. ``source_snapshot`` (the data source's configuration, no secrets)
     is recorded on the run so results stay explainable. Mentions are extracted,
     resolved and turned into claims when both ``gazetteer`` and ``resolution``
     are given; joint resolution against the warehouse needs ``warehouse_cursor``
-    (a read-only cursor factory on the source schema)."""
+    (a read-only cursor factory on the source schema). Strategy ``llm`` needs
+    ``llm`` (the extractor) as well, and queries nothing in the warehouse."""
+    if strategy not in STRATEGIES:
+        raise ValueError(f"unknown crawl strategy {strategy!r}")
+    if strategy == "llm" and (llm is None or gazetteer is None or resolution is None):
+        raise ValueError("the llm strategy needs a model, a gazetteer and a resolution config")
     run = runs.start(
         index,
         connector=connector.TYPE,
@@ -166,6 +194,8 @@ def crawl(
         settings={
             "data_source": source_snapshot or {},
             "full": full,
+            "strategy": strategy,
+            **({"llm": llm.provenance()} if strategy == "llm" and llm else {}),
             **({"request": request} if request else {}),
         },
         settings_version=settings.version if settings else None,
@@ -173,7 +203,7 @@ def crawl(
     )
     try:
         assets = connector.list_assets()
-        previous = None if full else previous_run(index, source_id, settings_hash)
+        previous = None if full else previous_run(index, source_id, settings_hash, strategy)
         known = previous_assets(index, previous)
         to_fetch, unchanged = plan_incremental(
             assets, {k: a.asset_version_id for k, a in known.items()}
@@ -192,7 +222,7 @@ def crawl(
             if analysis.status != "analyzed":
                 continue
             asset_mentions: list[MentionRecord] = []
-            if gazetteer is not None and resolution is not None:
+            if strategy == "deterministic" and gazetteer is not None and resolution is not None:
                 asset_mentions = extract_mentions(
                     run, fetched.asset, asset_segments, crawler_settings, gazetteer, resolution
                 )
@@ -206,11 +236,12 @@ def crawl(
                 for s in index.read(SEGMENTS, {"crawl_run_id": previous.crawl_run_id})
                 if isinstance(s, SegmentRecord) and s.asset_id in keep
             ]
-            mentions += [
-                m.model_copy(update={"crawl_run_id": run.crawl_run_id})
-                for m in index.read(MENTIONS, {"crawl_run_id": previous.crawl_run_id})
-                if isinstance(m, MentionRecord) and m.asset_id in keep
-            ]
+            if strategy == "deterministic":  # the llm arm reads every document again, from its cache
+                mentions += [
+                    m.model_copy(update={"crawl_run_id": run.crawl_run_id})
+                    for m in index.read(MENTIONS, {"crawl_run_id": previous.crawl_run_id})
+                    if isinstance(m, MentionRecord) and m.asset_id in keep
+                ]
         for asset in unchanged:
             before = known[asset.asset_id]
             if before.status in ("analyzed", "carried_forward"):
@@ -220,14 +251,26 @@ def crawl(
                 rows.append(_asset_row(run, asset, before.status, detail))
         index.append(ASSETS, rows)
         index.append(SEGMENTS, segments)
-        index.append(MENTIONS, mentions)
         resolution_counts: dict[str, int] = {}
         entities: list[EntityRecord] = []
         relationships: list[RelationshipRecord] = []
-        if gazetteer is not None and resolution is not None:
+        readable = [r for r in rows if r.status in ("analyzed", "carried_forward")]
+        if strategy == "llm" and llm is not None and gazetteer is not None and resolution is not None:
+            arm = run_arm(run, readable, segments, llm, gazetteer, resolution, crawler_settings)
+            mentions = arm.mentions
+            index.append(MENTIONS, mentions)
+            index.append(ENTITIES, arm.resolution.entities)
+            index.append(ENTITY_LINKS, arm.resolution.links)
+            index.append(RELATIONSHIPS, arm.resolution.relationships)
+            index.append(CLAIMS, arm.claims)
+            index.append(CLAIM_EVIDENCE, arm.evidence)
+            resolution_counts = arm.counts
+            entities, relationships = arm.resolution.entities, arm.resolution.relationships
+        elif gazetteer is not None and resolution is not None:
+            index.append(MENTIONS, mentions)
             resolved = resolve(
                 run,
-                [r for r in rows if r.status in ("analyzed", "carried_forward")],
+                readable,
                 segments,
                 mentions,
                 gazetteer,
@@ -241,7 +284,7 @@ def crawl(
             extracted = extract_claims(
                 run,
                 resolved.clusters,
-                [r for r in rows if r.status in ("analyzed", "carried_forward")],
+                readable,
                 segments,
                 mentions,
                 resolved.links,
@@ -253,6 +296,8 @@ def crawl(
             index.append(CLAIM_EVIDENCE, extracted.evidence)
             resolution_counts = {**resolved.counts, **extracted.counts}
             entities, relationships = resolved.entities, resolved.relationships
+        else:
+            index.append(MENTIONS, mentions)
         # The index is complete without embeddings, so a failure here is counted
         # on the run instead of failing it.
         embedding_counts: dict[str, int] = {}

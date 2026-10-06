@@ -525,8 +525,8 @@
 }
 
 .publish-status--new {
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--cyan-100);
+  color: var(--cyan-700);
 }
 
 .publish-status--identical {
@@ -569,4 +569,130 @@
 .publish-open,
 .publish-inline {
   margin-top: 0;
+}
+
+/* Instances found by the crawler (CR-9) */
+.instances h4 {
+  margin: 16px 0 6px;
+  font-size: 13px;
+  color: var(--text-secondary, #4b5563);
+}
+
+.instances__entity {
+  margin: 10px 0 6px !important;
+  font-size: 16px !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  color: var(--text-primary, #111827) !important;
+  overflow-wrap: anywhere;
+}
+
+.instances__search {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.instances__count,
+.instance-empty {
+  margin: 8px 0;
+  color: var(--text-secondary, #6b7280);
+  font-size: 12px;
+}
+
+.instance-error {
+  color: #b42318;
+  font-size: 13px;
+}
+
+.detail-section ul.instances__list,
+.detail-section ul.instances__keys,
+.detail-section ul.instances__related,
+.instances__documents {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.instances__list li {
+  display: flex;
+  flex-direction: column;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-color, #f3f4f6);
+}
+
+.instances__list .link-button {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.instances__documents-count,
+.instances__relationship {
+  color: var(--text-secondary, #6b7280);
+  font-size: 12px;
+}
+
+.instances__keys code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.instances__related li {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.instances__related q {
+  display: block;
+  color: var(--text-primary, #111827);
+}
+
+.instance-document {
+  padding: 10px 0;
+  border-top: 1px solid var(--border-color, #e5e7eb);
+}
+
+.instance-document__header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.instance-document__name {
+  color: var(--text-secondary, #6b7280);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.instance-passage {
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: var(--surface-muted, #f9fafb);
+  border-left: 3px solid var(--border-color, #d1d5db);
+  border-radius: 4px;
+}
+
+.instance-passage__where {
+  color: var(--text-secondary, #6b7280);
+  font-size: 11px;
+}
+
+.instance-passage__text {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.instance-passage__text mark {
+  padding: 0 2px;
+  background: #fde68a;
+  border-radius: 2px;
 }

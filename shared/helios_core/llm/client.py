@@ -100,16 +100,48 @@ class LLMClient:
                 raise LLMError(f"{self.provider} request failed: {e}") from e
         raise LLMError("unreachable")
 
+    def complete_with_usage(self, system: str, user: str) -> tuple[str, int, int]:
+        """``complete`` plus the provider's token counts: (text, tokens in, tokens out)."""
+        self.calls += 1
+        self.input_chars += len(system) + len(user)
+        for attempt in range(3):
+            try:
+                if self.provider == "anthropic":
+                    return self._anthropic_usage(system, user)
+                return self._openai_usage(system, user)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code in (429, 500, 502, 503, 529) and attempt < 2:
+                    time.sleep(3 * (attempt + 1))
+                    continue
+                raise LLMError(f"{self.provider} {e.response.status_code}: {e.response.text[:300]}") from e
+            except httpx.TimeoutException as e:
+                raise LLMTimeoutError(
+                    f"{self.provider} provider timed out "
+                    f"(response limit: {self.timeout:g} seconds)"
+                ) from e
+            except httpx.HTTPError as e:
+                raise LLMError(f"{self.provider} request failed: {e}") from e
+        raise LLMError("unreachable")
+
     def _anthropic(self, system: str, user: str) -> str:
+        return self._anthropic_usage(system, user)[0]
+
+    def _openai(self, system: str, user: str) -> str:
+        return self._openai_usage(system, user)[0]
+
+    def _anthropic_usage(self, system: str, user: str) -> tuple[str, int, int]:
         r = httpx.post("https://api.anthropic.com/v1/messages", timeout=self._http_timeout(),
                        headers={"x-api-key": self.api_key or "", "anthropic-version": "2023-06-01",
                                 "content-type": "application/json"},
                        json={"model": self.model, "max_tokens": self.max_tokens, "temperature": self.temperature,
                              "system": system, "messages": [{"role": "user", "content": user}]})
         r.raise_for_status()
-        return "".join(b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text")
+        body = r.json()
+        usage = body.get("usage") or {}
+        text = "".join(b.get("text", "") for b in body.get("content", []) if b.get("type") == "text")
+        return text, int(usage.get("input_tokens") or 0), int(usage.get("output_tokens") or 0)
 
-    def _openai(self, system: str, user: str) -> str:
+    def _openai_usage(self, system: str, user: str) -> tuple[str, int, int]:
         headers = {"content-type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -117,7 +149,13 @@ class LLMClient:
                        json={"model": self.model, "max_tokens": self.max_tokens, "temperature": self.temperature,
                              "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]})
         r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"]
+        body = r.json()
+        usage = body.get("usage") or {}
+        return (
+            body["choices"][0]["message"]["content"],
+            int(usage.get("prompt_tokens") or 0),
+            int(usage.get("completion_tokens") or 0),
+        )
 
     # ------------------------------------------------------------ tool calling
     def tool_turn(
