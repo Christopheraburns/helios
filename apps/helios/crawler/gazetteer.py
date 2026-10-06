@@ -28,30 +28,17 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from functools import lru_cache
+
+from helios_core.crawler.settings import Dictionary
 from helios_core.index import ids
 from helios_core.ontology.mapping import ClassIdentifiers, ResolutionConfig, template_columns
 
 KINDS = ("key", "display", "alias", "template")
 KIND_RANK = {kind: rank for rank, kind in enumerate(KINDS)}
-MAX_FORM_TOKENS = 12  # reason descriptions run to 9 tokens; nothing longer is a name
-MAX_SHARED_INSTANCES = 50  # a form shared by more instances than this is not a name
-SHORT_TOKEN = 5  # a single token shorter than this is probably not a name
+# How a name is judged (ordinary words, how short or how widely shared is too
+# much) comes from the settings' ``dictionary`` section.
 
-# Ordinary words that are also names in the warehouse (TPC-DS "number words" are
-# store and product names) or that appear in retail text next to names.
-COMMON_WORDS = frozenset(
-    """
-    the a an and or of in on at to for with by from is was were be been it this that
-    these those my our your his her their not no yes one two new old
-    item items store stores return returns product products order orders refund case
-    customer name email date number ticket receipt box package carton bag
-    home music shoes books men women kids sports jewelry electronics
-    red blue white black green pink gold silver
-    ought able pri ese anti cally ation eing bar n st barought ableought
-    please thanks dear hello re fw note
-    mr mrs ms miss dr sir
-    """.split()
-)
 _IDENTIFIER = re.compile(r"^[a-z_][a-z0-9_]*$")
 # A token is a run of word characters that may carry '.', '@', '+' or '-' inside
 # (email addresses, RMA numbers), or one punctuation character.
@@ -133,7 +120,8 @@ def has_names(identifiers: ClassIdentifiers) -> bool:
 class _Builder:
     """Collects forms per (class, surface) while rows stream in."""
 
-    def __init__(self) -> None:
+    def __init__(self, rules: Dictionary | None = None) -> None:
+        self.rules = rules or Dictionary()
         self.kind: dict[tuple[str, str], str] = {}
         self.columns: dict[tuple[str, str], str] = {}
         self.instances: dict[tuple[str, str], dict[str, None]] = defaultdict(dict)
@@ -143,7 +131,7 @@ class _Builder:
         self, class_name: str, value: str, kind: str, columns: str, instance: str, partial: bool
     ) -> None:
         surface = normalise(value)
-        if not surface or len(_token_strings(surface)) > MAX_FORM_TOKENS:
+        if not surface or len(_token_strings(surface)) > self.rules.max_form_tokens:
             return
         key = (class_name, surface)
         # One entry per form: the most specific kind wins, instances accumulate.
@@ -166,23 +154,34 @@ class _Builder:
                     kind=self.kind[key],
                     columns=self.columns[key],
                     instances=instances,
-                    low_specificity=is_low_specificity(surface, len(instances), self.partial[key]),
+                    low_specificity=is_low_specificity(
+                        surface, len(instances), self.partial[key], self.rules
+                    ),
                     partial=self.partial[key],
                 )
             )
         return result
 
 
-def is_low_specificity(surface: str, instance_count: int, partial: bool = False) -> bool:
+def is_low_specificity(
+    surface: str, instance_count: int, partial: bool = False, rules: Dictionary | None = None
+) -> bool:
     """A form that would match ordinary text or many instances: a short single
-    token, a common word, a partial name (some components missing), or one
+    token, an ordinary word, a partial name (some components missing), or one
     shared by many instances."""
+    rules = rules or Dictionary()
+    ordinary = _ordinary(tuple(rules.ordinary_words))
     parts = _token_strings(surface)
-    if len(parts) == 1 and len(parts[0]) < SHORT_TOKEN:
+    if len(parts) == 1 and len(parts[0]) < rules.short_token:
         return True
-    if surface in COMMON_WORDS or all(p in COMMON_WORDS for p in parts):
+    if surface in ordinary or all(p in ordinary for p in parts):
         return True
-    return partial or instance_count > MAX_SHARED_INSTANCES
+    return partial or instance_count > rules.max_shared_instances
+
+
+@lru_cache(maxsize=8)
+def _ordinary(words: tuple[str, ...]) -> frozenset[str]:
+    return frozenset(words)
 
 
 def _render(template: str, row: dict[str, Any]) -> tuple[str, bool]:
@@ -261,11 +260,12 @@ class Gazetteer:
         cls,
         rows_by_class: dict[str, list[dict[str, Any]]],
         config: ResolutionConfig,
-        source_schema: str = "tpcds",
+        dictionary: Dictionary | None = None,
     ) -> Gazetteer:
         """Build from row dicts (column -> value) per class: what ``build`` fetches,
-        and what tests supply directly."""
-        builder = _Builder()
+        and what tests supply directly. ``dictionary`` is the settings' section
+        of that name; without it no word is ordinary."""
+        builder = _Builder(dictionary)
         for class_name, rows in rows_by_class.items():
             identifiers = config.classes[class_name]
             columns = _columns_of(identifiers)
@@ -277,7 +277,7 @@ class Gazetteer:
                     continue
                 seen.add(values)  # a repeated primary key with new values adds forms
                 instance = ids.external_id(
-                    source_schema,
+                    config.database,
                     identifiers.ossie_element,
                     dict(zip(identifiers.primary, primary, strict=True)),
                 )
@@ -290,16 +290,17 @@ class Gazetteer:
         cursor_factory: Callable[[], Any],
         config: ResolutionConfig,
         classes: list[str],
-        source_schema: str = "tpcds",
+        dictionary: Dictionary | None = None,
     ) -> Gazetteer:
-        """Read each class's identifier columns from its table through ``cursor_factory``."""
+        """Read each class's identifier columns from its table through ``cursor_factory``,
+        in the mapping's database."""
         rows_by_class: dict[str, list[dict[str, Any]]] = {}
         for class_name in classes:
             identifiers = config.classes.get(class_name)
             if identifiers is None or not has_names(identifiers):
                 continue
-            rows_by_class[class_name] = fetch_rows(cursor_factory, identifiers, source_schema)
-        return cls.from_rows(rows_by_class, config, source_schema)
+            rows_by_class[class_name] = fetch_rows(cursor_factory, identifiers, config.database)
+        return cls.from_rows(rows_by_class, config, dictionary)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -415,7 +416,6 @@ def fetch_rows(
 
 
 __all__ = [
-    "COMMON_WORDS",
     "Form",
     "Gazetteer",
     "GazetteerHit",

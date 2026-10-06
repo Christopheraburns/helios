@@ -1,0 +1,39 @@
+{
+  "files": {
+    "apps/helios/crawler/access_check.py": {
+      "class:Customer": 2,
+      "identifier:tpcds": 2,
+      "word:tpcds": 2
+    },
+    "apps/helios/crawler/claims.py": {
+      "claim:PACKAGING_DAMAGED": 1,
+      "claim:REFUND_APPROVED": 2,
+      "claim:REFUND_REQUESTED": 1,
+      "claim:RETURN_REASON": 1,
+      "class:Contains": 1,
+      "class:Customer": 11,
+      "class:HasReason": 1,
+      "class:Item": 2,
+      "class:PartyTo": 1,
+      "class:Reason": 3,
+      "class:Return": 20,
+      "word:buyer": 1,
+      "word:damage": 1,
+      "word:damaged": 1,
+      "word:refund": 1,
+      "word:shopper": 1,
+      "word:staff": 6
+    },
+    "apps/helios/crawler/evaluate.py": {
+      "class:Contains": 2,
+      "class:HasReason": 1,
+      "class:LocatedAt": 2,
+      "class:PartyTo": 2,
+      "class:Return": 6,
+      "class:ReturnOf": 1,
+      "class:Sale": 1,
+      "identifier:tpcds": 1
+    }
+  },
+  "total_uses": 77
+}

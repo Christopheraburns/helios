@@ -2,7 +2,6 @@
 
 import pytest
 from apps.helios.crawler.crawl import crawl
-from helios_core.crawler.settings import DEFAULT_SETTINGS
 from helios_core.index import evidence, runs
 from helios_core.index.records import (
     ClaimEvidenceRecord,
@@ -13,6 +12,7 @@ from helios_core.index.records import (
 )
 from helios_core.index.store import duckdb_index_store
 from test_crawler_connector import DATASET, corpus  # noqa: F401 - fixture
+from crawler_samples import RETAIL_SETTINGS
 
 pytest.importorskip("lancedb")
 
@@ -277,8 +277,8 @@ def _crawl(index, connector, embed):
         actor="srv_helios_crawler",
         ontology_version="0.2.0",
         settings=None,
-        settings_hash=DEFAULT_SETTINGS.content_hash(),
-        crawler_settings=DEFAULT_SETTINGS,
+        settings_hash=RETAIL_SETTINGS.content_hash(),
+        crawler_settings=RETAIL_SETTINGS,
         embed=embed,
         request={"requested_by": "cloudera-workbench:alice", "note": "after the pattern fix"},
     )

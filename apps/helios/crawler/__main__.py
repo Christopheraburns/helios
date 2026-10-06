@@ -4,6 +4,8 @@
     python -m apps.helios.crawler crawl --dataset <helios_ds_dataset_id> [--full]
     python -m apps.helios.crawler evaluate --run <crawl_run_id> --dataset <dataset_id>
                                            [--index-duckdb <path>]
+    python -m apps.helios.crawler baseline record|check <file> [--run <crawl_run_id>]
+                                           [--source <id>] [--dataset <dataset_id>]
 
 ``--source`` crawls a data source registered in Helios (Data Sources page), with
 its connector, scope and crawl settings. ``--dataset`` is a shortcut for a
@@ -30,7 +32,6 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-MAPPINGS = REPO_ROOT / "ontology" / "mappings"
 
 
 def source_snapshot(source: Any) -> dict[str, Any]:
@@ -145,9 +146,20 @@ def main(argv: list[str] | None = None) -> int:
         metavar="PATH",
         help="read the run from (and write the scores to) this DuckDB index; truth from Impala",
     )
+    baseline_cmd = commands.add_parser(
+        "baseline",
+        help="record what a crawl found, or check a crawl against a recorded baseline (CG-0)",
+    )
+    baseline_cmd.add_argument("action", choices=["record", "check"])
+    baseline_cmd.add_argument("file", help="the baseline file (JSON)")
+    baseline_cmd.add_argument("--run", help="the crawl run; default: the source's latest successful rules crawl")
+    baseline_cmd.add_argument("--source", help="the source, when --run is not given (check: default from the file)")
+    baseline_cmd.add_argument("--dataset", help="score against this ground-truth dataset too (check: default from the file)")
     args = parser.parse_args(argv)
     if args.command == "evaluate":
         return evaluate_main(args)
+    if args.command == "baseline":
+        return baseline_main(args)
 
     from helios_core.config import impala_config
     from helios_core.crawler.sources import is_crawlable
@@ -210,17 +222,23 @@ def main(argv: list[str] | None = None) -> int:
         settings = crawler_settings.settings_of(settings_record)
     else:
         settings_record, settings = crawler_settings.active(catalog)
+    if settings.is_empty():
+        print(
+            "warning: no crawler settings are active, and the engine has no rules of its own "
+            "(no patterns, labels, phrases or claim cues). Load a preset on the Crawler page's "
+            "Settings tab, save it and activate it."
+        )
     ontology = ontology_versions.active(catalog)
     ontology_version = ontology.version if ontology else "unpublished"
 
-    resolution = resolution_for(ontology_version)
+    resolution = resolution_for(ontology_version, catalog)
     gazetteer = None
     if resolution is not None:
         if args.classes:
             classes = [c.strip() for c in args.classes.split(",") if c.strip()]
         else:
             classes = resolution.candidate_classes(source_uri(source, connector))
-        gazetteer = Gazetteer.build(connection.cursor, resolution, classes)
+        gazetteer = Gazetteer.build(connection.cursor, resolution, classes, settings.dictionary)
         print(
             f"gazetteer: {len(gazetteer.forms)} forms for {', '.join(gazetteer.classes)} "
             f"(mapping {resolution.model} for ontology {resolution.ontology_version})"
@@ -255,27 +273,39 @@ def main(argv: list[str] | None = None) -> int:
     return 0 if run.status == "SUCCEEDED" else 1
 
 
-def resolution_for(ontology_version: str, directory: Path = MAPPINGS) -> Any:
-    """The resolver's view of the mapping published for ``ontology_version``
-    (ontology/mappings/**). Falls back to the only mapping there is."""
-    from helios_core.ontology.mapping import load_mapping, resolution_config
+def resolution_for(ontology_version: str, catalog: Any) -> Any:
+    """The resolver's view of the active mapping for ``ontology_version``, from
+    ``helios_index`` (CG-6). Falls back to the only active mapping there is.
+    The repository's mapping files are not read here: they are shipped
+    examples, imported once through the API."""
+    from helios_core.index import mappings as stored
+    from helios_core.ontology.mapping import resolution_config
 
-    mappings = [
-        load_mapping(p)
-        for p in sorted(directory.rglob("*.yaml"))
-        if not p.name.endswith(".schema.yaml")
-    ]
-    matching = [m for m in mappings if m.ontology_version == ontology_version]
-    if not matching and len(mappings) == 1:
-        matching = mappings
+    active = stored.active(catalog)
+    if not active:
         print(
-            f"warning: no mapping for ontology {ontology_version}; using {mappings[0].model} "
-            f"(for {mappings[0].ontology_version})"
+            "warning: no mapping is active, so mentions are not extracted. Import or save one "
+            "and activate it: POST /api/v1/ontology/mappings, then /mappings/{version}:activate."
+        )
+        return None
+    records = list(active.values())
+    matching = [
+        r
+        for r in records
+        if r.ontology_version == ontology_version or r.ontology_version.endswith(f"@{ontology_version}")
+    ]
+    if not matching and len(records) == 1:
+        matching = records
+        print(
+            f"warning: no mapping for ontology {ontology_version}; using {records[0].model} "
+            f"(for {records[0].ontology_version})"
         )
     if not matching:
         print(f"warning: no mapping for ontology {ontology_version}; mentions are not extracted")
         return None
-    return resolution_config(matching[0])
+    chosen = matching[0]
+    print(f"mapping: {chosen.model} version {chosen.version} ({chosen.content_hash[:12]})")
+    return resolution_config(stored.mapping_of(chosen))
 
 
 def source_uri(source: Any, connector: Any) -> str:
@@ -335,6 +365,62 @@ def evaluate_main(args: Any) -> int:
         truth.close()
     print(harness.summary_table(record))
     return 0
+
+
+def baseline_main(args: Any) -> int:
+    """``baseline``: 0 if recorded or the same, 1 if the crawl differs, 2 if it could not run."""
+    import json
+
+    from helios_core.config import impala_config
+    from helios_core.engines.impala import ImpalaEngine
+    from helios_core.index import impala_index_store, runs
+
+    from . import baseline
+
+    config, index = impala_config(), impala_index_store()
+    if config is None or index is None:
+        print("Impala is not configured (IMPALA_HOST, WORKLOAD_USER, WORKLOAD_PASSWORD).")
+        return 2
+    path = Path(args.file)
+    recorded = json.loads(path.read_text()) if args.action == "check" else {}
+    source = args.source or recorded.get("source")
+    dataset = args.dataset or recorded.get("dataset_id")
+    strategy = recorded.get("strategy", "deterministic")
+    candidates = [
+        r
+        for r in runs.runs(index)
+        if r.status == "SUCCEEDED"
+        and (r.crawl_run_id == args.run if args.run else r.source == source)
+        and (args.run or str((r.settings or {}).get("strategy") or "deterministic") == strategy)
+    ]
+    if not candidates:
+        print("No successful crawl run matches (give --run, or --source).")
+        return 2
+    run = candidates[0]
+    truth = ImpalaEngine(config).connect() if dataset else None
+    try:
+        current = baseline.fingerprint(
+            index, run, truth_cursor=truth.cursor if truth else None, dataset_id=dataset
+        )
+    finally:
+        if truth is not None:
+            truth.close()
+    if args.action == "record":
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(current, indent=2, sort_keys=True) + "\n")
+        print(f"recorded {run.crawl_run_id} ({run.crawler_version}) to {path}")
+        return 0
+    differences = baseline.compare(recorded, current)
+    print(
+        f"{run.crawl_run_id} ({run.crawler_version}) against the baseline from "
+        f"{recorded['recorded_from']['crawl_run_id']} ({recorded['recorded_from']['crawler_version']})"
+    )
+    for line in differences:
+        print(f"  DIFFERENT  {line}")
+    if not differences:
+        tables = ", ".join(f"{t['rows']} {name}" for name, t in current["tables"].items())
+        print(f"  SAME  {tables}" + ("; scorecard identical" if "scorecard" in current else ""))
+    return 1 if differences else 0
 
 
 if __name__ == "__main__":

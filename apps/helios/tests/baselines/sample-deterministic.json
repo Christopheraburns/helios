@@ -1,0 +1,57 @@
+{
+  "counts": {
+    "cases": 4,
+    "cases_queried": 4,
+    "cases_resolved": 2,
+    "claim_evidence": 7,
+    "claims": 5,
+    "claims_unanchored": 2,
+    "entities": 18,
+    "links_possible": 6,
+    "links_sameas": 50,
+    "listed": 7,
+    "mentions": 58,
+    "relationships": 51,
+    "segments": 13
+  },
+  "source": "ds-1",
+  "strategy": "deterministic",
+  "tables": {
+    "assets": {
+      "rows": 7,
+      "sha256": "4ff446544fc2115d31ad267bb8445993160c21a20f2b39b5a58973f1b0193b2b"
+    },
+    "claim_evidence": {
+      "rows": 7,
+      "sha256": "339d2504be371d9b5748760731ecf37ef5e312c51a43e035de7b2928fba5b1c4"
+    },
+    "claims": {
+      "rows": 5,
+      "sha256": "6bac945ab4d7c8bee5b1c9554ea11187afc3fa521e3eb412a8a8a13e19635101"
+    },
+    "entities": {
+      "rows": 18,
+      "sha256": "66bf1af397d9e7663a33397018427c73a36ab7a3b8b76a7c261883364cdb7b40"
+    },
+    "entity_links": {
+      "rows": 56,
+      "sha256": "f92ea2c4a124e554371c2e0d02b681b5a6c918567866a4a7d52a07c703038a4d"
+    },
+    "mentions": {
+      "rows": 58,
+      "sha256": "b7f4c503a858a4a8bfa80f686dac91171e55ccbbbb8b24625106fe4107f21ffd"
+    },
+    "relationships": {
+      "rows": 51,
+      "sha256": "c26e27021d14b31d71d79feb8ed18ef553165aad65b073796e8ccd5dbd06e02d"
+    },
+    "segments": {
+      "rows": 13,
+      "sha256": "660dad120d50ad1baacb0bdf7f70fce5d17f444e26ea4ec2173c68855785f511"
+    }
+  },
+  "warehouse_queries": {
+    "count": 4,
+    "sha256": "dd8a2e72ccb2c1f7eec9715a3001e739f42fa1259923a9b309e1deff176dee82"
+  }
+}

@@ -28,18 +28,15 @@ from helios_core.index.records import AssetRecord, MentionRecord
 
 from .gazetteer import Gazetteer, normalise
 
-MAX_HUB_ASSETS = 6  # a weak identifier in more assets than this marks no single case
-DATE_FORMATS = ("%B %d, %Y", "%Y-%m-%d", "%b %d, %Y", "%d %B %Y")
-
-
-def parse_date(value: str | None) -> date | None:
-    """A date from the text ("June 14, 2001") or an ISO timestamp; None otherwise."""
+def parse_date(value: str | None, formats: Iterable[str] = ()) -> date | None:
+    """A date written in one of ``formats`` (the settings' ``date_formats``), or
+    an ISO date or timestamp; None otherwise."""
     if not value:
         return None
     text = str(value).strip()
     if re.match(r"^\d{4}-\d{2}-\d{2}", text):
         return date.fromisoformat(text[:10])
-    for pattern in DATE_FORMATS:
+    for pattern in formats:
         try:  # a calendar date in a document: no time zone to attach
             return datetime.strptime(text, pattern).date()  # noqa: DTZ007
         except ValueError:
@@ -62,6 +59,15 @@ class Rules:
         self.labels: dict[str, LabelRule] = {r.label.lower(): r for r in settings.pdf_labels}
         self.strong = list(settings.cases.identifiers)
         self.window = settings.cases.date_window_days
+        self.max_hub = settings.cases.max_hub_documents
+        self.date_formats = tuple(settings.date_formats)
+        self.tuning = settings.resolution
+        self.about = settings.about
+
+    def key_name(self, pattern: str) -> str:
+        """The key a document identifier found by ``pattern`` is stored under."""
+        rule = self.patterns.get(pattern)
+        return (rule.key_name if rule is not None else None) or pattern
 
     def label_of(self, mention: MentionRecord) -> LabelRule | None:
         detail = mention.extractor_detail
@@ -129,14 +135,14 @@ def asset_dates(
     date its text mentions."""
     dates: dict[str, date] = {}
     for asset in assets:
-        parsed = parse_date(asset.semantic_timestamp)
+        parsed = parse_date(asset.semantic_timestamp, rules.date_formats)
         if parsed is not None:
             dates[asset.asset_id] = parsed
     mentioned: dict[str, list[date]] = defaultdict(list)
     for mention in mentions:
         rule = rules.pattern_of(mention)
         if rule is not None and rule.kind == "value":
-            parsed = parse_date(mention.surface_form)
+            parsed = parse_date(mention.surface_form, rules.date_formats)
             if parsed is not None:
                 mentioned[mention.asset_id].append(parsed)
     for asset_id, found in mentioned.items():
@@ -185,7 +191,7 @@ def cluster_assets(
         if identifier.strong:
             for other in ordered[1:]:
                 uf.union(ordered[0], other)
-        elif len(ordered) <= MAX_HUB_ASSETS:
+        elif len(ordered) <= rules.max_hub:
             for i, a in enumerate(ordered):
                 for b in ordered[i + 1 :]:
                     if (

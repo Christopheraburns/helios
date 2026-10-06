@@ -7,8 +7,7 @@ import duckdb
 import pytest
 from apps.helios.crawler.connectors import HeliosDsConnector, object_reader
 from apps.helios.crawler.crawl import crawl
-from crawler_samples import chat_bytes, email_bytes, pdf_bytes
-from helios_core.crawler.settings import DEFAULT_SETTINGS
+from crawler_samples import RETAIL_SETTINGS, chat_bytes, email_bytes, pdf_bytes
 from helios_core.index import runs
 from helios_core.index.store import duckdb_index_store
 
@@ -64,7 +63,7 @@ def index():
     return store
 
 
-def _crawl(index, connector, analyze=None, full=False, settings=DEFAULT_SETTINGS):
+def _crawl(index, connector, analyze=None, full=False, settings=RETAIL_SETTINGS):
     return crawl(
         index,
         connector,
@@ -108,7 +107,7 @@ def test_second_crawl_carries_assets_and_segments_forward(corpus, index):
     first = _crawl(index, connector, analyze=_seen(seen))
     assert first.status == "SUCCEEDED"
     assert first.counts["listed"] == 3 and first.counts["analyzed"] == 3
-    assert first.settings_hash == DEFAULT_SETTINGS.content_hash()
+    assert first.settings_hash == RETAIL_SETTINGS.content_hash()
     assert seen == ["a-pdf", "b-email", "c-chat"]
 
     seen.clear()
@@ -139,7 +138,7 @@ def test_changed_settings_reanalyze_unchanged_assets(corpus, index):
 
     connector, _ = corpus
     _crawl(index, connector)
-    doc = DEFAULT_SETTINGS.model_dump(mode="json")
+    doc = RETAIL_SETTINGS.model_dump(mode="json")
     doc["analyzers"]["pdf"]["max_pages"] = 5
     changed = _crawl(index, connector, settings=CrawlerSettings.model_validate(doc))
     assert changed.counts["analyzed"] == 3 and "carried_forward" not in changed.counts

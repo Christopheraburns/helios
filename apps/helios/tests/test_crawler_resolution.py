@@ -18,9 +18,9 @@ from apps.helios.crawler.connectors import SourceAsset
 from apps.helios.crawler.crawl import segment_rows
 from apps.helios.crawler.gazetteer import Gazetteer
 from apps.helios.crawler.mentions import extract_mentions
-from apps.helios.crawler.resolution import JointSchema, build_query, gather_constraints, resolve
-from crawler_samples import chat_bytes, pdf_bytes
-from helios_core.crawler.settings import DEFAULT_SETTINGS
+from apps.helios.crawler.anchors import plans
+from apps.helios.crawler.resolution import build_query, gather_constraints, resolve
+from crawler_samples import RETAIL_SETTINGS, chat_bytes, pdf_bytes
 from helios_core.index import ids
 from helios_core.index.records import AssetRecord, CrawlRunRecord
 from helios_core.ontology.mapping import load_mapping, resolution_config
@@ -288,12 +288,12 @@ def read_assets(run, gazetteer, names=None):
         asset = SourceAsset(
             asset_id=asset_id, source="ds-1", mime_type=mime, locator={}, version=f"v-{asset_id}"
         )
-        analysis = analyze_asset(mime, data, DEFAULT_SETTINGS)
+        analysis = analyze_asset(mime, data, RETAIL_SETTINGS)
         assert analysis.status == "analyzed", analysis.detail
         own = segment_rows(run, asset, analysis.segments)
         assets.append(_asset_record(run, asset))
         segments += own
-        mentions += extract_mentions(run, asset, own, DEFAULT_SETTINGS, gazetteer, CONFIG)
+        mentions += extract_mentions(run, asset, own, RETAIL_SETTINGS, gazetteer, CONFIG)
     return assets, segments, mentions
 
 
@@ -304,7 +304,7 @@ def warehouse():
 
 @pytest.fixture(scope="module")
 def gazetteer(warehouse):
-    return Gazetteer.build(warehouse.cursor, CONFIG, CLASSES)
+    return Gazetteer.build(warehouse.cursor, CONFIG, CLASSES, RETAIL_SETTINGS.dictionary)
 
 
 @pytest.fixture(scope="module")
@@ -312,7 +312,7 @@ def world(warehouse, gazetteer):
     run = _run()
     assets, segments, mentions = read_assets(run, gazetteer)
     result = resolve(
-        run, assets, segments, mentions, gazetteer, CONFIG, DEFAULT_SETTINGS, warehouse.cursor
+        run, assets, segments, mentions, gazetteer, CONFIG, RETAIL_SETTINGS, warehouse.cursor
     )
     return SimpleNamespace(
         run=run,
@@ -439,15 +439,15 @@ def test_the_cluster_resolves_jointly_to_one_return_and_promotes_its_aliases(wor
 def test_a_receipt_tail_constrains_the_ticket(warehouse, gazetteer):
     run = _run()
     assets, segments, mentions = read_assets(run, gazetteer, names={"a-email"})
-    rules = cases.Rules(DEFAULT_SETTINGS)
+    rules = cases.Rules(RETAIL_SETTINGS)
     reader = resolution.Reader(gazetteer, CONFIG, rules)
     readings = list(resolution.read_all(mentions, reader).values())
     constraints = gather_constraints(readings)
-    assert constraints.tails == {"5079"} and not constraints.tickets
+    assert constraints.lookups == {("sr_ticket_number", "ends_with"): {"5079"}}  # a tail, no full number
     assert constraints.instances["Customer"] == {CUSTOMER[2]}
     assert constraints.instances["Item"] == {ITEM[11], ITEM[12]}
-    schema = JointSchema.from_config(CONFIG)
-    sql, params = build_query(schema, constraints)
+    [plan] = plans(CONFIG)
+    sql, params = build_query(plan, constraints)
     assert "MOD(r.sr_ticket_number, ?) = ?" in sql
     assert "r.sr_customer_sk IN (?)" in sql and "r.sr_item_sk IN (?, ?)" in sql
     assert (
@@ -459,7 +459,7 @@ def test_a_receipt_tail_constrains_the_ticket(warehouse, gazetteer):
     assert params == [2, 11, 12, 1, 10000, 5079]  # customer, the item's two versions, reason, tail
     assert "RMA" not in sql and "5079" not in sql  # document values are bound, never interpolated
     result = resolve(
-        run, assets, segments, mentions, gazetteer, CONFIG, DEFAULT_SETTINGS, warehouse.cursor
+        run, assets, segments, mentions, gazetteer, CONFIG, RETAIL_SETTINGS, warehouse.cursor
     )
     assert result.resolved == 1
     returns = [e for e in result.entities if e.ontology_class == "Return"]
@@ -504,7 +504,7 @@ def test_the_query_runs_on_the_warehouse_cursor_once_per_queryable_cluster(wareh
 
     run = _run()
     assets, segments, mentions = read_assets(run, gazetteer)
-    result = resolve(run, assets, segments, mentions, gazetteer, CONFIG, DEFAULT_SETTINGS, Cursor)
+    result = resolve(run, assets, segments, mentions, gazetteer, CONFIG, RETAIL_SETTINGS, Cursor)
     assert len(executed) == result.counts["cases_queried"] == 4
     assert all(sql.startswith("SELECT ") and sql.endswith(" LIMIT 6") for sql, _ in executed)
 
@@ -595,7 +595,7 @@ def test_ids_are_stable_across_runs(warehouse, gazetteer, world):
     run = _run("run-2")
     assets, segments, mentions = read_assets(run, gazetteer)
     again = resolve(
-        run, assets, segments, mentions, gazetteer, CONFIG, DEFAULT_SETTINGS, warehouse.cursor
+        run, assets, segments, mentions, gazetteer, CONFIG, RETAIL_SETTINGS, warehouse.cursor
     )
     assert [l.link_id for l in again.links] == [l.link_id for l in world.result.links]
     assert [e.entity_id for e in again.entities] == [e.entity_id for e in world.result.entities]
@@ -653,8 +653,8 @@ def test_crawl_writes_entities_links_and_relationships(warehouse, gazetteer, tmp
             actor="test",
             ontology_version="0.2.0",
             settings=None,
-            settings_hash=DEFAULT_SETTINGS.content_hash(),
-            crawler_settings=DEFAULT_SETTINGS,
+            settings_hash=RETAIL_SETTINGS.content_hash(),
+            crawler_settings=RETAIL_SETTINGS,
             gazetteer=gazetteer,
             resolution=CONFIG,
             warehouse_cursor=warehouse.cursor,

@@ -27,6 +27,10 @@ classes:
       ontology_version:
         description: "<pack or customer schema name>@<version> this mapping targets."
         required: true
+      database:
+        description: >-
+          The warehouse database (schema) the mapped tables are in. When absent it is
+          taken from the model's name up to its first dot.
       entities:
         range: EntityMapping
         multivalued: true
@@ -42,6 +46,13 @@ classes:
       resolution:
         range: ResolutionConfig
         inlined: true
+      anchors:
+        description: >-
+          Classes whose warehouse row a group of documents (a case) is about, and how
+          the crawler finds that row. See Anchor.
+        range: Anchor
+        multivalued: true
+        inlined_as_list: true
 
   EntityMapping:
     attributes:
@@ -137,3 +148,105 @@ classes:
         range: float
       model_assisted_min_confidence:
         range: float
+
+  Anchor:
+    description: >-
+      A class whose warehouse row a case's documents describe. The crawler builds one
+      bounded query from it: the anchor's table, its related records, the tables of
+      colocated classes and the date tables, constrained by what the documents say.
+    attributes:
+      class:
+        description: The anchor's ontology class; it must have an entity mapping.
+        required: true
+      lookups:
+        range: AnchorLookup
+        multivalued: true
+        inlined_as_list: true
+      joins:
+        range: AnchorJoin
+        multivalued: true
+        inlined_as_list: true
+      colocated:
+        range: ColocatedClass
+        multivalued: true
+        inlined_as_list: true
+      date:
+        range: DateSource
+        inlined: true
+      related:
+        range: RelatedRecord
+        multivalued: true
+        inlined_as_list: true
+      row_limit:
+        description: More consistent rows than this settle nothing.
+        range: integer
+      min_constraint_kinds:
+        description: Kinds of evidence a case needs before the warehouse is asked.
+        range: integer
+
+  AnchorLookup:
+    description: A value found in documents that constrains a column of the anchor's row.
+    attributes:
+      column:
+        required: true
+      match:
+        description: equals or ends_with.
+      type:
+        description: integer or string.
+      source_columns:
+        description: A key pattern or label feeds this lookup when it looks values up in one of these columns.
+        multivalued: true
+      identifies:
+        description: The class a mention of this value refers to when it proposes none of the case's records.
+
+  AnchorJoin:
+    description: A foreign key of a record's row, the entity it names and the relationship that makes.
+    attributes:
+      column:
+        required: true
+      class:
+        required: true
+      edge:
+        required: true
+
+  ColocatedClass:
+    description: A class living on a joined table under another key.
+    attributes:
+      via:
+        description: The joined class whose table it is on.
+        required: true
+      class:
+        required: true
+
+  DateSource:
+    description: >-
+      A record's date: a column of its table, or with table, key and value, a foreign
+      key into a date table.
+    attributes:
+      column:
+        required: true
+      table: {}
+      key: {}
+      value: {}
+
+  RelatedRecord:
+    description: Another record of the same case, joined to the anchor on key columns.
+    attributes:
+      class:
+        required: true
+      join_on:
+        description: "Pairs of [anchor column, this record's column]. (Not \"on\": YAML reads that as true.)"
+        required: true
+      edge:
+        description: Relationship from the anchor to this record.
+        required: true
+      joins:
+        range: AnchorJoin
+        multivalued: true
+        inlined_as_list: true
+      date:
+        range: DateSource
+        inlined: true
+      share_anchor_entities:
+        description: Where the anchor row names a class, this record's relationships use the anchor's entity.
+        range: boolean

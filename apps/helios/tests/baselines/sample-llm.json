@@ -1,0 +1,59 @@
+{
+  "counts": {
+    "claim_evidence": 1,
+    "claims": 1,
+    "entities": 2,
+    "links_possible": 0,
+    "links_sameas": 2,
+    "listed": 7,
+    "llm_claims": 5,
+    "llm_claims_unanchored": 3,
+    "llm_entities": 6,
+    "llm_hallucinated_spans": 2,
+    "llm_invalid_items": 1,
+    "llm_relocated": 1,
+    "mentions": 4,
+    "relationships": 3,
+    "segments": 13
+  },
+  "source": "ds-1",
+  "strategy": "llm",
+  "tables": {
+    "assets": {
+      "rows": 7,
+      "sha256": "4ff446544fc2115d31ad267bb8445993160c21a20f2b39b5a58973f1b0193b2b"
+    },
+    "claim_evidence": {
+      "rows": 1,
+      "sha256": "1f3ea782e6ca939c788acbeb8f2269e22ad6b2c105d0ec1a7272f45d781f129f"
+    },
+    "claims": {
+      "rows": 1,
+      "sha256": "9a81a07bae6caba2c416a3ee55d4eab5622ce7e0fef2d22f239db624d3e57db2"
+    },
+    "entities": {
+      "rows": 2,
+      "sha256": "e0639540e183c520bc89540e689be4ed44484241aff0b508bc78ef68db3451d3"
+    },
+    "entity_links": {
+      "rows": 2,
+      "sha256": "8df25983f0907723c682e938117131c5e28f82b346add305456b3477e1fafd2f"
+    },
+    "mentions": {
+      "rows": 4,
+      "sha256": "a743e5c961d92617168bc023722f35798b201ef24e1d0c3fd98bc2071d74a155"
+    },
+    "relationships": {
+      "rows": 3,
+      "sha256": "3a1d5056e4dd2e41e78f6b5559dfd35940344223a3a5ce1d96ed1ec3b111b96d"
+    },
+    "segments": {
+      "rows": 13,
+      "sha256": "660dad120d50ad1baacb0bdf7f70fce5d17f444e26ea4ec2173c68855785f511"
+    }
+  },
+  "warehouse_queries": {
+    "count": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

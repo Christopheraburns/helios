@@ -43,18 +43,8 @@ from helios_core.ontology.mapping import ResolutionConfig
 from .connectors import SourceAsset
 from .gazetteer import KIND_RANK, Gazetteer, GazetteerHit, normalise
 
-CUE_WINDOW = 40  # characters either side of a low-specificity name
-_TPCDS_ID = r"(?-i:\b[A-P]{16}\b)"
-_EMAIL = r"\b[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}\b"
-_SALUTATION = r"\b(?:mr|mrs|ms|miss|dr|sir|madam|prof)\b\.?"
-# Context that makes a low-specificity name count, per class. Classes without a
-# rule (Reason, Brand: their forms are multi-word) always count.
-CUES: dict[str, re.Pattern[str]] = {
-    "Store": re.compile(rf"\b(?:store|at)\b|\(#|#|{_TPCDS_ID}", re.IGNORECASE),
-    "Item": re.compile(rf"\b(?:item|product)\b|\(\s*{_TPCDS_ID}", re.IGNORECASE),
-    "Customer": re.compile(rf"{_SALUTATION}|{_EMAIL}", re.IGNORECASE),
-}
-FAR = CUE_WINDOW + 1  # "no cue in the window"
+# Context that makes a low-specificity name count comes from the settings
+# (``class_cues``, ``cue_window``). A class with no cues always counts.
 
 
 @dataclass(frozen=True)
@@ -82,34 +72,48 @@ def _phrase(phrase: str) -> re.Pattern[str]:
 # --- cues ----------------------------------------------------------------------------
 
 
-def cue_distance(text: str, start: int, end: int, class_name: str) -> int:
+def far(settings: CrawlerSettings) -> int:
+    """The distance that means "no cue in the window"."""
+    return settings.cue_window + 1
+
+
+def cue_distance(
+    text: str, start: int, end: int, class_name: str, settings: CrawlerSettings
+) -> int:
     """Characters between the span and the nearest cue for ``class_name``: 0 for
-    classes without cues or for a composite name carrying its own ("Mrs. Raymond");
-    ``FAR`` when none is within the window."""
-    cue = CUES.get(class_name)
+    classes without cues or for a composite name carrying its own (a title
+    before a surname); ``far(settings)`` when none is within the window."""
+    cue = settings.cue_pattern(class_name)
     if cue is None:
         return 0
-    before = text[max(0, start - CUE_WINDOW) : start]
-    after = text[end : end + CUE_WINDOW]
+    window = settings.cue_window
+    before = text[max(0, start - window) : start]
+    after = text[end : end + window]
     distances = [len(before) - m.end() for m in cue.finditer(before)]
     distances += [m.start() for m in cue.finditer(after)]
     inner = text[start:end]
     if any(m.group() != inner for m in cue.finditer(inner)):
         distances.append(0)
-    return min(distances, default=FAR)
+    return min(distances, default=far(settings))
 
 
-def _nearest_class(text: str, start: int, end: int, candidates: list[str]) -> str:
+def _nearest_class(
+    text: str, start: int, end: int, candidates: list[str], settings: CrawlerSettings
+) -> str:
     """The candidate with the nearest cue; ties keep the candidates' order."""
-    return min(candidates, key=lambda c: (cue_distance(text, start, end, c), candidates.index(c)))
+    return min(
+        candidates,
+        key=lambda c: (cue_distance(text, start, end, c, settings), candidates.index(c)),
+    )
 
 
 # --- the extractors ------------------------------------------------------------------
 
 
 def _patterns(
-    text: str, rules: Iterable[PatternRule], gazetteer: Gazetteer, column_classes: dict[str, str]
+    text: str, settings: CrawlerSettings, gazetteer: Gazetteer, column_classes: dict[str, str]
 ) -> Iterator[Found]:
+    rules: Iterable[PatternRule] = settings.patterns
     for rule in rules:
         for match in _compiled(rule.regex, rule.ignore_case).finditer(text):
             value = match.group(rule.group)
@@ -130,14 +134,14 @@ def _patterns(
                         {column_classes[c] for c in rule.columns if c in column_classes}
                     )
                     owners = owners if len(owners) == 1 else []
-                proposed = _nearest_class(text, start, end, owners) if owners else None
+                proposed = _nearest_class(text, start, end, owners, settings) if owners else None
             yield Found(
                 start, end, value, proposed, "pattern", rule.name, forms.get(proposed or "", ())
             )
 
 
 def _gazetteer(
-    text: str, gazetteer: Gazetteer, classes: set[str]
+    text: str, gazetteer: Gazetteer, classes: set[str], settings: CrawlerSettings
 ) -> tuple[list[Found], list[list[Found]]]:
     """(accepted, deferred): one accepted hit per span, or, for a low-specificity
     name with no cue, its candidates in order of preference, which count only
@@ -156,18 +160,22 @@ def _gazetteer(
             deferred.append([_hit_found(h) for h in sorted(partial, key=lambda h: len(h.instances))])
         if not whole:
             continue
-        ranked = sorted(whole, key=lambda h: _rank(text, start, end, h))
-        if _rank(text, start, end, ranked[0])[0] >= FAR:
+        ranked = sorted(whole, key=lambda h: _rank(text, start, end, h, settings))
+        if _rank(text, start, end, ranked[0], settings)[0] >= far(settings):
             deferred.append([_hit_found(h) for h in ranked])
         else:
             accepted.append(_hit_found(ranked[0]))
     return accepted, deferred
 
 
-def _rank(text: str, start: int, end: int, hit: GazetteerHit) -> tuple[int, int, int, str]:
+def _rank(
+    text: str, start: int, end: int, hit: GazetteerHit, settings: CrawlerSettings
+) -> tuple[int, int, int, str]:
     """Preference among the classes one span may name: nearest cue (for
     low-specificity names), most specific kind, fewest instances."""
-    distance = cue_distance(text, start, end, hit.class_name) if hit.low_specificity else 0
+    distance = (
+        cue_distance(text, start, end, hit.class_name, settings) if hit.low_specificity else 0
+    )
     return (distance, KIND_RANK[hit.kind], len(hit.instances), hit.class_name)
 
 
@@ -269,18 +277,28 @@ def _pdf_structure(
                 )
 
 
-def _email_header(
-    segment: SegmentRecord, classes: set[str], gazetteer: Gazetteer
+def _header(
+    segment: SegmentRecord, classes: set[str], gazetteer: Gazetteer, settings: CrawlerSettings
 ) -> Iterator[Found]:
-    name = str(segment.structure.get("display_name") or "").strip()
-    if name and "Customer" in classes:
+    """Entities a header names by rule (``header_rules``): the value of a field
+    the analyzer recognised, as an instance of the rule's class."""
+    for rule in settings.header_rules:
+        name = str(segment.structure.get(rule.field) or "").strip()
+        if not name or rule.proposed_class not in classes:
+            continue
         at = segment.text.find(name)
         if at >= 0:
             header = segment.locator.get("header", "")
-            form = gazetteer.forms.get(("Customer", normalise(name)))
+            form = gazetteer.forms.get((rule.proposed_class, normalise(name)))
             instances = form.instances if form is not None and not form.partial else ()
             yield Found(
-                at, at + len(name), name, "Customer", "pattern", f"header:{header}", instances
+                at,
+                at + len(name),
+                name,
+                rule.proposed_class,
+                "pattern",
+                f"header:{header}",
+                instances,
             )
 
 
@@ -344,10 +362,10 @@ def segment_mentions(
     if segment.segment_type == "page":
         structured = list(_pdf_structure(text, segment.structure, labels, gazetteer))
     elif segment.segment_type == "email_header":
-        structured = list(_email_header(segment, classes, gazetteer))
+        structured = list(_header(segment, classes, gazetteer, settings))
     patterns = [f for f in structured if f.extractor == "pattern"]
-    patterns += list(_patterns(text, settings.patterns, gazetteer, column_classes))
-    accepted, deferred = _gazetteer(text, gazetteer, classes)
+    patterns += list(_patterns(text, settings, gazetteer, column_classes))
+    accepted, deferred = _gazetteer(text, gazetteer, classes, settings)
     labelled = [f for f in structured if f.extractor == "gazetteer"]
     settled = {(f.start, f.end) for f in labelled}  # a label decides its span's class
     accepted = labelled + [f for f in accepted if (f.start, f.end) not in settled]
@@ -431,7 +449,6 @@ def extract_mentions(
 
 
 __all__ = [
-    "CUES",
     "Found",
     "anchored_instances",
     "cue_distance",

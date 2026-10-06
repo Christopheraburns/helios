@@ -231,6 +231,33 @@ class CrawlerSettingsActivationRecord(BaseModel):
     activated_by: str
 
 
+# --- source mappings (CG-6) -----------------------------------------------------------
+
+
+class MappingRecord(BaseModel):
+    """An immutable version of a source-to-ontology mapping
+    (helios_core.ontology.mapping.SourceMapping)."""
+
+    version: int = Field(description="1, 2, 3, ... in order of saving, across all models")
+    model: str = Field(description="The semantic model the mapping binds, e.g. tpcds.ossie.yaml")
+    ontology_version: str = Field(description="The ontology schema it targets, e.g. helios_retail@0.2.0")
+    content_hash: str
+    mapping_json: str = Field(description="The SourceMapping document, canonical JSON")
+    created_at: str
+    created_by: str
+    note: str = ""
+
+
+class MappingActivationRecord(BaseModel):
+    """Append-only: per model, the latest row is the mapping version crawls use."""
+
+    version: int
+    model: str
+    content_hash: str
+    activated_at: str
+    activated_by: str
+
+
 # --- evaluations (CR-8 / CR-E1) ------------------------------------------------------
 
 

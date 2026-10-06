@@ -2,8 +2,8 @@
 
 import pytest
 from apps.helios.crawler.analyzers import analyze_asset, detect
-from crawler_samples import REPORT_LINES, chat_bytes, email_bytes, pdf_bytes
-from helios_core.crawler.settings import DEFAULT_SETTINGS, CrawlerSettings
+from crawler_samples import RETAIL_SETTINGS, REPORT_LINES, chat_bytes, email_bytes, pdf_bytes
+from helios_core.crawler.settings import CrawlerSettings
 
 
 def test_detect_uses_the_bytes_not_the_declared_type():
@@ -14,7 +14,7 @@ def test_detect_uses_the_bytes_not_the_declared_type():
 
 
 def test_email_segments_header_subject_and_body_with_lf_line_endings():
-    result = analyze_asset("message/rfc822", email_bytes(), DEFAULT_SETTINGS)
+    result = analyze_asset("message/rfc822", email_bytes(), RETAIL_SETTINGS)
     assert result.status == "analyzed"
     header, subject, body = result.segments
     assert header.locator == {"header": "From"}
@@ -26,19 +26,19 @@ def test_email_segments_header_subject_and_body_with_lf_line_endings():
 
 
 def test_chat_has_one_segment_per_message_with_sender_and_role():
-    result = analyze_asset("application/json", chat_bytes(), DEFAULT_SETTINGS)
+    result = analyze_asset("application/json", chat_bytes(), RETAIL_SETTINGS)
     assert [s.locator for s in result.segments] == [
         {"message_id": "msg-1"},
         {"message_id": "msg-2"},
     ]
     assert result.segments[1].fields["role"] == "inspector"
     assert result.segments[1].text == "Box was crushed, the item has dents."
-    unknown = analyze_asset("application/json", chat_bytes("other/1"), DEFAULT_SETTINGS)
+    unknown = analyze_asset("application/json", chat_bytes("other/1"), RETAIL_SETTINGS)
     assert unknown.status == "invalid" and "not accepted" in unknown.detail
 
 
 def test_pdf_pages_with_label_values_and_a_table():
-    result = analyze_asset("application/pdf", pdf_bytes(), DEFAULT_SETTINGS)
+    result = analyze_asset("application/pdf", pdf_bytes(), RETAIL_SETTINGS)
     assert result.status == "analyzed"
     [page] = result.segments
     assert page.locator == {"page": 1}
@@ -66,11 +66,11 @@ def test_pdf_pages_with_label_values_and_a_table():
     ],
 )
 def test_wrong_or_unsupported_types_are_recorded_not_guessed(mime, data, status):
-    assert analyze_asset(mime, data, DEFAULT_SETTINGS).status == status
+    assert analyze_asset(mime, data, RETAIL_SETTINGS).status == status
 
 
 def test_disabled_analyzers_and_page_limits_follow_the_settings():
-    doc = DEFAULT_SETTINGS.model_dump(mode="json")
+    doc = RETAIL_SETTINGS.model_dump(mode="json")
     doc["analyzers"]["chat"]["enabled"] = False
     doc["analyzers"]["pdf"]["max_pages"] = 1
     settings = CrawlerSettings.model_validate(doc)

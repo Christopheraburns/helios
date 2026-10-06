@@ -1367,9 +1367,18 @@ export interface CrawlerSettingsVersion {
   active: boolean;
 }
 
+/** A shipped set of crawler rules for one kind of data. */
+export interface CrawlerSettingsPreset {
+  name: string;
+  title: string;
+  description: string;
+}
+
 export interface CrawlerSettingsState {
   active_version: number | null;
   using_defaults: boolean;
+  /** No rules at all (nothing active, or an empty version): crawls find very little. */
+  empty?: boolean;
   content_hash: string;
   settings: Record<string, unknown>;
   versions: CrawlerSettingsVersion[];
@@ -1488,6 +1497,10 @@ export interface HeliosApi {
   crawlerEvaluations?(dataset?: string): Promise<CrawlEvaluation[]>;
   crawlerSettings?(): Promise<CrawlerSettingsState>;
   crawlerSettingsDefaults?(): Promise<{ content_hash: string; settings: Record<string, unknown> }>;
+  crawlerSettingsPresets?(): Promise<CrawlerSettingsPreset[]>;
+  crawlerSettingsPreset?(
+    name: string,
+  ): Promise<CrawlerSettingsPreset & { content_hash: string; settings: Record<string, unknown> }>;
   crawlerSettingsVersion?(
     version: number,
   ): Promise<CrawlerSettingsVersion & { settings: Record<string, unknown> }>;
@@ -1851,6 +1864,16 @@ export class HeliosApiClient implements HeliosApi {
 
   crawlerSettings(): Promise<CrawlerSettingsState> {
     return this.get<CrawlerSettingsState>("/api/v1/crawler/settings");
+  }
+
+  crawlerSettingsPresets(): Promise<CrawlerSettingsPreset[]> {
+    return this.get("/api/v1/crawler/settings/presets");
+  }
+
+  crawlerSettingsPreset(
+    name: string,
+  ): Promise<CrawlerSettingsPreset & { content_hash: string; settings: Record<string, unknown> }> {
+    return this.get(`/api/v1/crawler/settings/presets/${encodeURIComponent(name)}`);
   }
 
   crawlerSettingsDefaults(): Promise<{ content_hash: string; settings: Record<string, unknown> }> {

@@ -8,6 +8,13 @@ crawl run records the version it used.
 
 Identity rules (how each class is identified, alias templates, thresholds) are
 not here: they belong to the published ontology mapping.
+
+**Schema 2 (CG-1): the engine has no rules of its own.** ``CrawlerSettings()`` is
+an empty document: no patterns, labels, phrases, case identifiers or claim cues.
+Rules for a kind of data come from a *preset* (``presets/*.yaml``), which is a
+complete settings document a user loads, edits and saves as a version. Until
+schema 2 one such set was built in; a stored schema 1 document is read as that
+set plus whatever the document itself says.
 """
 
 from __future__ import annotations
@@ -15,11 +22,16 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from typing import Literal
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Literal
+
+import yaml
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
+PRESETS = Path(__file__).parent / "presets"
 
 
 class _Model(BaseModel):
@@ -95,18 +107,22 @@ class PatternRule(_Model):
         None, description="Ontology class, if known from the pattern"
     )
     columns: list[str] = Field(
-        default_factory=list, description="TPC-DS columns to look the value up in"
+        default_factory=list, description="Warehouse columns to look the value up in"
     )
     ignore_case: bool = False
+    key_name: str | None = Field(
+        None,
+        pattern=r"^[a-z][a-z0-9_]*$",
+        description=(
+            "For a document_id pattern: the name of the key in the entity's document "
+            "identifier (documents.<class>:<key_name>=<value>). Default: the pattern's name."
+        ),
+    )
 
     @field_validator("regex")
     @classmethod
     def _compiles(cls, value: str) -> str:
-        try:
-            re.compile(value)
-        except re.error as exc:
-            raise ValueError(f"not a valid regular expression: {exc}") from exc
-        return value
+        return _valid_regex(value)
 
     @model_validator(mode="after")
     def _group_exists(self) -> PatternRule:
@@ -127,17 +143,77 @@ class LabelRule(_Model):
     kind: Literal["key", "display", "document_id", "value"] = "key"
 
 
+def _valid_regex(value: str) -> str:
+    try:
+        re.compile(value)
+    except re.error as exc:
+        raise ValueError(f"not a valid regular expression: {exc}") from exc
+    return value
+
+
+class HeaderRule(_Model):
+    """A recognised header field whose value names an entity of a class: the
+    display name on an email's From line names a person of ``proposed_class``."""
+
+    field: str = Field(min_length=1, description="Field of the header's structure, e.g. display_name")
+    proposed_class: str = Field(min_length=1)
+
+
+class Dictionary(_Model):
+    """How the dictionary built from the warehouse judges a name (step 5b). A
+    low-specificity name counts only next to a cue for its class, or when the
+    document confirms it elsewhere."""
+
+    ordinary_words: list[str] = Field(
+        default_factory=list,
+        description="Words that are names in the warehouse and also ordinary text",
+    )
+    short_token: int = Field(5, ge=1, description="A single word shorter than this is not a name alone")
+    max_shared_instances: int = Field(
+        50, ge=1, description="A name shared by more rows than this is not specific"
+    )
+    max_form_tokens: int = Field(12, ge=1, description="Longer values are not names")
+
+
+class About(_Model):
+    """What a document is about when no case settles it (step 11)."""
+
+    title_segments: list[str] = Field(
+        default_factory=lambda: ["email_subject"],
+        description="Segment types that are a document's title; an entity named there wins",
+    )
+    class_priority: list[str] = Field(
+        default_factory=list, description="Classes in order of preference; unlisted come last"
+    )
+
+
+class ResolutionRules(_Model):
+    """Tuning of single-mention resolution (step 10). Tier thresholds are in the mapping."""
+
+    max_candidates: int = Field(20, ge=1, description="A name shared by more rows is not resolved")
+    close: float = Field(0.05, ge=0, le=1, description="A runner-up this close blocks a definite link")
+    low_specificity_factor: float = Field(
+        0.5, ge=0, le=1, description="Score factor for an ordinary-word name"
+    )
+    top_possible: int = Field(3, ge=1, description="How many possible links to keep")
+
+
 class CaseLinking(_Model):
     """Which identifiers join documents into one case (step 7)."""
 
-    identifiers: list[str] = Field(description="Pattern names whose values link documents")
+    identifiers: list[str] = Field(
+        default_factory=list, description="Pattern names whose values link documents"
+    )
     date_window_days: int = Field(30, ge=0, le=3650)
+    max_hub_documents: int = Field(
+        6, ge=1, description="A weak identifier in more documents than this marks no single case"
+    )
 
 
 class Claims(_Model):
     """Cue lexicons per claim predicate (step 12)."""
 
-    cues: dict[str, list[str]]
+    cues: dict[str, list[str]] = Field(default_factory=dict)
     negations: list[str] = Field(default_factory=list)
     hedges: list[str] = Field(default_factory=list)
 
@@ -150,11 +226,9 @@ class LlmExtraction(_Model):
 
     prompt_version: str = Field("llm-1", pattern=r"^[A-Za-z0-9._-]{1,40}$")
     instructions: str = Field(
-        "You read retail customer-service documents (emails, chat threads and PDF "
-        "return reports) and list what they mention.\n"
-        "- List every reference to an entity of the classes below: names, IDs, email "
-        "addresses, ticket, case and return-authorization numbers, and phrases such as "
-        "\"the item\" or \"this return\".\n"
+        "You read documents and list what they mention.\n"
+        "- List every reference to an entity of the classes below: names, identifiers, "
+        "and phrases that refer to one.\n"
         "- Quote each reference exactly as it appears, character for character, and "
         "keep the quote as short as the reference itself.\n"
         "- List a claim only when the text states it. Its quote is the sentence or "
@@ -177,16 +251,56 @@ class LlmExtraction(_Model):
 
 
 class CrawlerSettings(_Model):
-    schema_version: Literal["1"] = SCHEMA_VERSION
+    schema_version: Literal["2"] = SCHEMA_VERSION
     analyzers: Analyzers = Field(default_factory=Analyzers)
-    patterns: list[PatternRule]
+    patterns: list[PatternRule] = Field(default_factory=list)
     pdf_labels: list[LabelRule] = Field(default_factory=list)
     contextual: dict[str, list[str]] = Field(
         default_factory=dict, description="Ontology class -> definite phrases referring to it"
     )
-    cases: CaseLinking
-    claims: Claims
+    class_cues: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description=(
+            "Ontology class -> regular expressions (case-insensitive) that, near a "
+            "low-specificity name, confirm it names that class. A class with none always counts."
+        ),
+    )
+    cue_window: int = Field(40, ge=1, le=1000, description="Characters either side of a name")
+    header_rules: list[HeaderRule] = Field(default_factory=list)
+    dictionary: Dictionary = Field(default_factory=Dictionary)
+    date_formats: list[str] = Field(
+        default_factory=lambda: ["%Y-%m-%d"], description="strptime formats for dates in text"
+    )
+    about: About = Field(default_factory=About)
+    resolution: ResolutionRules = Field(default_factory=ResolutionRules)
+    cases: CaseLinking = Field(default_factory=CaseLinking)
+    claims: Claims = Field(default_factory=Claims)
     llm: LlmExtraction = Field(default_factory=LlmExtraction)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_schema_1(cls, data: Any) -> Any:
+        """A schema 1 document relied on rules that were built in. Read it as
+        those rules with the document's own sections on top."""
+        if isinstance(data, dict) and data.get("schema_version") == "1":
+            legacy = schema_1_defaults()
+            merged = {**legacy, **data, "schema_version": SCHEMA_VERSION}
+            # Per-pattern values that the code used to decide from the pattern's name.
+            by_name = {p["name"]: p for p in legacy.get("patterns", [])}
+            merged["patterns"] = [
+                {**{k: v for k, v in by_name.get(p.get("name"), {}).items() if k == "key_name"}, **p}
+                for p in merged.get("patterns", [])
+            ]
+            return merged
+        return data
+
+    def is_empty(self) -> bool:
+        """No rules at all: a crawl with these settings finds only what the
+        warehouse dictionary names."""
+        return not (
+            self.patterns or self.pdf_labels or self.contextual or self.cases.identifiers
+            or self.claims.cues or self.class_cues or self.header_rules
+        )
 
     @model_validator(mode="after")
     def _consistent(self) -> CrawlerSettings:
@@ -197,7 +311,18 @@ class CrawlerSettings(_Model):
         unknown = sorted(set(self.cases.identifiers) - set(names))
         if unknown:
             raise ValueError(f"cases.identifiers name unknown patterns: {unknown}")
+        for class_name, cues in self.class_cues.items():
+            for cue in cues:
+                try:
+                    _valid_regex(cue)
+                except ValueError as exc:
+                    raise ValueError(f"class_cues.{class_name}: {cue!r}: {exc}") from exc
         return self
+
+    def cue_pattern(self, class_name: str) -> re.Pattern[str] | None:
+        """One pattern matching any of the class's cues, or None if it has none."""
+        cues = self.class_cues.get(class_name)
+        return _cue_pattern(tuple(cues)) if cues else None
 
     def canonical_json(self) -> str:
         return json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
@@ -205,6 +330,11 @@ class CrawlerSettings(_Model):
 
     def content_hash(self) -> str:
         return hashlib.sha256(self.canonical_json().encode()).hexdigest()
+
+
+@lru_cache(maxsize=256)
+def _cue_pattern(cues: tuple[str, ...]) -> re.Pattern[str]:
+    return re.compile("|".join(cues), re.IGNORECASE)
 
 
 def ontology_problems(
@@ -216,6 +346,9 @@ def ontology_problems(
         {p.proposed_class for p in settings.patterns}
         | {r.proposed_class for r in settings.pdf_labels}
         | set(settings.contextual)
+        | set(settings.class_cues)
+        | {r.proposed_class for r in settings.header_rules}
+        | set(settings.about.class_priority)
     )
     for name in sorted(n for n in named if n and n not in classes):
         problems.append(f"unknown ontology class {name!r}")
@@ -224,250 +357,37 @@ def ontology_problems(
     return problems
 
 
-# --- defaults ----------------------------------------------------------------------
-# Written from general retail language. Over-tuning to one source's wording is
-# measured on a held-out corpus (Helios-DS C-12).
+# --- presets ------------------------------------------------------------------------
+# Rules for a kind of data, shipped as data. The engine names none of them.
 
-_MONTH = "(?:January|February|March|April|May|June|July|August|September|October|November|December)"
 
-DEFAULT_SETTINGS = CrawlerSettings(
-    patterns=[
-        PatternRule(
-            name="tpcds_business_id",
-            regex=r"\b[A-P]{16}\b",
-            kind="key",
-            columns=["i_item_id", "c_customer_id", "s_store_id"],
-        ),
-        PatternRule(
-            name="email_address",
-            regex=r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
-            kind="key",
-            proposed_class="Customer",
-            columns=["c_email_address"],
-        ),
-        PatternRule(
-            name="ticket_number",
-            regex=r"\b(?:receipt\s+)?ticket(?:\s+(?:number|no\.?|#))?(?:\s+(?:was|is))?\s*:?\s*#?(\d{1,10})\b",
-            group=1,
-            kind="key",
-            proposed_class="Sale",
-            columns=["ss_ticket_number", "sr_ticket_number"],
-            ignore_case=True,
-        ),
-        PatternRule(
-            name="receipt_tail",
-            regex=r"\breceipt\s+ending\s+(?:in\s+)?(\d{3,6})\b",
-            group=1,
-            kind="partial_key",
-            proposed_class="Sale",
-            columns=["ss_ticket_number", "sr_ticket_number"],
-            ignore_case=True,
-        ),
-        PatternRule(
-            name="return_authorization",
-            regex=r"\bRMA-\d{4,10}\b",
-            kind="document_id",
-            proposed_class="Return",
-        ),
-        PatternRule(
-            name="support_case",
-            regex=r"\bCS-\d{4,10}\b",
-            kind="document_id",
-            proposed_class="Return",
-        ),
-        PatternRule(name="money", regex=r"\$\d[\d,]*(?:\.\d{2})?", kind="value"),
-        PatternRule(name="date", regex=rf"\b{_MONTH}\s+\d{{1,2}},\s+\d{{4}}\b", kind="value"),
-    ],
-    pdf_labels=[
-        LabelRule(label="RMA number", proposed_class="Return", kind="document_id"),
-        LabelRule(label="Support case", proposed_class="Return", kind="document_id"),
-        LabelRule(label="Store", proposed_class="Store", columns=["s_store_name"], kind="display"),
-        LabelRule(
-            label="Original receipt ticket",
-            proposed_class="Sale",
-            columns=["ss_ticket_number", "sr_ticket_number"],
-        ),
-        LabelRule(label="Customer ID", proposed_class="Customer", columns=["c_customer_id"]),
-        LabelRule(label="Name", proposed_class="Customer", kind="display"),
-        LabelRule(label="Email", proposed_class="Customer", columns=["c_email_address"]),
-        LabelRule(label="Item ID", proposed_class="Item", columns=["i_item_id"]),
-        LabelRule(
-            label="Description", proposed_class="Item", columns=["i_product_name"], kind="display"
-        ),
-        LabelRule(label="Brand", proposed_class="Brand", columns=["i_brand"], kind="display"),
-        LabelRule(label="Return date", kind="value"),
-        LabelRule(label="Sale date", kind="value"),
-    ],
-    contextual={
-        "Item": ["the item", "the product", "the merchandise"],
-        "Return": ["this return", "the return"],
-        "Customer": ["the customer"],
-        "Store": ["that store", "the store"],
-    },
-    cases=CaseLinking(
-        identifiers=["return_authorization", "support_case", "ticket_number", "email_address"],
-        date_window_days=30,
-    ),
-    # Cue phrases are matched case-insensitively on word boundaries; "*" stands
-    # for up to a few words ("refund * approved"). Written from general retail
-    # language, not from any one corpus's sentences.
-    claims=Claims(
-        cues={
-            "PACKAGING_DAMAGED": [
-                "damaged",
-                "damage",
-                "crushed",
-                "torn",
-                "torn open",
-                "dented",
-                "dents",
-                "dent",
-                "scuffed",
-                "scratched",
-                "scratches",
-                "cracked",
-                "broken",
-                "ripped",
-                "smashed",
-                "bent",
-                "impact marks",
-                "visible dents",
-                "crushed box",
-                "box was crushed",
-                "packaging damaged",
-                "packaging damage",
-                "damaged packaging",
-                "carton torn",
-                "carton was torn",
-                "carton ripped",
-                "resealed with tape",
-                "dropped in transit",
-                "drop in transit",
-                "contents shifted",
-                "shifted around inside",
-                "carrier damage",
-                "unusable",
-            ],
-            "RETURN_REASON": [
-                "reason",
-                "reason code",
-                "return reason",
-                "reason code on file",
-                "recorded return reason",
-                "return slip says",
-                "reason on the slip",
-                "reason was recorded as",
-                "recorded as",
-                "reason given",
-                "reason for return",
-                "reason for the return",
-                "reason stated",
-                "cited reason",
-            ],
-            "REFUND_REQUESTED": [
-                "refund me",
-                "refund my",
-                "want my",
-                "want a refund",
-                "wants a refund",
-                "wants the refund",
-                "wants the * refund",
-                "wanted a refund",
-                "expect a refund",
-                "expect a full refund",
-                "expect the refund",
-                "expecting a refund",
-                "expecting the refund",
-                "when will the refund",
-                "when will i get",
-                "when to expect the refund",
-                "when can i expect",
-                "waiting on refund",
-                "waiting on the refund",
-                "waiting for the refund",
-                "waiting for my refund",
-                "confirm refund",
-                "confirm the refund",
-                "confirm my refund",
-                "refund to my card",
-                "refund to my account",
-                "money back",
-                "please refund",
-                "please process",
-                "process my refund",
-                "process the refund",
-                "requested a refund",
-                "requesting a refund",
-                "asked for a refund",
-                "asking for a refund",
-                "asks for a refund",
-                "refund request",
-                "demand a refund",
-                "would like a refund",
-                "i'll receive",
-                "receive my refund",
-                "receive a refund",
-                "receive the refund",
-                "receive",
-            ],
-            "REFUND_APPROVED": [
-                "refund approved",
-                "refund is approved",
-                "refund was approved",
-                "is approved",
-                "approved",
-                "approve it",
-                "approve the refund",
-                "approving the refund",
-                "approval",
-                "refund queued",
-                "refund issued",
-                "refund has been issued",
-                "refund of * issued",
-                "refund of * approved",
-                "refund * approved",
-                "refund * issued",
-                "refund * to original tender",
-                "to original tender",
-                "i'll refund",
-                "i will refund",
-                "we'll refund",
-                "we will refund",
-                "refunding",
-                "processing now",
-                "processing the refund",
-                "refund processed",
-                "refund posted",
-                "refund sent",
-                "has been refunded",
-                "will be refunded",
-                "disposition:",
-                "disposition: * refund",
-                "full refund of",
-                "refund of",
-            ],
-        },
-        negations=[
-            "not",
-            "no",
-            "never",
-            "without",
-            "isn't",
-            "wasn't",
-            "weren't",
-            "don't",
-            "didn't",
-            "doesn't",
-            "hasn't",
-            "haven't",
-            "won't",
-            "wouldn't",
-            "couldn't",
-            "can't",
-            "cannot",
-            "neither",
-            "nor",
-        ],
-        hedges=["if", "whether", "might", "maybe", "unless", "perhaps", "possibly", "should"],
-    ),
-)
+@lru_cache(maxsize=1)
+def _preset_index() -> dict[str, Any]:
+    return yaml.safe_load((PRESETS / "index.yaml").read_text()) or {}
+
+
+def presets() -> dict[str, dict[str, str]]:
+    """name -> {title, description} of each shipped preset."""
+    return {
+        name: {"title": str(info.get("title", name)), "description": str(info.get("description", ""))}
+        for name, info in sorted((_preset_index().get("presets") or {}).items())
+        if (PRESETS / f"{name}.yaml").is_file()
+    }
+
+
+def preset_document(name: str) -> dict[str, Any]:
+    if name not in presets():
+        raise KeyError(name)
+    return yaml.safe_load((PRESETS / f"{name}.yaml").read_text())
+
+
+def load_preset(name: str) -> CrawlerSettings:
+    return CrawlerSettings.model_validate(preset_document(name))
+
+
+def schema_1_defaults() -> dict[str, Any]:
+    """The rules that were built in before schema 2, as a document."""
+    return dict(preset_document(str(_preset_index()["schema_1_defaults"])))
+
+
+EMPTY_SETTINGS = CrawlerSettings()

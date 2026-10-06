@@ -24,9 +24,9 @@ from apps.helios.crawler.connectors import SourceAsset
 from apps.helios.crawler.crawl import segment_rows
 from apps.helios.crawler.mentions import extract_mentions
 from apps.helios.crawler.resolution import resolve
-from helios_core.crawler.settings import DEFAULT_SETTINGS
 from helios_core.index import ids
 from helios_core.index.records import SegmentRecord
+from crawler_samples import RETAIL_SETTINGS
 
 CONFIG = resolution_fixtures.CONFIG
 RETURN_A, RETURN_B = resolution_fixtures.RETURN_A, resolution_fixtures.RETURN_B
@@ -66,12 +66,12 @@ def read(run, gazetteer, documents: dict[str, tuple[str, bytes]]):
         asset = SourceAsset(
             asset_id=asset_id, source="ds-1", mime_type=mime, locator={}, version=f"v-{asset_id}"
         )
-        analysis = analyze_asset(mime, data, DEFAULT_SETTINGS)
+        analysis = analyze_asset(mime, data, RETAIL_SETTINGS)
         assert analysis.status == "analyzed", analysis.detail
         own = segment_rows(run, asset, analysis.segments)
         assets.append(resolution_fixtures._asset_record(run, asset))
         segments += own
-        mentions += extract_mentions(run, asset, own, DEFAULT_SETTINGS, gazetteer, CONFIG)
+        mentions += extract_mentions(run, asset, own, RETAIL_SETTINGS, gazetteer, CONFIG)
     return assets, segments, mentions
 
 
@@ -79,7 +79,7 @@ def extract(warehouse, gazetteer, documents, run_id="run-1"):
     run = resolution_fixtures._run(run_id)
     assets, segments, mentions = read(run, gazetteer, documents)
     resolved = resolve(
-        run, assets, segments, mentions, gazetteer, CONFIG, DEFAULT_SETTINGS, warehouse.cursor
+        run, assets, segments, mentions, gazetteer, CONFIG, RETAIL_SETTINGS, warehouse.cursor
     )
     extraction = extract_claims(
         run,
@@ -90,7 +90,7 @@ def extract(warehouse, gazetteer, documents, run_id="run-1"):
         resolved.links,
         resolved.entities,
         resolved.relationships,
-        DEFAULT_SETTINGS,
+        RETAIL_SETTINGS,
     )
     keys = {e.entity_id: e.external_ids[0] for e in resolved.entities}
     return SimpleNamespace(
@@ -114,7 +114,7 @@ def warehouse():
 @pytest.fixture(scope="module")
 def gazetteer(warehouse):
     return resolution_fixtures.Gazetteer.build(
-        warehouse.cursor, CONFIG, resolution_fixtures.CLASSES
+        warehouse.cursor, CONFIG, resolution_fixtures.CLASSES, RETAIL_SETTINGS.dictionary
     )
 
 
@@ -174,13 +174,13 @@ def test_a_chat_message_is_one_unit_and_headers_are_not():
 
 
 def hits(text):
-    return {p: h.cue.phrase for p, h in find_hits(text, _cues(), DEFAULT_SETTINGS).items()}
+    return {p: h.cue.phrase for p, h in find_hits(text, _cues(), RETAIL_SETTINGS).items()}
 
 
 def _cues():
     from apps.helios.crawler.claims import compile_cues
 
-    return compile_cues(DEFAULT_SETTINGS)
+    return compile_cues(RETAIL_SETTINGS)
 
 
 def test_cues_match_whole_words_case_insensitively_with_gaps():
@@ -431,8 +431,8 @@ def test_crawl_writes_claims_and_evidence(warehouse, gazetteer, tmp_path):
             actor="test",
             ontology_version="0.2.0",
             settings=None,
-            settings_hash=DEFAULT_SETTINGS.content_hash(),
-            crawler_settings=DEFAULT_SETTINGS,
+            settings_hash=RETAIL_SETTINGS.content_hash(),
+            crawler_settings=RETAIL_SETTINGS,
             **{
                 "gazetteer": gazetteer,
                 "resolution": CONFIG,
@@ -468,5 +468,5 @@ def test_default_cue_lexicons_name_only_retail_predicates():
     from helios_core.crawler.settings import ontology_problems
 
     classes = {"Customer", "Item", "Brand", "Store", "Reason", "Sale", "Return"}
-    assert ontology_problems(DEFAULT_SETTINGS, classes, set(SHAPES)) == []
-    assert set(DEFAULT_SETTINGS.claims.cues) == set(SHAPES)
+    assert ontology_problems(RETAIL_SETTINGS, classes, set(SHAPES)) == []
+    assert set(RETAIL_SETTINGS.claims.cues) == set(SHAPES)

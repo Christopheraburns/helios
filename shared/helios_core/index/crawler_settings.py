@@ -3,7 +3,7 @@
 Saving validates the document and stores it as the next version number; saving
 content identical to an existing version returns that version instead. Versions
 are never changed. Activations are an append-only log; with none, crawls use
-the built-in defaults (helios_core.crawler.settings.DEFAULT_SETTINGS).
+empty settings: the engine has no rules of its own (settings schema 2).
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from ..crawler.settings import DEFAULT_SETTINGS, CrawlerSettings
+from ..crawler.settings import EMPTY_SETTINGS, CrawlerSettings
 from .records import CrawlerSettingsActivationRecord, CrawlerSettingsRecord
 from .store import IndexStore
 
@@ -83,12 +83,12 @@ def activate(
 
 
 def active(store: IndexStore) -> tuple[CrawlerSettingsRecord | None, CrawlerSettings]:
-    """The active version and its settings; (None, defaults) if none was activated."""
+    """The active version and its settings; (None, empty settings) if none was activated."""
     activations = [
         r for r in store.read(ACTIVATIONS) if isinstance(r, CrawlerSettingsActivationRecord)
     ]
     if not activations:
-        return None, DEFAULT_SETTINGS
+        return None, EMPTY_SETTINGS
     latest = max(activations, key=lambda r: r.activated_at)
     record = get(store, latest.version)
     return record, settings_of(record)
