@@ -66,7 +66,7 @@ describe("SettingsForm", () => {
 
     const fresh = screen.getByLabelText("New claim type");
     fireEvent.change(fresh, { target: { value: "REFUND_REQUESTED" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Add" })[1]); // the cue-phrase group's Add
     expect(Object.keys(seen.current.claims.cues)).toEqual(["REFUND_APPROVED", "REFUND_REQUESTED"]);
 
     fireEvent.click(screen.getByRole("tab", { name: "Names" }));
@@ -74,6 +74,34 @@ describe("SettingsForm", () => {
     expect(seen.current.dictionary.ordinary_words).toEqual(["the"]);
     fireEvent.click(screen.getByRole("button", { name: "Remove class Store" }));
     expect(seen.current.class_cues).toEqual({});
+  });
+
+  it("defines a kind of claim: its subject, its object and where each is looked for", () => {
+    const seen = { current: SETTINGS };
+    render(<Harness seen={seen} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Claims" }));
+
+    fireEvent.change(screen.getByLabelText("New kind of claim"), { target: { value: "REFUND_REQUESTED" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Add" })[0]);
+    expect(seen.current.claims.predicates.REFUND_REQUESTED.subject.find).toEqual(["in_unit", "single_in_document"]);
+
+    fireEvent.change(screen.getByLabelText("REFUND_REQUESTED subject class"), { target: { value: "Customer" } });
+    const find = screen.getByLabelText("Add to REFUND_REQUESTED subject find");
+    fireEvent.change(find, { target: { value: "case_edge:PartyTo" } });
+    fireEvent.keyDown(find, { key: "Enter" });
+    expect(seen.current.claims.predicates.REFUND_REQUESTED.subject).toEqual({
+      class: "Customer",
+      find: ["in_unit", "single_in_document", { case_edge: "PartyTo" }],
+    });
+    expect(screen.getByText("case_edge:PartyTo", { selector: ".settings-chip" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add a speaker rule" }));
+    fireEvent.change(screen.getByLabelText("Speaker rule 1 speaker"), { target: { value: "customer" } });
+    expect(seen.current.claims.speakers).toEqual([
+      { segment: "message", field: null, values: [], author_class: null, speaker: "customer" },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Remove claim REFUND_REQUESTED" }));
+    expect(seen.current.claims.predicates).toEqual({});
   });
 
   it("links cases by ticking identifier patterns", () => {

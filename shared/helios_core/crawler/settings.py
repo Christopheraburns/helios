@@ -210,12 +210,90 @@ class CaseLinking(_Model):
     )
 
 
-class Claims(_Model):
-    """Cue lexicons per claim predicate (step 12)."""
+class CaseEdge(_Model):
+    """Find the entity through a relationship of the case's own entity."""
 
+    case_edge: str = Field(min_length=1, description="The relationship type, e.g. PartyTo")
+
+
+FindStep = Literal["in_unit", "case", "author", "single_in_document", "single_in_case"]
+
+
+class ClaimRole(_Model):
+    """The subject or the object of a claim: its class, and where to look for
+    the entity, in order. The first place that gives exactly one entity wins.
+
+    - ``in_unit``: named in the sentence or message that makes the claim
+    - ``case``: the entity the case is about (its class must be a case class)
+    - ``{case_edge: X}``: related to the case's entity by relationship X
+    - ``author``: the document's author, when of this class
+    - ``single_in_document`` / ``single_in_case``: the only one of its class there
+    """
+
+    class_name: str = Field(alias="class", min_length=1)
+    find: list[FindStep | CaseEdge] = Field(min_length=1)
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+
+class ClaimPredicate(_Model):
+    """One kind of claim: what it is about, what it points to, and who may make it."""
+
+    subject: ClaimRole
+    object: ClaimRole
+    blocked_speakers: list[str] = Field(
+        default_factory=list, description="Speakers whose words never make this claim"
+    )
+    unknown_speaker_needs_strong_cue: bool = Field(
+        False, description="An unidentified speaker makes it only with a strong cue"
+    )
+
+
+class SpeakerRule(_Model):
+    """Who is speaking in a part of a document. The first rule that fits decides;
+    with none, the speaker is unknown."""
+
+    segment: str = Field(min_length=1, description="Segment type: message, email_body, page, ...")
+    field: str | None = Field(None, description="A field of the segment that must be present")
+    values: list[str] = Field(
+        default_factory=list, description="... and, if given, have one of these values"
+    )
+    author_class: str | None = Field(
+        None, description="The document's author must be a resolved entity of this class"
+    )
+    speaker: str = Field(min_length=1)
+
+
+class Confidence(_Model):
+    strong: float = Field(0.95, ge=0, le=1)
+    medium: float = Field(0.85, ge=0, le=1)
+    weak: float = Field(0.7, ge=0, le=1)
+
+
+class Claims(_Model):
+    """Claims (step 12): the kinds there are, the cue phrases that state each,
+    who is speaking, and what cancels a cue."""
+
+    predicates: dict[str, ClaimPredicate] = Field(
+        default_factory=dict, description="Claim type -> its subject, object and speakers"
+    )
+    case_classes: list[str] = Field(
+        default_factory=list, description="Classes of entity a case can be about"
+    )
+    speakers: list[SpeakerRule] = Field(default_factory=list)
     cues: dict[str, list[str]] = Field(default_factory=dict)
+    weak_words: list[str] = Field(
+        default_factory=list,
+        description="One-word cues too general to stand alone: they count only when the unit names the claim's subject",
+    )
     negations: list[str] = Field(default_factory=list)
     hedges: list[str] = Field(default_factory=list)
+    negation_window: int = Field(3, ge=0, le=20, description="Words before a cue a negation reaches over")
+    gap_words: int = Field(4, ge=0, le=20, description="Words a * in a cue phrase may stand for")
+    abbreviations: list[str] = Field(
+        default_factory=list, description="Words whose trailing period does not end a sentence"
+    )
+    confidence: Confidence = Field(default_factory=Confidence)
 
 
 class LlmExtraction(_Model):
@@ -291,6 +369,8 @@ class CrawlerSettings(_Model):
                 {**{k: v for k, v in by_name.get(p.get("name"), {}).items() if k == "key_name"}, **p}
                 for p in merged.get("patterns", [])
             ]
+            # A schema 1 claims section held only cue words; the kinds of claim were in code.
+            merged["claims"] = {**legacy.get("claims", {}), **(data.get("claims") or {})}
             return merged
         return data
 
@@ -349,10 +429,16 @@ def ontology_problems(
         | set(settings.class_cues)
         | {r.proposed_class for r in settings.header_rules}
         | set(settings.about.class_priority)
+        | set(settings.claims.case_classes)
+        | {r.author_class for r in settings.claims.speakers}
     )
+    for predicate in settings.claims.predicates.values():
+        for role in (predicate.subject, predicate.object):
+            named.add(role.class_name)
+            named.update(step.case_edge for step in role.find if isinstance(step, CaseEdge))
     for name in sorted(n for n in named if n and n not in classes):
         problems.append(f"unknown ontology class {name!r}")
-    for predicate in sorted(set(settings.claims.cues) - predicates):
+    for predicate in sorted((set(settings.claims.cues) | set(settings.claims.predicates)) - predicates):
         problems.append(f"unknown claim predicate {predicate!r}")
     return problems
 

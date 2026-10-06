@@ -7,7 +7,7 @@ import duckdb
 import pytest
 from apps.helios.crawler import llm_arm
 from apps.helios.crawler.crawl import crawl, previous_run
-from apps.helios.crawler.llm_arm import LlmExtractor, Vocabulary, load_vocabulary, run_arm
+from apps.helios.crawler.llm_arm import LlmExtractor, Vocabulary, claim_shapes, load_vocabulary, run_arm
 from crawler_samples import RETAIL_SETTINGS
 from helios_core.index import evidence
 from helios_core.index.store import duckdb_index_store
@@ -23,7 +23,7 @@ from test_crawler_resolution import (  # noqa: F401 - fixtures
     warehouse,
 )
 
-VOCABULARY = load_vocabulary(REPO_ROOT / "ontology", CLASSES, list(RETAIL_SETTINGS.claims.cues))
+VOCABULARY = load_vocabulary(REPO_ROOT / "ontology", CLASSES, claim_shapes(RETAIL_SETTINGS))
 EMAIL_REPLY = {
     "entities": [
         {"id": "e1", "segment": 0, "quote": "Wilma.Graham@t.edu", "class": "Customer"},

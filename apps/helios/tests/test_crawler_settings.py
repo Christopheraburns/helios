@@ -112,7 +112,7 @@ def test_ontology_problems_name_unknown_classes_and_predicates():
     settings = CrawlerSettings.model_validate(doc)
     problems = ontology_problems(
         settings,
-        {"Item", "Return", "Customer", "Store", "Sale", "Brand", "Reason"},
+        {"Item", "Return", "Customer", "Store", "Sale", "Brand", "Reason", "Contains", "HasReason", "PartyTo"},
         set(RETAIL_SETTINGS.claims.cues),
     )
     assert problems == [

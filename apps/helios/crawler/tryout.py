@@ -99,11 +99,16 @@ def _claim(settings: CrawlerSettings, rule: dict[str, Any], passage: Passage) ->
     predicate = rule.get("predicate")
     cues = [c for c in compile_cues(settings) if c.predicate == predicate]
     matches = []
-    for unit in split_units(_segment(passage)):
+    for unit in split_units(_segment(passage), settings.claims.abbreviations):
         for cue in cues:
             for m in cue.pattern.finditer(unit.text):
                 stopped = blocked(
-                    unit.text, m.start(), settings.claims.negations, settings.claims.hedges, m.end()
+                    unit.text,
+                    m.start(),
+                    settings.claims.negations,
+                    settings.claims.hedges,
+                    m.end(),
+                    settings.claims.negation_window,
                 )
                 matches.append(
                     _match(
