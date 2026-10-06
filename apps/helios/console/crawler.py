@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import Any, Literal
 
 from apps.helios.crawler import evaluate as harness
 from fastapi import APIRouter, HTTPException, Request
@@ -233,6 +233,9 @@ def _run_view(run: Any, evaluation: Any = None) -> dict[str, Any]:
     return {
         "requested_by": ((run.settings or {}).get("request") or {}).get("requested_by"),
         "note": ((run.settings or {}).get("request") or {}).get("note"),
+        "strategy": (run.settings or {}).get("strategy") or "deterministic",
+        # Provider, model and prompt of an LLM crawl; never a key.
+        "llm": (run.settings or {}).get("llm"),
         # False when the crawl connected as someone other than the crawler machine
         # user, who may be able to read what the crawler must not (CR-0d).
         "isolated": run.actor == crawl_jobs.crawler_identity(),
@@ -254,6 +257,29 @@ def _run_view(run: Any, evaluation: Any = None) -> dict[str, Any]:
         "counts": run.counts,
         "error": run.error,
     }
+
+
+@crawler_router.get("/entities")
+def list_entities(classes: str, q: str = "", limit: int = 50) -> dict[str, Any]:
+    """Entities the crawler found for the given ontology classes (comma-separated),
+    from each source's latest successful crawl; most-documented first."""
+    from helios_core.index import browse
+
+    wanted = [c.strip() for c in classes.split(",") if c.strip()]
+    if not wanted:
+        raise HTTPException(status_code=422, detail="classes must name at least one ontology class")
+    return browse.class_entities(_store(), wanted, q, limit)
+
+
+@crawler_router.get("/entities/{entity_id}")
+def get_entity(entity_id: str, run: str) -> dict[str, Any]:
+    """One entity: its documents, the passages that mention it, related entities and claims."""
+    from helios_core.index import browse
+
+    found = browse.entity_documents(_store(), run, entity_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail=f"entity {entity_id} not found in crawl run {run}")
+    return found
 
 
 @crawler_router.get("/runs")
@@ -519,6 +545,7 @@ class StartCrawlRequest(BaseModel):
     dataset_id: str | None = None
     full: bool = False
     note: str | None = Field(default=None, max_length=200)
+    strategy: Literal["deterministic", "llm"] = "deterministic"
 
 
 def _principal(request: Request):
@@ -586,6 +613,7 @@ def start_crawl(body: StartCrawlRequest, request: Request) -> dict[str, Any]:
             full=body.full,
             requested_by=principal.id,
             note=(body.note or "").strip() or None,
+            strategy=body.strategy,
         )
     except HTTPException:
         raise

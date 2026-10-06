@@ -123,6 +123,7 @@ def launch_view(run: Any) -> dict[str, Any]:
         "full": environment.get("HELIOS_CRAWL_FULL") == "1",
         "requested_by": environment.get("HELIOS_CRAWL_REQUESTED_BY") or None,
         "note": environment.get("HELIOS_CRAWL_NOTE") or None,
+        "strategy": environment.get("HELIOS_CRAWL_STRATEGY") or "deterministic",
     }
 
 
@@ -144,6 +145,7 @@ def launch(
     full: bool,
     requested_by: str,
     note: str | None = None,
+    strategy: str = "deterministic",
 ) -> dict[str, Any]:
     job = ensure_job(client, project_id)
     environment = {
@@ -152,6 +154,7 @@ def launch(
         **({"HELIOS_CRAWL_SOURCE": source_id} if source_id else {}),
         **({"HELIOS_CRAWL_DATASET": dataset_id} if dataset_id else {}),
         **({"HELIOS_CRAWL_NOTE": note} if note else {}),
+        **({"HELIOS_CRAWL_STRATEGY": strategy} if strategy != "deterministic" else {}),
     }
     run = client.create_job_run(
         {"project_id": project_id, "job_id": job.id, "environment": environment},

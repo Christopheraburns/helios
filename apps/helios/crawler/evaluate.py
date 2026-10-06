@@ -947,6 +947,7 @@ def score(truth: Truth, rows: IndexRows, run: CrawlRunRecord | None = None) -> d
         "run": {
             "crawl_run_id": run.crawl_run_id if run else None,
             "strategy": _strategy(run),
+            "llm": _llm(run),
             "crawler_version": run.crawler_version if run else None,
             "settings_version": run.settings_version if run else None,
             "counts": dict(sorted((run.counts if run else {}).items())),
@@ -1004,6 +1005,31 @@ def _strategy(run: CrawlRunRecord | None) -> str:
     if run is None:
         return "deterministic"
     return str(run.settings.get("strategy") or "deterministic")
+
+
+def _llm(run: CrawlRunRecord | None) -> dict[str, Any] | None:
+    """An LLM crawl's model and prompt, with its cost and reliability totals
+    and how many of the spans it returned were not in the documents."""
+    if run is None or not run.settings.get("llm"):
+        return None
+    counts = run.counts
+    returned = counts.get("llm_entities", 0) + counts.get("llm_claims", 0)
+    documents = counts.get("llm_calls", 0) + counts.get("llm_cached", 0)
+    fresh = counts.get("llm_calls", 0)
+    cost = counts.get("llm_cost_microusd")
+    return {
+        **run.settings["llm"],
+        "documents": documents,
+        "calls": fresh,
+        "cached": counts.get("llm_cached", 0),
+        "failed": counts.get("llm_failed", 0),
+        "tokens_in": counts.get("llm_tokens_in", 0),
+        "tokens_out": counts.get("llm_tokens_out", 0),
+        "cost_usd": round(cost / 1_000_000, 6) if cost is not None else None,
+        "ms_per_document": round(counts.get("llm_ms", 0) / fresh) if fresh else None,
+        "hallucinated_spans": counts.get("llm_hallucinated_spans", 0),
+        "hallucinated_span_rate": _rate(counts.get("llm_hallucinated_spans", 0), returned),
+    }
 
 
 def _now() -> str:

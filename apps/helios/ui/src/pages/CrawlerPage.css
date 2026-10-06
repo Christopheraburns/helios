@@ -133,8 +133,8 @@
 }
 
 .crawler-badge--running {
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--cyan-100);
+  color: var(--cyan-700);
 }
 
 .crawler-badge--problem {
@@ -471,4 +471,25 @@
   color: var(--text-secondary, #4b5563);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.crawler-badge--strategy {
+  margin-left: 6px;
+  color: #5b3d8c;
+  background: #efe7fa;
+}
+
+.crawler-scores th.crawler-scores__llm,
+.crawler-scores td.crawler-scores__llm {
+  background: #f7f3fc;
+}
+
+.crawler-llm-note {
+  margin: 8px 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  background: #f7f3fc;
+  border-left: 3px solid #8c62b3;
+  border-radius: 4px;
 }

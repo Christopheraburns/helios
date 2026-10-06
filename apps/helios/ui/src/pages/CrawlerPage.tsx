@@ -8,6 +8,7 @@ import {
   type CrawlLaunches,
   type CrawlRunDetail,
   type CrawlRunSummary,
+  type CrawlStrategy,
   type CrawlTarget,
   type CrawlerSettingsSaveResult,
   type CrawlerSettingsState,
@@ -75,6 +76,8 @@ const PROBLEM_STATUSES = [
   "no_text",
   "invalid",
   "embedding_failed",
+  "llm_failed",
+  "llm_invalid_replies",
 ];
 
 function problemCount(counts: Record<string, number>): number {
@@ -95,6 +98,30 @@ const FOUND_COUNTS: { key: string; label: string }[] = [
   { key: "claim_evidence", label: "evidence passages" },
   { key: "embedded", label: "searchable passages" },
 ];
+
+const STRATEGY_LABELS: Record<string, string> = {
+  deterministic: "Rules",
+  llm: "LLM",
+};
+
+const strategyOf = (run: { strategy?: string }) => run.strategy ?? "deterministic";
+
+/** An LLM crawl's cost and reliability, from its counts. */
+function llmFacts(counts: Record<string, number>): string {
+  const n = (key: string) => counts[key] ?? 0;
+  const parts = [
+    `${(n("llm_calls") + n("llm_cached")).toLocaleString()} documents read (${n("llm_cached").toLocaleString()} from cache)`,
+    `${n("llm_tokens_in").toLocaleString()} tokens in, ${n("llm_tokens_out").toLocaleString()} out`,
+  ];
+  if (counts.llm_cost_microusd != null) parts.push(`$${(counts.llm_cost_microusd / 1e6).toFixed(2)}`);
+  parts.push(`${n("llm_hallucinated_spans").toLocaleString()} quotes not in the documents (dropped)`);
+  if (n("llm_claims_unanchored")) {
+    parts.push(`${n("llm_claims_unanchored").toLocaleString()} claims without a resolved subject or object (dropped)`);
+  }
+  if (n("llm_failed")) parts.push(`${n("llm_failed")} documents failed`);
+  if (n("llm_invalid_replies")) parts.push(`${n("llm_invalid_replies")} unreadable replies`);
+  return parts.join(" · ");
+}
 
 function statusClass(status: string): string {
   if (status === "SUCCEEDED" || GOOD_STATUSES.has(status)) return "crawler-badge--ok";
@@ -149,6 +176,7 @@ function RunsTab({ context }: CrawlerPageProps) {
   const [runs, setRuns] = useState<CrawlRunSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState("");
+  const [strategy, setStrategy] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -189,7 +217,13 @@ function RunsTab({ context }: CrawlerPageProps) {
   }, [crawling, load, loadLaunches]);
 
   const sources = useMemo(() => Array.from(new Set((runs ?? []).map((r) => r.source))).sort(), [runs]);
-  const shown = (runs ?? []).filter((r) => !source || r.source === source);
+  const strategies = useMemo(
+    () => Array.from(new Set((runs ?? []).map(strategyOf))).sort(),
+    [runs],
+  );
+  const shown = (runs ?? []).filter(
+    (r) => (!source || r.source === source) && (!strategy || strategyOf(r) === strategy),
+  );
 
   if (error) return <ErrorState title="Failed to load crawl runs" message={error} />;
   if (!runs) return <LoadingState />;
@@ -204,6 +238,21 @@ function RunsTab({ context }: CrawlerPageProps) {
             {sources.map((s) => (
               <option key={s} value={s}>
                 {short(s, 13)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label title="How the text was understood: by rules and the warehouse, or by an LLM">
+          Strategy{" "}
+          <select
+            aria-label="Filter by strategy"
+            value={strategy}
+            onChange={(e) => setStrategy(e.target.value)}
+          >
+            <option value="">All</option>
+            {strategies.map((s) => (
+              <option key={s} value={s}>
+                {STRATEGY_LABELS[s] ?? s}
               </option>
             ))}
           </select>
@@ -263,6 +312,14 @@ function RunsTab({ context }: CrawlerPageProps) {
                 </td>
                 <td>
                   <span className={`crawler-badge ${statusClass(run.status)}`}>{run.status}</span>
+                  {strategyOf(run) !== "deterministic" && (
+                    <span
+                      className="crawler-badge crawler-badge--strategy"
+                      title={run.llm ? `${run.llm.provider} ${run.llm.model}` : undefined}
+                    >
+                      {STRATEGY_LABELS[strategyOf(run)] ?? strategyOf(run)}
+                    </span>
+                  )}
                 </td>
                 <td className="num">{run.counts.listed ?? "—"}</td>
                 <td className="num">{run.counts.analyzed ?? run.counts.fetched ?? 0}</td>
@@ -310,6 +367,7 @@ function StartCrawl({
   const [targetKey, setTargetKey] = useState("");
   const [datasetId, setDatasetId] = useState("");
   const [full, setFull] = useState(false);
+  const [strategy, setStrategy] = useState<CrawlStrategy>("deterministic");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -355,7 +413,12 @@ function StartCrawl({
     setBusy(true);
     setFeedback(null);
     try {
-      const launched = await crawlerClient().startCrawl!(chosen, full, note.trim() || undefined);
+      const launched = await crawlerClient().startCrawl!(
+        chosen,
+        full,
+        note.trim() || undefined,
+        strategy,
+      );
       setNote("");
       setFeedback({
         kind: "ok",
@@ -396,6 +459,17 @@ function StartCrawl({
           <input type="checkbox" checked={full} onChange={(e) => setFull(e.target.checked)} /> Full
           re-crawl
         </label>
+        <label title="Rules: the standard crawler, which feeds search. LLM: an experiment that reads each document with the project's AI model, to be scored against the rules; it uses the model's quota and does not feed search.">
+          Strategy{" "}
+          <select
+            aria-label="Crawl strategy"
+            value={strategy}
+            onChange={(e) => setStrategy(e.target.value as CrawlStrategy)}
+          >
+            <option value="deterministic">Rules (standard)</option>
+            <option value="llm">LLM (experiment)</option>
+          </select>
+        </label>
         <input
           className="crawler-start__note"
           aria-label="Note for this crawl"
@@ -415,7 +489,7 @@ function StartCrawl({
       {active.map((l) => (
         <div className="crawler-start__status" role="status" key={l.job_run_id}>
           <span className="crawler-badge crawler-badge--running">{l.status.replace("ENGINE_", "")}</span>{" "}
-          Crawl of {short(launchTarget(l), 13)} requested {when(l.created_at)}
+          {l.strategy === "llm" ? "LLM crawl" : "Crawl"} of {short(launchTarget(l), 13)} requested {when(l.created_at)}
           {l.requested_by ? ` by ${l.requested_by.split(":").pop()}` : ""} (job run {l.job_run_id})
           {l.note ? `: ${l.note}` : ""}
         </div>
@@ -488,6 +562,26 @@ function RunDetail({ context, crawlRunId }: CrawlerPageProps & { crawlRunId: str
           {run.crawler_version} / {run.ontology_version} / {run.settings_version ?? "built-in defaults"}{" "}
           <span className="mono muted">{short(run.settings_hash, 10)}</span>
         </dd>
+        <dt>Strategy</dt>
+        <dd>
+          {strategyOf(run) === "llm"
+            ? "LLM: each document read by an AI model; links by exact keys only"
+            : "Rules: patterns, warehouse names and joint resolution"}
+          {run.llm && (
+            <>
+              {" · "}
+              {run.llm.provider} {run.llm.model}, prompt {run.llm.prompt_version}{" "}
+              <span className="mono muted">{short(run.llm.prompt_hash, 10)}</span>, temperature{" "}
+              {run.llm.temperature}
+            </>
+          )}
+        </dd>
+        {strategyOf(run) === "llm" && (
+          <>
+            <dt>LLM usage</dt>
+            <dd>{llmFacts(run.counts)}</dd>
+          </>
+        )}
         <dt>Found</dt>
         <dd>
           {FOUND_COUNTS.filter((c) => run.counts[c.key] != null)
@@ -772,6 +866,53 @@ function EvaluationDetail({ evaluation }: { evaluation: CrawlEvaluation }) {
   );
 }
 
+/** The LLM measures the scorecard records for an LLM crawl (metrics.run.llm). */
+interface LlmMeasures {
+  provider: string;
+  model: string;
+  prompt_version: string;
+  documents: number;
+  cached: number;
+  failed: number;
+  tokens_in: number;
+  tokens_out: number;
+  cost_usd: number | null;
+  ms_per_document: number | null;
+  hallucinated_spans: number;
+  hallucinated_span_rate: number | null;
+}
+
+function llmMeasures(evaluation: CrawlEvaluation): LlmMeasures | null {
+  const run = (evaluation.metrics?.run ?? null) as { llm?: LlmMeasures | null } | null;
+  return run?.llm ?? null;
+}
+
+const LLM_COLUMNS: { label: string; title: string; value: (llm: LlmMeasures) => string }[] = [
+  {
+    label: "Not in doc.",
+    title:
+      "Share of the entities and claims the model returned whose quoted text was not in the document. These were dropped, not stored.",
+    // A percentage with one decimal: the page's two-decimal ratios would show 4.5% as 0.05.
+    value: (llm) =>
+      llm.hallucinated_span_rate == null ? "—" : `${(llm.hallucinated_span_rate * 100).toFixed(1)}%`,
+  },
+  {
+    label: "Tokens",
+    title: "Tokens sent to and received from the model in this crawl. Documents answered from the cache add none.",
+    value: (llm) => (llm.tokens_in + llm.tokens_out).toLocaleString(),
+  },
+  {
+    label: "Sec / doc",
+    title: "Average model response time per document, for documents not answered from the cache",
+    value: (llm) => (llm.ms_per_document == null ? "—" : (llm.ms_per_document / 1000).toFixed(1)),
+  },
+  {
+    label: "Cost",
+    title: "Model cost of this crawl, when token prices are set in the crawler settings (llm section)",
+    value: (llm) => (llm.cost_usd == null ? "—" : `$${llm.cost_usd.toFixed(2)}`),
+  },
+];
+
 function ScoresTab({ context }: CrawlerPageProps) {
   const { crawlerClient } = context;
   const [all, setAll] = useState<CrawlEvaluation[] | null>(null);
@@ -795,6 +936,8 @@ function ScoresTab({ context }: CrawlerPageProps) {
   const datasets = useMemo(() => Array.from(new Set((all ?? []).map((e) => e.dataset_id))).sort(), [all]);
   const selected = dataset || datasets[0] || "";
   const shown = (all ?? []).filter((e) => e.dataset_id === selected);
+  // The LLM columns appear only when an LLM crawl has been scored on this dataset.
+  const llmColumns = shown.some((e) => llmMeasures(e)) ? LLM_COLUMNS : [];
 
   if (error) return <ErrorState title="Failed to load evaluations" message={error} />;
   if (!all) return <LoadingState />;
@@ -833,6 +976,11 @@ function ScoresTab({ context }: CrawlerPageProps) {
                   {c.label}
                 </th>
               ))}
+              {llmColumns.map((c) => (
+                <th key={c.label} className="num crawler-scores__llm" title={c.title}>
+                  {c.label}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -856,14 +1004,23 @@ function ScoresTab({ context }: CrawlerPageProps) {
                       {pct(e.summary[c.key])}
                     </td>
                   ))}
+                  {llmColumns.map((c) => {
+                    const llm = llmMeasures(e);
+                    return (
+                      <td key={c.label} className="num crawler-scores__llm">
+                        {llm ? c.value(llm) : "—"}
+                      </td>
+                    );
+                  })}
                 </tr>
                 {open === e.evaluation_id && (
                   <tr className="crawler-scores-detail">
-                    <td colSpan={5 + SUMMARY_COLUMNS.length}>
+                    <td colSpan={5 + SUMMARY_COLUMNS.length + llmColumns.length}>
                       <div className="muted">
                         Evaluated {when(e.evaluated_at)} by {e.evaluator} ({e.evaluator_mode}), harness{" "}
                         {e.harness_version}, ontology {e.ontology_version}.
                       </div>
+                      <LlmScoreNote evaluation={e} />
                       <EvaluationDetail evaluation={e} />
                     </td>
                   </tr>
@@ -873,6 +1030,24 @@ function ScoresTab({ context }: CrawlerPageProps) {
           </tbody>
         </table>
       )}
+    </div>
+  );
+}
+
+function LlmScoreNote({ evaluation }: { evaluation: CrawlEvaluation }) {
+  const llm = llmMeasures(evaluation);
+  if (!llm) return null;
+  return (
+    <div className="crawler-llm-note">
+      <strong>LLM crawl:</strong> {llm.provider} {llm.model}, prompt {llm.prompt_version}.{" "}
+      {llm.documents.toLocaleString()} documents read ({llm.cached.toLocaleString()} from cache
+      {llm.failed ? `, ${llm.failed} failed` : ""}); {llm.tokens_in.toLocaleString()} tokens in,{" "}
+      {llm.tokens_out.toLocaleString()} out; {llm.hallucinated_spans.toLocaleString()} quotes not
+      in the documents were dropped.
+      <br />
+      This crawl links only on exact keys the model quoted. A return is identified by its RMA or
+      case number, which is not a warehouse key, so links and claims involving returns score as
+      unmatched; that lowers link precision, claims and golden questions.
     </div>
   );
 }

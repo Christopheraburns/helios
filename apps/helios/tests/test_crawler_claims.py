@@ -391,7 +391,7 @@ def test_crawl_writes_claims_and_evidence(warehouse, gazetteer, tmp_path):
     from apps.helios.crawler.crawl import CRAWLER_VERSION, crawl
     from helios_core.index.store import duckdb_index_store
 
-    assert CRAWLER_VERSION == "0.6.0"
+    assert CRAWLER_VERSION == "0.7.0"
     root = tmp_path / "objects"
     con = duckdb.connect()
     con.execute("CREATE SCHEMA helios_ds")

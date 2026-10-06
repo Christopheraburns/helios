@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inputFrom, scopeSummary } from "./DataSourcesPage";
+import { inputFrom, missingFields, scopeSummary } from "./DataSourcesPage";
 
 describe("data source form", () => {
   it("turns object-store fields into a scope", () => {
@@ -31,5 +31,15 @@ describe("data source form", () => {
   it("summarises scopes", () => {
     expect(scopeSummary({ connector: "object_store", scope: { bucket: "b", prefix: "p/" } })).toBe("s3://b/p/");
     expect(scopeSummary({ connector: "impala", scope: {} })).toBe("used by semantic models");
+  });
+
+  it("names the required fields that are still blank", () => {
+    const base = { name: "Store", description: "", connection_ref: "S3 Object Store", crawl: {} };
+    expect(missingFields({ ...base, connector: "object_store", scope: { bucket: "b" } })).toEqual([]);
+    expect(
+      missingFields({ ...base, name: " ", connection_ref: "", connector: "object_store", scope: { bucket: "" } }),
+    ).toEqual(["Name", "Connection", "Bucket"]);
+    expect(missingFields({ ...base, connector: "helios_ds", scope: {} })).toEqual(["Dataset ID"]);
+    expect(missingFields({ ...base, connector: "table_rows", scope: { table: "" } })).toEqual(["Table"]);
   });
 });

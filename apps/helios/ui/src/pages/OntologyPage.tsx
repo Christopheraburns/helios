@@ -5,6 +5,7 @@ import type {
   OntologyVersionSummary,
 } from "../api/client";
 import { ErrorState, LoadingState } from "../components/AsyncState";
+import ClassInstances from "../features/ontology/ClassInstances";
 import OntologyGraphView, { LAYER_COLOURS } from "../features/ontology/OntologyGraphView";
 import PublishPanel from "../features/ontology/PublishPanel";
 import {
@@ -147,6 +148,17 @@ export default function OntologyPage({ context }: OntologyPageProps) {
     (c) => layers.has(c.layer) && c.name.toLowerCase().includes(classFilter.toLowerCase()),
   );
   const selectedNode = model?.classes.find((c) => c.name === selectedClass) ?? null;
+  // The selected class with every subclass, for finding its instances.
+  const selectedFamily = useMemo(() => {
+    if (!model || !selectedClass) return [];
+    const family = [selectedClass];
+    for (let i = 0; i < family.length; i += 1) {
+      model.links
+        .filter((l) => l.kind === "is_a" && l.target === family[i] && !family.includes(l.source))
+        .forEach((l) => family.push(l.source));
+    }
+    return family;
+  }, [model, selectedClass]);
   const broken = useMemo(() => (graph ? brokenClasses(graph) : new Set<string>()), [graph]);
   const mappings = useMemo(
     () => (graph && selectedClass ? mappingsFor(graph, selectedClass) : []),
@@ -373,6 +385,14 @@ export default function OntologyPage({ context }: OntologyPageProps) {
             )}
 
             {!classDetail && <LoadingState />}
+
+            {selectedFamily.length > 0 && (
+              <ClassInstances
+                api={context.crawlerClient}
+                classes={selectedFamily}
+                onSelectClass={setSelectedClass}
+              />
+            )}
 
             {classDetail && classDetail.parents.length > 0 && (
               <div className="detail-section">

@@ -10,6 +10,7 @@ Runs are started by the Helios API (POST /api/v1/crawler/runs; the Crawler page'
   HELIOS_CRAWL_FULL          "1" to re-fetch and re-analyze everything
   HELIOS_CRAWL_REQUESTED_BY  who asked for the crawl (recorded on the run)
   HELIOS_CRAWL_NOTE          the requester's note (recorded on the run)
+  HELIOS_CRAWL_STRATEGY      "deterministic" (default) or "llm" (the LLM crawler)
 
 The crawl connects as this Job's WORKLOAD_USER. To crawl as the crawler machine
 user, set WORKLOAD_USER and WORKLOAD_PASSWORD in the Job's environment.
@@ -34,6 +35,8 @@ if bool(source) == bool(dataset):
 argv = ["crawl", "--source", source] if source else ["crawl", "--dataset", dataset]
 if os.environ.get("HELIOS_CRAWL_FULL") == "1":
     argv.append("--full")
+if os.environ.get("HELIOS_CRAWL_STRATEGY", "").strip():
+    argv += ["--strategy", os.environ["HELIOS_CRAWL_STRATEGY"].strip()]
 print(f"helios-crawl: {' '.join(argv)} (requested by {os.environ.get('HELIOS_CRAWL_REQUESTED_BY') or 'unknown'})", flush=True)
 status = main(argv)
 if status:
