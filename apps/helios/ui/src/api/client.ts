@@ -1379,9 +1379,39 @@ export interface CrawlerSettingsState {
   using_defaults: boolean;
   /** No rules at all (nothing active, or an empty version): crawls find very little. */
   empty?: boolean;
+  /** Class and claim names of the active ontology, for the editor's pickers. */
+  vocabulary?: { classes: string[]; predicates: string[] } | null;
   content_hash: string;
   settings: Record<string, unknown>;
   versions: CrawlerSettingsVersion[];
+}
+
+/** What a draft rule matches in sample passages (nothing is saved). */
+export interface CrawlerTryResult {
+  sample:
+    | { kind: "text" }
+    | { kind: "crawl"; crawl_runs: Array<{ crawl_run_id: string; source: string; started_at: string }> }
+    | { kind: "none"; reason: string };
+  scanned: number;
+  matched: number;
+  matches: number;
+  blocked: number;
+  values: Array<{ text: string; count: number }>;
+  distinct_values: number;
+  passages: Array<{
+    segment_type: string;
+    locator: Record<string, unknown>;
+    text: string;
+    truncated: boolean;
+    matches: Array<{
+      start: number;
+      end: number;
+      text: string;
+      rule?: string;
+      strength?: string;
+      blocked?: boolean;
+    }>;
+  }>;
 }
 
 export interface CrawlerSettingsSaveResult extends CrawlerSettingsVersion {
@@ -1497,6 +1527,11 @@ export interface HeliosApi {
   crawlerEvaluations?(dataset?: string): Promise<CrawlEvaluation[]>;
   crawlerSettings?(): Promise<CrawlerSettingsState>;
   crawlerSettingsDefaults?(): Promise<{ content_hash: string; settings: Record<string, unknown> }>;
+  tryCrawlerSettingsRule?(
+    settings: Record<string, unknown>,
+    rule: Record<string, unknown>,
+    text?: string,
+  ): Promise<CrawlerTryResult>;
   crawlerSettingsPresets?(): Promise<CrawlerSettingsPreset[]>;
   crawlerSettingsPreset?(
     name: string,
@@ -1864,6 +1899,18 @@ export class HeliosApiClient implements HeliosApi {
 
   crawlerSettings(): Promise<CrawlerSettingsState> {
     return this.get<CrawlerSettingsState>("/api/v1/crawler/settings");
+  }
+
+  tryCrawlerSettingsRule(
+    settings: Record<string, unknown>,
+    rule: Record<string, unknown>,
+    text?: string,
+  ): Promise<CrawlerTryResult> {
+    return this.post<CrawlerTryResult>("/api/v1/crawler/settings:try", {
+      settings,
+      rule,
+      ...(text === undefined ? {} : { text }),
+    });
   }
 
   crawlerSettingsPresets(): Promise<CrawlerSettingsPreset[]> {
