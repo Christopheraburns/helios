@@ -116,10 +116,87 @@ def get_settings() -> dict[str, Any]:
         "using_defaults": record is None,
         # No rules at all: crawls find only what the warehouse dictionary names.
         "empty": settings.is_empty(),
+        # Names the editor offers in its pickers; None when no ontology version is active.
+        "vocabulary": _vocabulary_view(store),
         "content_hash": settings.content_hash(),
         "settings": settings.model_dump(mode="json"),
         "versions": [_meta(r, active_version) for r in reversed(versions.versions(store))],
     }
+
+
+def _vocabulary_view(store) -> dict[str, list[str]] | None:
+    vocabulary = _ontology_vocabulary(store)
+    if vocabulary is None:
+        return None
+    classes, predicates = vocabulary
+    return {"classes": sorted(classes), "predicates": sorted(predicates)}
+
+
+class TryRequest(BaseModel):
+    """A draft settings document, one of its rules, and optionally text to try it on."""
+
+    settings: dict[str, Any]
+    rule: dict[str, Any]
+    text: str | None = Field(default=None, max_length=200_000)
+    source: str | None = Field(default=None, max_length=200)
+
+
+MAX_TRY_SEGMENTS = 3000
+
+
+@crawler_router.post("/settings:try")
+def try_settings_rule(body: TryRequest) -> dict[str, Any]:
+    """What one rule of unsaved settings matches: in ``text`` when given, else in
+    the passages of the latest crawl (of ``source``, or of every source). The
+    crawler's own code is used, nothing is written and the warehouse is not asked."""
+    from apps.helios.crawler import tryout
+    from helios_core.index import browse
+
+    try:
+        settings = CrawlerSettings.model_validate(body.settings)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "these settings are not valid yet",
+                "problems": [
+                    f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()
+                ],
+            },
+        ) from exc
+    if body.text is not None:
+        passages = tryout.pasted(body.text)
+        sample: dict[str, Any] = {"kind": "text"}
+    else:
+        store = _store()
+        latest = [r for r in browse._latest(store) if body.source in (None, r.source)]
+        passages = [
+            tryout.Passage(s.segment_id, s.segment_type, s.locator, s.text)
+            for run in latest
+            for s in browse._rows(store, run.crawl_run_id, browse.SEGMENTS)
+        ][:MAX_TRY_SEGMENTS]
+        sample = (
+            {
+                "kind": "crawl",
+                "crawl_runs": [
+                    {"crawl_run_id": r.crawl_run_id, "source": r.source, "started_at": r.started_at}
+                    for r in latest
+                ],
+            }
+            if latest
+            else {
+                "kind": "none",
+                "reason": (
+                    "No crawl has finished yet. Paste some text to try the rule on, or run a "
+                    "crawl first: it reads and splits documents even with no rules."
+                ),
+            }
+        )
+    try:
+        result = tryout.try_rule(settings, body.rule, passages)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"sample": sample, **result}
 
 
 @crawler_router.get("/settings/defaults")

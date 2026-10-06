@@ -15,6 +15,8 @@ import {
   type CrawlerSettingsState,
 } from "../api/client";
 import { ErrorState, LoadingState } from "../components/AsyncState";
+import SettingsForm, { type Settings, type TryRule } from "../features/crawler/SettingsForm";
+import TryPanel from "../features/crawler/TryPanel";
 import type { ApplicationContextState } from "../hooks/useApplicationContext";
 import "./CrawlerPage.css";
 
@@ -1066,6 +1068,17 @@ function SettingsTab({ context }: CrawlerPageProps) {
   const [result, setResult] = useState<CrawlerSettingsSaveResult | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [presets, setPresets] = useState<CrawlerSettingsPreset[] | null>(null);
+  const [formMode, setFormMode] = useState(true);
+  const [trying, setTrying] = useState<{ rule: TryRule; title: string } | null>(null);
+  // The form edits the same document as the JSON view; null when the JSON is not readable.
+  const draft = useMemo<Settings | null>(() => {
+    try {
+      const parsed: unknown = JSON.parse(text);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Settings) : null;
+    } catch {
+      return null;
+    }
+  }, [text]);
 
   useEffect(() => {
     let active = true;
@@ -1172,9 +1185,15 @@ function SettingsTab({ context }: CrawlerPageProps) {
         </div>
       )}
 
-      <div className="crawler-settings-grid">
-        <section>
-          <h2>Versions</h2>
+      <div className="crawler-settings-stack">
+        <details className="crawler-versions" open={!formMode || state.versions.length === 0 || state.empty}>
+          <summary>
+            Versions and presets{" "}
+            <span className="muted">
+              ({state.versions.length} saved{state.active_version ? `, version ${state.active_version} active` : ""})
+            </span>
+          </summary>
+          <h2 className="visually-hidden">Versions</h2>
           {state.versions.length === 0 ? (
             <p className="muted">No saved versions yet.</p>
           ) : (
@@ -1267,33 +1286,64 @@ function SettingsTab({ context }: CrawlerPageProps) {
               ontology mapping, not these settings. See <code>docs/crawler-analysis.md</code>.
             </p>
           </details>
-        </section>
+        </details>
 
         <section className="crawler-editor">
-          <h2>
-            Edit <span className="muted">(loaded: {editing ?? "—"})</span>
-          </h2>
-          <textarea
-            className="crawler-json"
-            spellCheck={false}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            aria-label="Crawler settings JSON"
-          />
+          <div className="crawler-editor-header">
+            <h2>
+              Edit <span className="muted">(loaded: {editing ?? "—"})</span>
+            </h2>
+            <div className="crawler-mode" role="radiogroup" aria-label="How to edit">
+              <button type="button" role="radio" aria-checked={formMode} className={formMode ? "active" : ""} onClick={() => setFormMode(true)}>
+                Form
+              </button>
+              <button type="button" role="radio" aria-checked={!formMode} className={!formMode ? "active" : ""} onClick={() => setFormMode(false)}>
+                JSON
+              </button>
+            </div>
+          </div>
+          {formMode && draft === null && (
+            <div className="crawler-settings-empty" role="alert">
+              The JSON cannot be read, so the form cannot show it. Switch to JSON and fix it, or load
+              a version or preset.
+            </div>
+          )}
+          {formMode && draft !== null ? (
+            <div className="crawler-form-layout">
+              <SettingsForm
+                settings={draft}
+                vocabulary={state.vocabulary ?? null}
+                onChange={(next) => setText(JSON.stringify(next, null, 2))}
+                onTry={(rule, title) => setTrying({ rule, title })}
+              />
+              <TryPanel api={crawlerClient} settings={draft} rule={trying?.rule ?? null} title={trying?.title ?? ""} />
+            </div>
+          ) : null}
+          {!formMode && (
+            <textarea
+              className="crawler-json"
+              spellCheck={false}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              aria-label="Crawler settings JSON"
+            />
+          )}
           <div className="crawler-editor-actions">
-            <button
-              className="crawler-button"
-              onClick={() => {
-                try {
-                  setText(JSON.stringify(JSON.parse(text), null, 2));
-                  setProblem(null);
-                } catch (err) {
-                  setProblem(`Not valid JSON: ${message(err, "parse error")}`);
-                }
-              }}
-            >
-              Format
-            </button>
+            {!formMode && (
+              <button
+                className="crawler-button"
+                onClick={() => {
+                  try {
+                    setText(JSON.stringify(JSON.parse(text), null, 2));
+                    setProblem(null);
+                  } catch (err) {
+                    setProblem(`Not valid JSON: ${message(err, "parse error")}`);
+                  }
+                }}
+              >
+                Format
+              </button>
+            )}
             <input
               className="crawler-note"
               placeholder="Note: what changed and why"

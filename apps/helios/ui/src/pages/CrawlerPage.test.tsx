@@ -249,9 +249,13 @@ describe("CrawlerPage", () => {
     fireEvent.click(screen.getByText("Validate and save"));
     expect(await screen.findByText(/not a valid regular expression/)).toBeTruthy();
 
+    fireEvent.click(screen.getByRole("radio", { name: "JSON" }));
     fireEvent.change(screen.getByLabelText("Crawler settings JSON"), { target: { value: "{ not json" } });
     fireEvent.click(screen.getByText("Validate and save"));
     expect(await screen.findByText(/Not valid JSON/)).toBeTruthy();
+    // The form cannot show unreadable JSON, and says so.
+    fireEvent.click(screen.getByRole("radio", { name: "Form" }));
+    expect(screen.getByText(/The JSON cannot be read/)).toBeInTheDocument();
   });
 
   it("labels LLM crawls, filters by strategy and shows the model and its usage", async () => {
@@ -358,10 +362,11 @@ describe("CrawlerPage", () => {
     expect(screen.getByText("Store returns over a warehouse.")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Start from “Retail returns”" }));
     await waitFor(() => expect(api.crawlerSettingsPreset).toHaveBeenCalledWith("retail-returns"));
-    await waitFor(() =>
-      expect((screen.getByLabelText("Crawler settings JSON") as HTMLTextAreaElement).value).toContain(
-        "ticket_number",
-      ),
+    // The preset opens in the form: its pattern is a field, not JSON.
+    expect(await screen.findByDisplayValue("ticket_number")).toHaveAttribute("aria-label", "Pattern 1 name");
+    fireEvent.click(screen.getByRole("radio", { name: "JSON" }));
+    expect((screen.getByLabelText("Crawler settings JSON") as HTMLTextAreaElement).value).toContain(
+      "ticket_number",
     );
   });
 
