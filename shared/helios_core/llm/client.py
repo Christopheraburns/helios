@@ -3,7 +3,8 @@ LLM client with two interchangeable backends:
 
   LLM_PROVIDER=anthropic   Anthropic Messages API (ANTHROPIC_API_KEY, ANTHROPIC_MODEL)
   LLM_PROVIDER=openai      any OpenAI-compatible endpoint, e.g. Cloudera AI Inference
-                           (INFERENCE_BASE_URL, INFERENCE_API_KEY, INFERENCE_MODEL)
+                           (INFERENCE_BASE_URL, INFERENCE_TOKEN or INFERENCE_API_KEY,
+                           INFERENCE_MODEL)
   LLM_PROVIDER=mistral     Mistral's OpenAI-compatible API
                            (MISTRAL_API_KEY, optional MISTRAL_MODEL)
 
@@ -481,6 +482,15 @@ def _parse_json(text: str) -> Any:
         raise ValueError("no JSON object in response")
 
 
+def inference_token() -> str | None:
+    """The OpenAI-compatible endpoint's bearer token, if the deployment sets one."""
+    for name in ("INFERENCE_TOKEN", "INFERENCE_API_KEY"):
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return None
+
+
 def llm_from_env() -> LLMClient | None:
     provider = (
         os.environ.get("LLM_PROVIDER")
@@ -512,4 +522,4 @@ def llm_from_env() -> LLMClient | None:
     base = os.environ.get("INFERENCE_BASE_URL")
     if not base:
         return None
-    return LLMClient("openai", os.environ.get("INFERENCE_MODEL", ""), os.environ.get("INFERENCE_API_KEY"), base)
+    return LLMClient("openai", os.environ.get("INFERENCE_MODEL", ""), inference_token(), base)

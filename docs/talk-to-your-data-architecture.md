@@ -334,7 +334,7 @@ Anthropic remains available through `LLM_PROVIDER=anthropic`,
 `ANTHROPIC_API_KEY`, and `ANTHROPIC_MODEL`. For an OpenAI-compatible Cloudera
 AI Inference endpoint, use
 `LLM_PROVIDER=openai`, `INFERENCE_BASE_URL`, `INFERENCE_MODEL`, and optionally
-`INFERENCE_API_KEY` instead.
+`INFERENCE_TOKEN` (or the older `INFERENCE_API_KEY`) instead.
 
 ### End-user session override
 
@@ -355,6 +355,9 @@ The OpenAI-compatible choice calls the Cloudera LiteLLM gateway at
 `https://ai-gateway.cloudops.cloudera.com` with the user-supplied API key.
 `claude-haiku-4-5` is the suggested model. Users cannot enter an arbitrary
 base URL. `INFERENCE_BASE_URL` may override that gateway for a deployment.
+When the deployment also sets `INFERENCE_TOKEN` and `INFERENCE_MODEL`, the
+page offers that model first and the key may be left blank; Helios then uses
+the deployment's token.
 Bedrock uses the deployment's `AWS_REGION` or
 `AWS_DEFAULT_REGION` (default `us-east-1`) and the Bedrock Converse API with
 the user-supplied Bedrock bearer key.

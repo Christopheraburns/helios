@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 
 from helios_core.llm import LLMClient, llm_from_env
+from helios_core.llm.client import inference_token
 
 SUPPORTED_PROVIDERS = frozenset({
     "anthropic",
@@ -120,6 +121,15 @@ def openai_compatible_base_url() -> str:
     """Use the deployment override, otherwise the Cloudera LiteLLM gateway."""
     configured = os.environ.get("INFERENCE_BASE_URL", "").strip()
     return configured or LITELLM_GATEWAY_URL
+
+
+def deployment_defaults(provider: str) -> tuple[str | None, str | None]:
+    """The model and key the deployment supplies for a provider chosen on the
+    LLM Provider page, so the user need not enter their own. Only the
+    OpenAI-compatible endpoint has them (INFERENCE_MODEL, INFERENCE_TOKEN)."""
+    if provider != "openai":
+        return None, None
+    return os.environ.get("INFERENCE_MODEL", "").strip() or None, inference_token()
 
 
 def provider_availability() -> dict[str, bool]:

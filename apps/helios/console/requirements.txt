@@ -1,7 +1,5 @@
 # Direct dependencies for the Helios API Application on PBJ Python 3.12.
 # Install into the project-local directory documented in docs/ui-deployment.md.
-lancedb==1.0.4  # CR-11: vector DB for segment embeddings
-sentence-transformers==3.0.1  # CR-11: local embedding model (all-MiniLM-L6-v2)
 fastapi==0.141.1
 httpx==0.28.1
 impyla==0.24.0
@@ -16,3 +14,7 @@ PyYAML==6.0.2
 requests==2.32.5
 sqlglot==30.18.0
 uvicorn[standard]==0.53.0
+# Searching crawled documents (CR-11). Optional: without them crawls run and
+# search_evidence reports that it is unavailable. sentence-transformers brings PyTorch.
+lancedb==0.39.0
+sentence-transformers==6.1.0

@@ -9,11 +9,12 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { TraceCollection, TraceDetail, TraceSpan } from "../../api/client";
 import { ApplicationContextState } from "../../hooks/useApplicationContext";
-import TraceNode from "./TraceNode";
+import { whereInDocument } from "../../components/EvidenceResults";
+import TraceNode, { LaneLabelNode } from "./TraceNode";
 import { adaptSemanticPathToFlow } from "./semanticPathFlowAdapter";
 import { adaptTraceToFlow } from "./traceFlowAdapter";
 
-const nodeTypes = { trace: TraceNode };
+const nodeTypes = { trace: TraceNode, lane: LaneLabelNode };
 
 export default function TraceWorkspace({
   context,
@@ -242,6 +243,7 @@ export default function TraceWorkspace({
               maxZoom={1.6}
               style={{ width: "100%", height: "100%" }}
               onNodeClick={(_event, node) => {
+                if (node.type === "lane") return;
                 const span = detail.spans.find(
                   (item) => item.id === node.id,
                 );
@@ -336,6 +338,23 @@ function SemanticInspector({
   const datasetIndex = nodeId.startsWith("semantic-dataset-")
     ? Number(nodeId.replace("semantic-dataset-", ""))
     : -1;
+  const documents = evidence.documents ?? null;
+  const search = nodeId.startsWith("document-search-")
+    ? documents?.searches[Number(nodeId.replace("document-search-", ""))]
+    : undefined;
+  const group = nodeId.startsWith("document-group-")
+    ? documents?.groups[Number(nodeId.replace("document-group-", ""))]
+    : undefined;
+  if (search || group) {
+    return (
+      <DocumentInspector
+        search={search}
+        group={group}
+        bridges={documents?.bridges ?? []}
+      />
+    );
+  }
+  const queryBridges = nodeId === "semantic-query" ? documents?.bridges ?? [] : [];
   const semanticObject = evidence.semantic_objects[objectIndex];
   const dataset = evidence.datasets[datasetIndex];
   const payload = semanticObject
@@ -358,6 +377,21 @@ function SemanticInspector({
       <p className="page-header__eyebrow">Answer path</p>
       <h3>{title}</h3>
       {semanticObject?.description ? <p>{semanticObject.description}</p> : null}
+      {queryBridges.length ? (
+        <div className="trace-bridges">
+          <h4>Filters taken from documents</h4>
+          <ul>
+            {queryBridges.map((bridge) => (
+              <li key={bridge.id}>
+                <code>{bridge.field} = {bridge.value}</code>
+                <span>
+                  {bridge.entity.class} {bridge.entity.name}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {dataset ? (
         <dl>
           <div><dt>Database table</dt><dd>{dataset.physical_name}</dd></div>
@@ -400,6 +434,82 @@ function SemanticInspector({
           <pre>{JSON.stringify(evidence.revision, null, 2)}</pre>
         </details>
       ) : null}
+    </>
+  );
+}
+
+type DocumentEvidence = NonNullable<
+  NonNullable<TraceDetail["semantic_evidence"]>["documents"]
+>;
+
+function DocumentInspector({
+  search,
+  group,
+  bridges,
+}: {
+  search?: DocumentEvidence["searches"][number];
+  group?: DocumentEvidence["groups"][number];
+  bridges: DocumentEvidence["bridges"];
+}) {
+  if (search) {
+    return (
+      <>
+        <p className="page-header__eyebrow">Document search</p>
+        <h3>“{search.query}”</h3>
+        <dl>
+          <div>
+            <dt>Method</dt>
+            <dd>
+              {search.tool === "entity_claims"
+                ? "Claims extracted from documents"
+                : "Search by meaning"}
+            </dd>
+          </div>
+          <div><dt>Found</dt><dd>{search.result_count}</dd></div>
+          <div><dt>Status</dt><dd>{search.status}</dd></div>
+        </dl>
+        <p>Select a document step to read what was found.</p>
+      </>
+    );
+  }
+  if (!group) return null;
+  const used = bridges.filter((bridge) => bridge.group_id === group.id);
+  return (
+    <>
+      <p className="page-header__eyebrow">Documents found</p>
+      <h3>
+        {group.count} {group.type} {group.count === 1 ? "passage" : "passages"}
+      </h3>
+      <p>
+        Found by similarity to the search and given to the AI model. They are
+        not verified against the warehouse.
+      </p>
+      <ol className="trace-passages">
+        {group.passages.map((passage) => {
+          const keys = used.filter((bridge) => bridge.passage_id === passage.id);
+          return (
+            <li key={passage.id}>
+              <div className="trace-passages__meta">
+                <span>
+                  {passage.claim
+                    ? passage.claim.replace(/_/g, " ").toLowerCase()
+                    : whereInDocument(passage.locator, group.type)}
+                </span>
+                {passage.relevance != null ? (
+                  <span>{Math.round(Math.max(0, passage.relevance) * 100)}% match</span>
+                ) : null}
+              </div>
+              <p>{passage.text}</p>
+              {keys.map((bridge) => (
+                <p className="trace-passages__bridge" key={bridge.id}>
+                  Used in the query: {bridge.entity.class} {bridge.entity.name} (
+                  <code>{bridge.field} = {bridge.value}</code>)
+                </p>
+              ))}
+            </li>
+          );
+        })}
+      </ol>
     </>
   );
 }

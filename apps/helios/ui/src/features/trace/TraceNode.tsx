@@ -10,6 +10,7 @@ export interface TraceNodeData extends Record<string, unknown> {
     | "server"
     | "semantic"
     | "dataset"
+    | "document"
     | "query"
     | "result";
   status: string;
@@ -17,6 +18,12 @@ export interface TraceNodeData extends Record<string, unknown> {
   tokens?: number;
   explanation?: string;
   semanticId?: string;
+}
+
+/** A heading over one lane of the answer path; not a step. */
+export function LaneLabelNode({ data }: NodeProps) {
+  const lane = data as { label: string; lane: string };
+  return <div className={`trace-lane trace-lane--${lane.lane}`}>{lane.label}</div>;
 }
 
 export default function TraceNode({ data, selected }: NodeProps) {

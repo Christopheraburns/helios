@@ -531,7 +531,10 @@ process memory, and never includes it in a response or audit details. `DELETE`
 returns the session to the project environment default. The
 OpenAI-compatible provider uses the Cloudera LiteLLM gateway. Its base URL is
 not accepted from the browser; `INFERENCE_BASE_URL` can override the default
-gateway for a deployment.
+gateway for a deployment. For that provider `model` and `api_key` may be blank
+when the deployment sets `INFERENCE_MODEL` and `INFERENCE_TOKEN`; each
+`providers[]` entry reports `default_model` and `key_configured` so the page
+knows when they may be omitted.
 
 ## Talk to Your Data
 

@@ -93,11 +93,18 @@ def test_starting_a_crawl_creates_the_job_once_and_runs_it(client, workbench):
     assert environment["HELIOS_CRAWL_DATASET"] == DATASET
     assert environment["HELIOS_CRAWL_FULL"] == "0"
     assert "HELIOS_CRAWL_SOURCE" not in environment
+    assert "HELIOS_CRAWL_NOTE" not in environment and body["note"] is None
 
     workbench.runs[0].status = "ENGINE_SUCCEEDED"
-    again = client.post("/api/v1/crawler/runs", json={"dataset_id": DATASET, "full": True}, headers=ALICE)
+    again = client.post(
+        "/api/v1/crawler/runs",
+        json={"dataset_id": DATASET, "full": True, "note": "  after the pattern fix "},
+        headers=ALICE,
+    )
     assert again.status_code == 202 and len(workbench.created_jobs) == 1
     assert json.loads(workbench.runs[0].environment)["HELIOS_CRAWL_FULL"] == "1"
+    assert json.loads(workbench.runs[0].environment)["HELIOS_CRAWL_NOTE"] == "after the pattern fix"
+    assert again.json()["note"] == "after the pattern fix"
 
 
 def test_a_second_crawl_of_the_same_target_waits_for_the_first(client, workbench):
@@ -109,7 +116,13 @@ def test_a_second_crawl_of_the_same_target_waits_for_the_first(client, workbench
 
 @pytest.mark.parametrize(
     "body",
-    [{}, {"dataset_id": DATASET, "source_id": "s"}, {"dataset_id": "x; rm -rf /"}, {"dataset_id": "a" * 200}],
+    [
+        {},
+        {"dataset_id": DATASET, "source_id": "s"},
+        {"dataset_id": "x; rm -rf /"},
+        {"dataset_id": "a" * 200},
+        {"dataset_id": DATASET, "note": "n" * 201},
+    ],
 )
 def test_bad_requests_start_nothing(client, workbench, body):
     assert client.post("/api/v1/crawler/runs", json=body, headers=ALICE).status_code == 422
@@ -138,7 +151,7 @@ def test_launches_and_targets_describe_what_was_and_can_be_crawled(client, workb
     run = runs.start(
         index, connector="helios_ds", source=DATASET, ontology_version="0.2.0",
         crawler_version="0.6.0", actor="cburns",
-        settings={"data_source": {"organization_id": "unregistered"}, "request": {"requested_by": "cloudera-workbench:alice"}},
+        settings={"data_source": {"organization_id": "unregistered"}, "request": {"requested_by": "cloudera-workbench:alice", "note": "baseline"}},
     )
     runs.finish(index, run, {"listed": 1})
     assert client.get("/api/v1/crawler/targets", headers=ALICE).json() == [
@@ -146,4 +159,5 @@ def test_launches_and_targets_describe_what_was_and_can_be_crawled(client, workb
     ]
     [listed] = client.get("/api/v1/crawler/runs").json()
     assert listed["requested_by"] == "cloudera-workbench:alice"
+    assert listed["note"] == "baseline"
     assert listed["isolated"] is False  # ran as cburns, not the crawler machine user

@@ -162,7 +162,7 @@ The following are feature-specific rather than required for API readiness:
   client to MCP. `HELIOS_MCP_TIMEOUT_SECONDS` controls its per-operation
   timeout. It defaults to 45 seconds; use `180` for the current warehouse
   latency.
-- `INFERENCE_BASE_URL`, `INFERENCE_MODEL`, `INFERENCE_API_KEY`
+- `INFERENCE_BASE_URL`, `INFERENCE_MODEL`, `INFERENCE_TOKEN` (or the older `INFERENCE_API_KEY`)
 
 Store credentials through the Cloudera environment-variable/secret mechanism,
 not in source control. Leave TLS verification enabled. In particular, do not

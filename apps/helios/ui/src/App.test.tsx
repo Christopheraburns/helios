@@ -913,6 +913,49 @@ describe("Helios application shell", () => {
     );
   });
 
+  it("uses the deployment's token and model for the OpenAI-compatible provider", async () => {
+    const client = successfulClient();
+    const providers = [
+      { id: "anthropic" as const, available: true },
+      { id: "bedrock" as const, available: true },
+      { id: "mistral" as const, available: true },
+      { id: "openai" as const, available: true, default_model: "deployment-model", key_configured: true },
+    ];
+    vi.mocked(client.modelProviderSettings!).mockResolvedValue({
+      source: "environment",
+      provider: "anthropic",
+      model: "claude-haiku-4-5-20251001",
+      api_key_configured: false,
+      providers,
+    });
+    vi.mocked(client.updateModelProviderSettings!).mockResolvedValue({
+      source: "session",
+      provider: "openai",
+      model: "deployment-model",
+      api_key_configured: true,
+      providers,
+    });
+    window.history.replaceState({}, "", "/governance/model-provider");
+
+    render(<App client={client} />);
+
+    await screen.findByRole("heading", { name: "LLM Provider" });
+    const save = screen.getByRole("button", { name: "Use for this session" });
+    expect(save).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "openai" } });
+    expect(screen.getByLabelText("Provider model")).toHaveValue("deployment-model");
+    expect(screen.getByLabelText("API key")).not.toBeRequired();
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(client.updateModelProviderSettings).toHaveBeenCalledWith({
+        provider: "openai",
+        model: "deployment-model",
+        api_key: "",
+      }),
+    );
+  });
+
   it("manages a session-only LLM provider from Settings", async () => {
     const client = successfulClient();
     vi.mocked(client.updateModelProviderSettings!).mockResolvedValue({
@@ -954,6 +997,7 @@ describe("Helios application shell", () => {
     expect(screen.getByLabelText("Provider model"))
       .toHaveValue("claude-haiku-4-5");
     expect(screen.getByText(/Cloudera LiteLLM gateway/)).toBeInTheDocument();
+    expect(screen.getByLabelText("API key")).toBeRequired();
 
     fireEvent.change(screen.getByLabelText("Provider"), {
       target: { value: "mistral" },

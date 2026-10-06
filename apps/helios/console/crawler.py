@@ -49,7 +49,7 @@ from helios_core.engines.impala import ImpalaEngine, ImpalaProxyDelegationError,
 from helios_core.index import crawler_settings as versions
 from helios_core.index import ontology_versions, runs
 from helios_core.index.records import AssetRecord
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from . import crawl_jobs, ontology
 from .graph_client import GraphGatewayClient, GraphGatewayError, GraphGatewayUnavailable
@@ -232,6 +232,7 @@ def _latest_evaluations_by_run(store) -> dict[str, Any]:
 def _run_view(run: Any, evaluation: Any = None) -> dict[str, Any]:
     return {
         "requested_by": ((run.settings or {}).get("request") or {}).get("requested_by"),
+        "note": ((run.settings or {}).get("request") or {}).get("note"),
         # False when the crawl connected as someone other than the crawler machine
         # user, who may be able to read what the crawler must not (CR-0d).
         "isolated": run.actor == crawl_jobs.crawler_identity(),
@@ -517,7 +518,7 @@ class StartCrawlRequest(BaseModel):
     source_id: str | None = None
     dataset_id: str | None = None
     full: bool = False
-    note: str | None = None
+    note: str | None = Field(default=None, max_length=200)
 
 
 def _principal(request: Request):
@@ -584,7 +585,7 @@ def start_crawl(body: StartCrawlRequest, request: Request) -> dict[str, Any]:
             dataset_id=body.dataset_id,
             full=body.full,
             requested_by=principal.id,
-            note=body.note,
+            note=(body.note or "").strip() or None,
         )
     except HTTPException:
         raise

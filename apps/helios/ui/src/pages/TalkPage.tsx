@@ -20,8 +20,12 @@ import {
   ErrorState,
   LoadingState,
 } from "../components/AsyncState";
-import ExplainResult from "../components/ExplainResult";
-import SearchEvidenceResult from "../components/SearchEvidenceResult";
+import {
+  EntityClaims,
+  EntityClaimsResult,
+  EvidenceSearch,
+  EvidenceSearchResult,
+} from "../components/EvidenceResults";
 import { ApplicationContextState } from "../hooks/useApplicationContext";
 
 interface TalkPageProps {
@@ -148,28 +152,35 @@ function QueryResult({ turn }: { turn: ConversationTurn }) {
   );
 }
 
-function UnstructuredResults({ turn }: { turn: ConversationTurn }) {
-  const unstructuredResults = [];
-
-  for (const item of turn.tool_trace) {
-    const result = item.result && typeof item.result === "object"
-      ? (item.result as Record<string, unknown>)
-      : null;
-
-    if (item.tool === "search_evidence" && result && !result.error) {
-      unstructuredResults.push(
-        <SearchEvidenceResult key={`search-${item.tool}`} result={result as any} />
-      );
-    }
-
-    if (item.tool === "explain" && result && !result.error) {
-      unstructuredResults.push(
-        <ExplainResult key={`explain-${item.tool}`} result={result as any} />
-      );
-    }
-  }
-
-  return unstructuredResults.length > 0 ? <>{unstructuredResults}</> : null;
+function DocumentResults({ turn }: { turn: ConversationTurn }) {
+  return (
+    <>
+      {turn.tool_trace.map((item, index) => {
+        const result =
+          item.result && typeof item.result === "object"
+            ? (item.result as Record<string, unknown>)
+            : null;
+        if (!result || result.error) return null;
+        if (item.tool === "search_evidence" && Array.isArray(result.segments)) {
+          return (
+            <EvidenceSearchResult
+              key={index}
+              result={result as unknown as EvidenceSearch}
+            />
+          );
+        }
+        if (item.tool === "entity_claims" && Array.isArray(result.claims)) {
+          return (
+            <EntityClaimsResult
+              key={index}
+              result={result as unknown as EntityClaims}
+            />
+          );
+        }
+        return null;
+      })}
+    </>
+  );
 }
 
 function ToolActivity({
@@ -219,7 +230,11 @@ function ToolActivity({
                   ["compile_query", "run_query"].includes(item.tool)
                 )
                   ? "An approved data request was prepared."
-                  : "This answer did not need a database query."}
+                  : turn.tool_trace.some((item) =>
+                      ["search_evidence", "entity_claims"].includes(item.tool)
+                    )
+                    ? "Crawled documents were searched; no database query was needed."
+                    : "This answer did not need a database query."}
               </span>
             </li>
             <li>
@@ -655,7 +670,7 @@ export default function TalkPage({ context }: TalkPageProps) {
                       <div className="talk-message__content">{item.content}</div>
                       {item.role === "assistant" && turns[item.id] ? (
                         <>
-                          <UnstructuredResults turn={turns[item.id]} />
+                          <DocumentResults turn={turns[item.id]} />
                           <QueryResult turn={turns[item.id]} />
                           <ToolActivity
                             turn={turns[item.id]}

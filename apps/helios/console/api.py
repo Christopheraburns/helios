@@ -62,9 +62,11 @@ from apps.helios.console.mcp_settings import (
     SessionMCPSettingsStore,
     environment_max_tool_rounds,
 )
+from apps.helios.console.trace_documents import DOCUMENT_TOOLS, document_evidence
 from apps.helios.console.model_provider import (
     DEFAULT_SESSION_MODEL_PROVIDER_STORE,
     SUPPORTED_PROVIDERS,
+    deployment_defaults,
     SessionModelProvider,
     SessionModelProviderStore,
     environment_provider_summary,
@@ -242,8 +244,9 @@ class ModelProviderSettingsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: Literal["anthropic", "mistral", "bedrock", "openai"]
-    model: str = Field(min_length=1, max_length=300)
-    api_key: SecretStr
+    # Blank means "use what the deployment configures" (OpenAI-compatible only).
+    model: str = Field(default="", max_length=300)
+    api_key: SecretStr = SecretStr("")
 
 
 class MCPSettingsRequest(BaseModel):
@@ -1494,7 +1497,9 @@ def _semantic_trace_evidence(
             "type": "interpreted_by",
         }
     ]
-    tool_ids = [tool["id"] for tool in tools]
+    documents, document_edges = document_evidence(agent_tools)
+    # Document searches have their own lane; they resolve no definitions.
+    tool_ids = [tool["id"] for tool in tools if tool["name"] not in DOCUMENT_TOOLS]
     for tool_id in tool_ids:
         edges.append({
             "id": f"assistant-{tool_id}",
@@ -1530,6 +1535,8 @@ def _semantic_trace_evidence(
                 "type": "mapped_to_physical_data",
             })
     terminal_sources = dataset_ids or semantic_ids or upstream_ids
+    if documents and not (tool_ids or query):
+        terminal_sources = []  # a documents-only answer has no warehouse path
     if query:
         query["id"] = "query"
         for source_id in terminal_sources:
@@ -1547,6 +1554,9 @@ def _semantic_trace_evidence(
             "target": "answer",
             "type": "supported_answer",
         })
+    edges += [
+        edge for edge in document_edges if query or edge["target"] != "query"
+    ]
 
     incomplete_reasons = []
     if not run.semantic_revision_id:
@@ -1587,6 +1597,7 @@ def _semantic_trace_evidence(
         "semantic_objects": semantic_items,
         "datasets": data_sources,
         "query": query,
+        "documents": documents,
         "edges": edges,
         "answer": run.answer,
         "error": (
@@ -1722,7 +1733,12 @@ def _model_provider_settings_response(
         "model": settings.model if settings is not None else environment_model,
         "api_key_configured": settings is not None,
         "providers": [
-            {"id": provider, "available": availability[provider]}
+            {
+                "id": provider,
+                "available": availability[provider],
+                "default_model": deployment_defaults(provider)[0],
+                "key_configured": deployment_defaults(provider)[1] is not None,
+            }
             for provider in sorted(SUPPORTED_PROVIDERS)
         ],
     }
@@ -1768,8 +1784,9 @@ def update_model_provider_settings(
     request: Request,
     principal: Annotated[authz.Principal, Depends(current_principal)],
 ) -> dict:
-    model = body.model.strip()
-    api_key = body.api_key.get_secret_value().strip()
+    default_model, default_key = deployment_defaults(body.provider)
+    model = body.model.strip() or default_model or ""
+    api_key = body.api_key.get_secret_value().strip() or default_key or ""
     if not model:
         raise HTTPException(422, "model must not be blank")
     if not api_key:

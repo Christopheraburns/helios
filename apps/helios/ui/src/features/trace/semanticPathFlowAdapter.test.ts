@@ -198,4 +198,116 @@ describe("adaptSemanticPathToFlow", () => {
     expect(flow.nodes.at(-1)?.data.label).toBe("Request ended");
     expect(flow.nodes.at(-1)?.data.detail).toContain("do not have access");
   });
+
+  const documents = {
+    searches: [
+      { id: "span-search", tool: "search_evidence", query: "damaged packaging", status: "success", result_count: 3 },
+    ],
+    groups: [
+      {
+        id: "documents:email",
+        type: "email",
+        count: 2,
+        search_ids: ["span-search"],
+        passages: [
+          {
+            id: "seg-1",
+            asset_id: "a1",
+            text: "The box was crushed.",
+            locator: { part: "body" },
+            relevance: 0.58,
+            entities: [{ class: "Customer", name: "Barbara Clark", keys: ["tpcds.customer:c_customer_sk=88705"] }],
+          },
+        ],
+      },
+      { id: "documents:chat", type: "chat", count: 1, search_ids: ["span-search"], passages: [] },
+    ],
+    bridges: [
+      {
+        id: "documents:email:tpcds.customer.c_customer_sk=88705",
+        group_id: "documents:email",
+        passage_id: "seg-1",
+        key: "tpcds.customer:c_customer_sk=88705",
+        field: "tpcds.customer.c_customer_sk",
+        value: "88705",
+        entity: { class: "Customer", name: "Barbara Clark" },
+      },
+    ],
+  };
+  const documentEdges = [
+    { id: "d1", source: "assistant", target: "span-search", type: "searched_documents" },
+    { id: "d2", source: "span-search", target: "documents:email", type: "found_passages" },
+    { id: "d3", source: "span-search", target: "documents:chat", type: "found_passages" },
+    { id: "d4", source: "documents:email", target: "answer", type: "supported_answer" },
+    { id: "d5", source: "documents:chat", target: "answer", type: "supported_answer" },
+  ];
+
+  it("draws a document lane above the warehouse lane and bridges keys into the query", () => {
+    const evidence = detail.semantic_evidence!;
+    const flow = adaptSemanticPathToFlow({
+      ...detail,
+      semantic_evidence: {
+        ...evidence,
+        tools: [
+          ...evidence.tools,
+          { id: "span-search", name: "search_evidence", status: "success", error: null, arguments: {} },
+        ],
+        documents,
+        edges: [
+          ...evidence.edges,
+          ...documentEdges,
+          { id: "d6", source: "documents:email", target: "query", type: "key_used_in_query" },
+        ],
+      },
+    });
+    const node = (id: string) => flow.nodes.find((item) => item.id === id)!;
+
+    expect(node("document-search-0").data.detail).toBe("“damaged packaging”");
+    expect(node("document-group-0").data.label).toBe("2 emails");
+    expect(node("document-group-0").data.detail).toBe("1 customer key used in the query");
+    expect(node("document-group-1").data.label).toBe("1 chat excerpt");
+    expect(node("semantic-tools").data.detail).not.toContain("search evidence");
+    expect(node("document-search-0").position.y).toBeLessThan(node("semantic-tools").position.y);
+    expect(flow.nodes.filter((item) => item.type === "lane").map((item) => item.id)).toEqual([
+      "lane-documents",
+      "lane-warehouse",
+    ]);
+    const bridge = flow.edges.find((edge) => edge.className === "trace-edge--bridge")!;
+    expect([bridge.source, bridge.target, bridge.label]).toEqual([
+      "document-group-0",
+      "semantic-query",
+      "1 customer key used as filters",
+    ]);
+    expect(
+      flow.edges.some((edge) => edge.source === "document-group-1" && edge.target === "semantic-answer"),
+    ).toBe(true);
+  });
+
+  it("shows only the document lane for an answer that used no warehouse data", () => {
+    const evidence = detail.semantic_evidence!;
+    const flow = adaptSemanticPathToFlow({
+      ...detail,
+      semantic_evidence: {
+        ...evidence,
+        tools: [{ id: "span-search", name: "search_evidence", status: "success", error: null, arguments: {} }],
+        semantic_objects: [],
+        datasets: [],
+        query: null,
+        documents: { ...documents, bridges: [] },
+        edges: [
+          { id: "q", source: "question", target: "assistant", type: "interpreted_by" },
+          ...documentEdges,
+        ],
+      },
+    });
+    const ids = flow.nodes.map((item) => item.id);
+
+    expect(ids).not.toContain("semantic-tools");
+    expect(ids).not.toContain("semantic-dataset-0");
+    expect(ids).not.toContain("lane-warehouse");
+    expect(ids).toEqual(expect.arrayContaining(["lane-documents", "document-search-0", "document-group-0", "semantic-answer"]));
+    expect(flow.nodes.find((item) => item.id === "document-group-0")!.data.detail)
+      .toBe("Text given to the AI model for the answer");
+    expect(flow.edges.every((edge) => ids.includes(edge.source) && ids.includes(edge.target))).toBe(true);
+  });
 });

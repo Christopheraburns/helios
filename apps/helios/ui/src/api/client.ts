@@ -30,6 +30,10 @@ export interface ModelProviderSettings {
   providers: Array<{
     id: ModelProviderId;
     available: boolean;
+    /** The model the deployment configures for this provider, if any. */
+    default_model?: string | null;
+    /** True when the deployment supplies a key, so the user need not enter one. */
+    key_configured?: boolean;
   }>;
 }
 
@@ -127,6 +131,45 @@ export interface TraceDetail {
   semantic_evidence?: SemanticTraceEvidence;
 }
 
+/** One passage the document tools returned for an answer. */
+export interface TraceDocumentPassage {
+  id: string;
+  asset_id: string | null;
+  text: string;
+  locator: Record<string, unknown>;
+  relevance: number | null;
+  claim?: string | null;
+  entities: Array<{ class: string; name: string; keys?: string[] }>;
+}
+
+/** The document side of an answer path: searches, documents found by type,
+ * and the document keys that were used as filters in the approved query. */
+export interface TraceDocumentEvidence {
+  searches: Array<{
+    id: string;
+    tool: string;
+    query: string;
+    status: string;
+    result_count: number;
+  }>;
+  groups: Array<{
+    id: string;
+    type: string;
+    count: number;
+    search_ids: string[];
+    passages: TraceDocumentPassage[];
+  }>;
+  bridges: Array<{
+    id: string;
+    group_id: string;
+    passage_id: string;
+    key: string;
+    field: string;
+    value: string;
+    entity: { class: string | null; name: string | null };
+  }>;
+}
+
 export interface SemanticTraceEvidence {
   status: "complete" | "incomplete";
   incomplete_reasons: string[];
@@ -173,6 +216,7 @@ export interface SemanticTraceEvidence {
     columns: string[];
     row_count: number | null;
   } | null;
+  documents?: TraceDocumentEvidence | null;
   edges: Array<{
     id: string;
     source: string;
@@ -1115,6 +1159,7 @@ export interface CrawlLaunch {
   dataset_id: string | null;
   full: boolean;
   requested_by: string | null;
+  note?: string | null;
 }
 
 export interface CrawlLaunches {

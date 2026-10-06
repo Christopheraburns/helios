@@ -2979,6 +2979,82 @@ a:focus-visible {
   border-color: #5f6ca8;
 }
 
+.trace-node--document {
+  background: #fdf8ee;
+  border-color: #b7791f;
+  border-style: dashed;
+}
+
+.trace-lane {
+  width: 510px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 6px;
+}
+
+.trace-lane--document {
+  color: #7a4f0d;
+  background: #f7e8c8;
+}
+
+.trace-lane--warehouse {
+  color: #1d557a;
+  background: #dcecf6;
+}
+
+.trace-passages {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 10px 0 0;
+  list-style: none;
+}
+
+.trace-passages li {
+  padding: 8px 10px;
+  background: #fdf8ee;
+  border-left: 3px solid #b7791f;
+  border-radius: 4px;
+}
+
+.trace-passages p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.trace-passages__meta {
+  display: flex;
+  justify-content: space-between;
+  color: var(--slate-500);
+  font-size: 0.7rem;
+}
+
+.trace-passages p.trace-passages__bridge,
+.trace-bridges li span {
+  color: #1d557a;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.trace-bridges ul {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.trace-bridges li {
+  display: grid;
+  gap: 2px;
+  font-size: 0.76rem;
+}
+
 .trace-node--result {
   border-color: #2f9264;
 }
@@ -3041,6 +3117,16 @@ a:focus-visible {
 .react-flow__edge.trace-edge--error path {
   stroke: #c94d43;
   stroke-width: 2;
+}
+
+.react-flow__edge.trace-edge--document path {
+  stroke: #b7791f;
+  stroke-dasharray: 5 4;
+}
+
+.react-flow__edge.trace-edge--bridge path {
+  stroke: #1d557a;
+  stroke-width: 3;
 }
 
 .evaluation-workspace__start {
@@ -3733,31 +3819,19 @@ a:focus-visible {
 .talk-answer-path span { margin-top: 4px; color: var(--slate-600); font-size: 0.68rem; line-height: 1.4; }
 .talk-loading-overlay { position: absolute; inset: 0; padding: 32px; text-align: center; background: rgb(255 255 255 / 80%); }
 
-/* CR-11: Unstructured results (evidence segments and entity explanations) */
-.talk-result--evidence, .talk-result--explain { border: 1px solid var(--cyan-200); background: var(--cyan-50); border-radius: 8px; }
-.talk-segments { display: grid; gap: 10px; }
-.talk-segment { padding: 10px 12px; background: #fff; border-radius: 6px; border-left: 3px solid var(--cyan-600); }
-.talk-segment__header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; font-size: 0.75rem; }
-.talk-segment__locator { color: var(--slate-500); font-weight: 600; text-transform: uppercase; }
-.talk-segment__relevance { color: var(--cyan-700); font-weight: 600; }
-.talk-segment__text { margin: 0; font-size: 0.9rem; line-height: 1.5; color: var(--text-primary, #111827); }
-.talk-segment__id { display: block; margin-top: 6px; color: var(--slate-400); font-family: ui-monospace, monospace; font-size: 0.7rem; }
-
-.talk-entity-summary { display: flex; gap: 16px; padding: 8px 0; font-size: 0.88rem; }
-.talk-entity-summary strong { color: var(--text-primary, #111827); }
-.talk-entity-summary span { color: var(--slate-600); }
-
-.talk-claims { display: grid; gap: 8px; }
-.talk-claim { padding: 0; margin: 0; border: none; background: transparent; }
-.talk-claim__summary { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 8px 10px; background: #fff; border-radius: 6px; cursor: pointer; border: 1px solid var(--slate-200); }
-.talk-claim__summary:hover { background: var(--slate-50); }
-.talk-claim__count { margin-left: auto; color: var(--slate-500); font-size: 0.75rem; font-weight: normal; white-space: nowrap; }
-.talk-claim__summary strong { font-size: 0.9rem; color: var(--text-primary, #111827); }
-.talk-claim__summary .muted { font-size: 0.85rem; }
-.talk-claim__evidence { display: grid; gap: 8px; padding: 10px 0; }
-.talk-evidence { padding: 8px 10px; background: var(--slate-50); border-radius: 5px; border-left: 2px solid var(--slate-400); }
-.talk-evidence__locator { display: block; font-size: 0.7rem; color: var(--slate-500); font-weight: 600; text-transform: uppercase; margin-bottom: 4px; }
-.talk-evidence__text { margin: 0; font-size: 0.85rem; line-height: 1.4; color: var(--text-primary, #111827); }
+/* Passages and claims from crawled documents (CR-11) */
+.talk-evidence__list { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.talk-evidence__item { padding: 10px 12px; background: #fff; border: 1px solid var(--slate-200); border-left: 3px solid var(--cyan-600); border-radius: 6px; }
+.talk-evidence__meta { display: flex; gap: 12px; justify-content: space-between; margin-bottom: 4px; color: var(--slate-500); font-size: 0.74rem; }
+.talk-evidence__meta strong { color: var(--navy-900); font-size: 0.82rem; }
+.talk-evidence__text { margin: 0; overflow-wrap: anywhere; font-size: 0.88rem; line-height: 1.5; white-space: pre-wrap; }
+.talk-evidence__claim { margin: 0 0 6px; font-size: 0.86rem; }
+.talk-evidence__entities { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 8px 0 0; list-style: none; }
+.talk-evidence__entities li { padding: 2px 8px; font-size: 0.74rem; background: var(--slate-100); border-radius: 10px; }
+.talk-evidence__entities li span { color: var(--slate-500); }
+.talk-evidence__quote { padding: 6px 10px; margin: 6px 0 0; font-size: 0.84rem; line-height: 1.45; background: var(--slate-50); border-left: 2px solid var(--slate-200); }
+.talk-evidence__quote footer { margin-top: 2px; color: var(--slate-500); font-size: 0.72rem; }
+.talk-evidence__empty { margin: 0; color: var(--slate-600); font-size: 0.86rem; }
 
 @media (max-width: 800px) {
   .talk-page { min-height: auto; }
