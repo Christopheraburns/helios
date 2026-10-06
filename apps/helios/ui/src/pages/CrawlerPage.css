@@ -493,3 +493,23 @@
   border-left: 3px solid #8c62b3;
   border-radius: 4px;
 }
+
+.crawler-settings-empty {
+  margin: 10px 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  background: #fff7db;
+  border: 1px solid #e4cf88;
+  border-left: 4px solid #b7791f;
+  border-radius: 4px;
+}
+
+.crawler-preset {
+  margin: 6px 0 10px;
+}
+
+.crawler-preset .muted {
+  margin-top: 3px;
+  font-size: 12px;
+}

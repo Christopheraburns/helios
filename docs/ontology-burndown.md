@@ -144,6 +144,31 @@ Browser ──► Helios UI (new Ontology page)
 
   *Done when:* a user can publish 0.2.0 and activate it from the UI, and the crawler's runs record it.
 
+## Side quest: ontology authoring (added 2026-10-06)
+
+Let an end user create and extend an ontology in the UI, with an LLM proposing and a person deciding, and without writing LinkML. Point of view, tools and architecture: [ontology-authoring.md](ontology-authoring.md).
+
+**Decisions (2026-10-06, proposed):**
+- Built inside Helios: a package under `shared/helios_core/ontology/`, a router in the Helios API, a Workbench Job for long LLM runs. No new application.
+- The unit of work is a **draft**: a shipped base plus an ordered list of small operations. A draft compiles to LinkML and a mapping file, and is published through the existing path.
+- The LLM only produces operations for review. It cannot publish or activate.
+
+**Order:** OA-0 decides whether the rest is worth building as designed. OA-1 to OA-4 give a usable manual tool. OA-5 to OA-7 add the LLM. OA-8 and OA-9 make a draft safe to activate.
+
+- [ ] **OA-0** Spike: can the model propose a useful ontology? Hide the retail pack; give the model core, the published semantic model and a sample of the development corpus; compare what it proposes with the retail pack's classes, relationships and claim types. *Done when:* recall and precision against the retail pack are written down, with the prompt, and there is a go or no-go on OA-5 and OA-6 as designed.
+- [ ] **OA-1** Draft model and compiler (`helios_core/ontology/authoring/`): the closed set of operations, a draft as base plus operations, and a deterministic compiler to a LinkML extension and a mapping file. *Done when:* the retail pack and the example tenant extension, re-expressed as drafts over their bases, compile and publish to graphs with the same content hash as today's files.
+- [ ] **OA-2** Storage and API: a metadata migration for drafts, changes and suggestion runs; compiled files in the artifact store; `/api/v1/ontology/bases` and `/api/v1/ontology/drafts` (create, list, read with the compiled graph, add changes, decide, discard), under `ontology.edit` and audited. Publish accepts a draft as well as a file path. *Done when:* a draft can be created, changed, published and activated through the API alone, and a user without `ontology.edit` is refused.
+- [ ] **OA-3** Validation and difference: structure rules (leaves only, nothing imported redefined, no cycles, names, definitions), the existing mapping check, and a difference against any published version. Publish refuses a draft that fails. *Done when:* each rule has a failing example in the tests, and the difference for a draft adding one class lists exactly that class.
+- [ ] **OA-4** Workbench on the Ontology page: a Drafts mode with a structured editor (class, parent, definition, attributes, relationships, claim types), the graph showing the draft's additions distinctly, validation results and the difference. *Done when:* a user adds a class with an attribute and a relationship, sees it in the graph, and publishes it, without seeing YAML.
+- [ ] **OA-5** Suggestions from the semantic model (`helios_core/ontology/suggest/`, Job `helios-ontology-suggest`): classes, attributes, relationships and mappings proposed from datasets, fields, relationships and glossary terms, each with its reason and evidence; reply cache and provenance as in the LLM crawler; a review queue in the workbench. *Done when:* a run over the published model produces suggestions that all name real tables and columns, and accepting them changes the draft.
+- [ ] **OA-6** Suggestions from documents: classes and claim types proposed from what the crawl could not classify (unlinked mentions, repeated phrases, PDF labels), each quoting passages that exist; cue phrases for a claim type, with the passages each cue would match. Writes a crawler settings version for accepted cues. *Done when:* every suggestion's quotes are found in the index, and ungrounded ones are dropped and counted.
+- [ ] **OA-7** Mapping probe: check a proposed class mapping against the warehouse as the signed-in user (key uniqueness, row count, repeated names, samples), and suggest identifiers. *Done when:* a mapping with a non-unique key is flagged before it can be accepted.
+- [ ] **OA-8** Trial crawl: the crawler accepts an explicit ontology version; a draft can be compiled, published without activation, and crawled on a sample; the run is non-serving (no search, no browsing); results and scores are shown against the active version. *Done when:* a draft adding one class shows the entities it would find on the development corpus, and search is unchanged.
+- [ ] **OA-9** Coverage questions: the user writes plain questions the ontology should support; Helios reports the classes and relationships each needs and what is missing. *Done when:* a question needing a class the draft lacks is reported as not covered, and becomes covered when the class is added.
+- [ ] **OA-10** Copilot: a chat panel on the workbench using the assistant's tool loop, with tools for suggest, edit, probe, validate and trial. Its changes are suggestions in the draft. *Done when:* "add a class for X under Y and map it to table Z" produces reviewable changes, and the copilot cannot publish or activate.
+
+**Open questions** (detail in the linked document): whether proposing and publishing need separate permissions; one active ontology or one per organization; per-user filtering of document evidence (crawler DS-7); changing or removing published classes, which is out of scope here.
+
 ## Problems in the ontology files to fix before the crawler depends on them
 
 1. **The mapping doesn't match the published Ossie model.** `mappings/ossie/tpcds.yaml` uses `dim_customer`, `dim_store`, `dim_warehouse`, `dim_item` and `dim_promotion`, plus measures `net_revenue` and `return_rate`. `models/published/tpcds.ossie.yaml` uses `customer`, `store_sales` and `store_sales_revenue`, and has no `net_revenue` or `return_rate`.

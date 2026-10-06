@@ -22,6 +22,8 @@ from .records import (
     MentionRecord,
     OntologyActivationRecord,
     OntologyVersionRecord,
+    MappingActivationRecord,
+    MappingRecord,
     RelationshipRecord,
     SegmentRecord,
 )
@@ -43,6 +45,8 @@ TABLES: dict[str, type[BaseModel]] = {
     f"{NAMESPACE}.crawler_settings": CrawlerSettingsRecord,
     f"{NAMESPACE}.crawler_settings_activations": CrawlerSettingsActivationRecord,
     f"{NAMESPACE}.evaluations": EvaluationRecord,
+    f"{NAMESPACE}.mappings": MappingRecord,
+    f"{NAMESPACE}.mapping_activations": MappingActivationRecord,
 }
 
 # Tables written per crawl run (rows carry crawl_run_id). Evaluations name a run

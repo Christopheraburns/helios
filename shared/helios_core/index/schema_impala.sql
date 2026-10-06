@@ -171,3 +171,22 @@ CREATE TABLE IF NOT EXISTS helios_index.evaluations (
   status STRING,
   error STRING
 ) STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
+
+CREATE TABLE IF NOT EXISTS helios_index.mappings (
+  version BIGINT,
+  model STRING,
+  ontology_version STRING,
+  content_hash STRING,
+  mapping_json STRING,
+  created_at STRING,
+  created_by STRING,
+  note STRING
+) STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
+
+CREATE TABLE IF NOT EXISTS helios_index.mapping_activations (
+  version BIGINT,
+  model STRING,
+  content_hash STRING,
+  activated_at STRING,
+  activated_by STRING
+) STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');

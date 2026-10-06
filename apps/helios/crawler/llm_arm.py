@@ -327,14 +327,13 @@ def resolve_exact(
     gazetteer: Gazetteer,
     config: ResolutionConfig,
     settings: CrawlerSettings,
-    source_schema: str = "tpcds",
 ) -> tuple[Resolution, dict[str, Link]]:
     """Arm B's resolution: a quoted business key naming exactly one warehouse
     row, or a document's own ID. Returns the resolution and each linked
     mention's link."""
     rules = Rules(settings)
     reader = Reader(gazetteer, config, rules)
-    book = EntityBook(gazetteer, config, source_schema)
+    book = EntityBook(gazetteer, config, config.database)
     for mention in sorted(mentions, key=lambda m: m.mention_id):
         # Names and keys as the documents write them, for the entities' display names.
         book._written.setdefault(
@@ -377,7 +376,7 @@ def resolve_exact(
         for mention_id, link in sorted(links.items())
     ]
     relationships = derive_relationships(
-        run, assets, segments, {m: [l] for m, l in links.items()}, {}, {}, {}, book
+        run, assets, segments, {m: [l] for m, l in links.items()}, {}, {}, {}, book, settings.about
     )
     resolution = Resolution(
         entities=book.records(run),

@@ -6,6 +6,7 @@
 
 model: tpcds.ossie.yaml
 ontology_version: helios_retail@0.2.0
+database: tpcds
 
 entities:
   - ossie_element: customer
@@ -147,8 +148,7 @@ relationships:
   - ossie_relationship: store_returns__sr_reason_sk__reason
     edge: HasReason
   # Return -> Sale (ReturnOf) has no Ossie relationship: TPC-DS joins them on
-  # (ticket number, item), not a foreign key. The crawler derives it from the
-  # shared ticket number.
+  # (ticket number, item), not a foreign key. It is declared under anchors.
 
 concepts:
   - glossary_term: "Net Revenue"
@@ -167,3 +167,48 @@ resolution:
     alias_min_score: 0.92
     fuzzy_min_score: 0.85
     model_assisted_min_confidence: 0.80
+
+# Record anchors: the warehouse row a case's documents are about, and how to
+# find it. Here a case is one return of one sale. The crawler builds one bounded
+# query from this (apps/helios/crawler/anchors.py); it knows no class by name.
+anchors:
+  - class: Return
+    # Values in documents that constrain the return's row. A receipt or ticket
+    # number is looked up in either table's ticket column; it identifies the sale.
+    lookups:
+      - column: sr_ticket_number
+        match: equals
+        type: integer
+        source_columns: [sr_ticket_number, ss_ticket_number]
+        identifies: Sale
+      - column: sr_ticket_number
+        match: ends_with            # "receipt ending in 5079"
+        type: integer
+        source_columns: [sr_ticket_number, ss_ticket_number]
+        identifies: Sale
+    # What the return's row names, and the relationship each makes.
+    joins:
+      - {column: sr_customer_sk, class: Customer, edge: PartyTo}
+      - {column: sr_item_sk, class: Item, edge: Contains}
+      - {column: sr_reason_sk, class: Reason, edge: HasReason}
+      - {column: sr_store_sk, class: Store, edge: LocatedAt}
+    # Brand is a label on the item row the return joins to.
+    colocated:
+      - {via: Item, class: Brand}
+    # TPC-DS stores dates as keys into date_dim.
+    date: {column: sr_returned_date_sk, table: date_dim, key: d_date_sk, value: d_date}
+    related:
+      - class: Sale
+        join_on:
+          - [sr_ticket_number, ss_ticket_number]
+          - [sr_item_sk, ss_item_sk]
+        edge: ReturnOf
+        joins:
+          - {column: ss_customer_sk, class: Customer, edge: PartyTo}
+          - {column: ss_item_sk, class: Item, edge: Contains}
+          - {column: ss_store_sk, class: Store, edge: LocatedAt}
+        date: {column: ss_sold_date_sk, table: date_dim, key: d_date_sk, value: d_date}
+        # The documents name one customer and one store for the purchase and the return.
+        share_anchor_entities: true
+    row_limit: 5
+    min_constraint_kinds: 2

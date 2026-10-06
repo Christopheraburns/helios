@@ -1,0 +1,81 @@
+{
+  "counts": {
+    "claim_evidence": 34,
+    "claims": 30,
+    "entities": 332,
+    "links_possible": 0,
+    "links_sameas": 817,
+    "listed": 301,
+    "llm_claims": 994,
+    "llm_claims_unanchored": 958,
+    "llm_entities": 4096,
+    "llm_hallucinated_spans": 231,
+    "llm_invalid_items": 23,
+    "llm_relocated": 11,
+    "mentions": 3840,
+    "relationships": 987,
+    "segments": 1003
+  },
+  "dataset_id": "1ca99f86-e6a0-57fc-8311-cadcac4c8302",
+  "format": 1,
+  "recorded_from": {
+    "crawl_run_id": "crawl_da9ce15c813d4ff49762f71fe3fc79cb",
+    "crawler_version": "0.7.0",
+    "ontology_version": "0.2.0",
+    "settings_hash": "e332c92e4dd496f37382946de79370a0f1e9e6f0cf3708f644b76c3656ec1501",
+    "settings_version": null,
+    "started_at": "2026-10-06T00:46:53.891808+00:00"
+  },
+  "scorecard": {
+    "sha256": "74afc20be6cc0f8a96e3bf8bad4c00255d6e9336c16e4f2623a35f6e9af13afe",
+    "summary": {
+      "claim_precision": 0.0,
+      "claim_recall": 0.0,
+      "evidence_agreement": null,
+      "mention_precision": 0.7286,
+      "mention_recall_alias": 0.9556,
+      "mention_recall_contextual": 0.8072,
+      "mention_recall_direct": 0.9226,
+      "questions_pass_rate": 0.1667,
+      "resolution_accuracy_alias": 0.1814,
+      "sameas_precision": 0.3918,
+      "segments_coverage": 1.0
+    }
+  },
+  "source": "1ca99f86-e6a0-57fc-8311-cadcac4c8302",
+  "strategy": "llm",
+  "tables": {
+    "assets": {
+      "rows": 301,
+      "sha256": "be5242a219739bd1122af738e0b6bb28a89231886e061c51aeb38f5eb055dc02"
+    },
+    "claim_evidence": {
+      "rows": 34,
+      "sha256": "a40a2107213d7f4cb3357d701aef6dcd165902fbec8c7f7e3bf65e412eeeabec"
+    },
+    "claims": {
+      "rows": 30,
+      "sha256": "ec42124fc8db5c3faf15e475c4fe991d690a8ac219874a28de060529f9826460"
+    },
+    "entities": {
+      "rows": 332,
+      "sha256": "5a3969aada9c6dfab430412c9038bd490360fdcdf7b62cdbc8392911362fcd1e"
+    },
+    "entity_links": {
+      "rows": 817,
+      "sha256": "12f2481403c60987f615a4a276ff5bfea3a5e97df88159fcdcac52fa56515099"
+    },
+    "mentions": {
+      "rows": 3840,
+      "sha256": "e7d4a3e22df67441439865313a581e381c176ce73dedd9e79f4a2fc71654000c"
+    },
+    "relationships": {
+      "rows": 987,
+      "sha256": "18674e70fbb4ef5216d0504f832a96628f08aeec2c9915c8bbffbcd9f1781f84"
+    },
+    "segments": {
+      "rows": 1003,
+      "sha256": "6f072b5d4e5244a994d0ceb3f07cf0703991991eb1709b9404470fd78b0f2365"
+    }
+  }
+}

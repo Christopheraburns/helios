@@ -1,0 +1,380 @@
+# The "retail returns" crawler settings: the rules the crawler was first written
+# with, for documents about store returns (emails, chat threads, PDF return
+# reports) over a TPC-DS warehouse. Until settings schema 2 these were the
+# built-in defaults; they are now one preset among others, and the engine's own
+# defaults are empty.
+#
+# A preset is a complete crawler settings document. Load it on the Crawler
+# page's Settings tab, edit it there, and save it as a version.
+schema_version: '2'
+analyzers:
+  pdf:
+    enabled: true
+    max_pages: 50
+  email:
+    enabled: true
+    identity_headers:
+    - From
+    html_when_no_plain: true
+  chat:
+    enabled: true
+    schemas:
+    - helios-ds/chat-thread/1.0
+  text:
+    enabled: true
+    max_chars: 2000000
+  row:
+    enabled: true
+patterns:
+- name: tpcds_business_id
+  regex: \b[A-P]{16}\b
+  group: 0
+  kind: key
+  proposed_class: null
+  columns:
+  - i_item_id
+  - c_customer_id
+  - s_store_id
+  ignore_case: false
+  key_name: null
+- name: email_address
+  regex: \b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b
+  group: 0
+  kind: key
+  proposed_class: Customer
+  columns:
+  - c_email_address
+  ignore_case: false
+  key_name: null
+- name: ticket_number
+  regex: \b(?:receipt\s+)?ticket(?:\s+(?:number|no\.?|#))?(?:\s+(?:was|is))?\s*:?\s*#?(\d{1,10})\b
+  group: 1
+  kind: key
+  proposed_class: Sale
+  columns:
+  - ss_ticket_number
+  - sr_ticket_number
+  ignore_case: true
+  key_name: null
+- name: receipt_tail
+  regex: \breceipt\s+ending\s+(?:in\s+)?(\d{3,6})\b
+  group: 1
+  kind: partial_key
+  proposed_class: Sale
+  columns:
+  - ss_ticket_number
+  - sr_ticket_number
+  ignore_case: true
+  key_name: null
+- name: return_authorization
+  regex: \bRMA-\d{4,10}\b
+  group: 0
+  kind: document_id
+  proposed_class: Return
+  columns: []
+  ignore_case: false
+  key_name: rma
+- name: support_case
+  regex: \bCS-\d{4,10}\b
+  group: 0
+  kind: document_id
+  proposed_class: Return
+  columns: []
+  ignore_case: false
+  key_name: case
+- name: money
+  regex: \$\d[\d,]*(?:\.\d{2})?
+  group: 0
+  kind: value
+  proposed_class: null
+  columns: []
+  ignore_case: false
+  key_name: null
+- name: date
+  regex: \b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b
+  group: 0
+  kind: value
+  proposed_class: null
+  columns: []
+  ignore_case: false
+  key_name: null
+pdf_labels:
+- label: RMA number
+  proposed_class: Return
+  columns: []
+  kind: document_id
+- label: Support case
+  proposed_class: Return
+  columns: []
+  kind: document_id
+- label: Store
+  proposed_class: Store
+  columns:
+  - s_store_name
+  kind: display
+- label: Original receipt ticket
+  proposed_class: Sale
+  columns:
+  - ss_ticket_number
+  - sr_ticket_number
+  kind: key
+- label: Customer ID
+  proposed_class: Customer
+  columns:
+  - c_customer_id
+  kind: key
+- label: Name
+  proposed_class: Customer
+  columns: []
+  kind: display
+- label: Email
+  proposed_class: Customer
+  columns:
+  - c_email_address
+  kind: key
+- label: Item ID
+  proposed_class: Item
+  columns:
+  - i_item_id
+  kind: key
+- label: Description
+  proposed_class: Item
+  columns:
+  - i_product_name
+  kind: display
+- label: Brand
+  proposed_class: Brand
+  columns:
+  - i_brand
+  kind: display
+- label: Return date
+  proposed_class: null
+  columns: []
+  kind: value
+- label: Sale date
+  proposed_class: null
+  columns: []
+  kind: value
+contextual:
+  Item:
+  - the item
+  - the product
+  - the merchandise
+  Return:
+  - this return
+  - the return
+  Customer:
+  - the customer
+  Store:
+  - that store
+  - the store
+class_cues:
+  Store:
+  - \b(?:store|at)\b
+  - \(#
+  - '#'
+  - (?-i:\b[A-P]{16}\b)
+  Item:
+  - \b(?:item|product)\b
+  - \(\s*(?-i:\b[A-P]{16}\b)
+  Customer:
+  - \b(?:mr|mrs|ms|miss|dr|sir|madam|prof)\b\.?
+  - \b[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}\b
+cue_window: 40
+header_rules:
+- field: display_name
+  proposed_class: Customer
+dictionary:
+  ordinary_words: [the, a, an, and, or, of, in, 'on', at, to, for, with, by, from, is, was, were, be,
+    been, it, this, that, these, those, my, our, your, his, her, their, not, 'no', 'yes', one, two, new,
+    old, item, items, store, stores, return, returns, product, products, order, orders, refund, case,
+    customer, name, email, date, number, ticket, receipt, box, package, carton, bag, home, music, shoes,
+    books, men, women, kids, sports, jewelry, electronics, red, blue, white, black, green, pink, gold,
+    silver, ought, able, pri, ese, anti, cally, ation, eing, bar, n, st, barought, ableought, please,
+    thanks, dear, hello, re, fw, note, mr, mrs, ms, miss, dr, sir]
+  short_token: 5
+  max_shared_instances: 50
+  max_form_tokens: 12
+date_formats:
+- '%B %d, %Y'
+- '%Y-%m-%d'
+- '%b %d, %Y'
+- '%d %B %Y'
+about:
+  title_segments:
+  - email_subject
+  class_priority:
+  - Return
+  - Item
+  - Customer
+  - Sale
+  - Store
+  - Brand
+  - Reason
+resolution:
+  max_candidates: 20
+  close: 0.05
+  low_specificity_factor: 0.5
+  top_possible: 3
+cases:
+  identifiers:
+  - return_authorization
+  - support_case
+  - ticket_number
+  - email_address
+  date_window_days: 30
+  max_hub_documents: 6
+claims:
+  cues:
+    PACKAGING_DAMAGED:
+    - damaged
+    - damage
+    - crushed
+    - torn
+    - torn open
+    - dented
+    - dents
+    - dent
+    - scuffed
+    - scratched
+    - scratches
+    - cracked
+    - broken
+    - ripped
+    - smashed
+    - bent
+    - impact marks
+    - visible dents
+    - crushed box
+    - box was crushed
+    - packaging damaged
+    - packaging damage
+    - damaged packaging
+    - carton torn
+    - carton was torn
+    - carton ripped
+    - resealed with tape
+    - dropped in transit
+    - drop in transit
+    - contents shifted
+    - shifted around inside
+    - carrier damage
+    - unusable
+    RETURN_REASON:
+    - reason
+    - reason code
+    - return reason
+    - reason code on file
+    - recorded return reason
+    - return slip says
+    - reason on the slip
+    - reason was recorded as
+    - recorded as
+    - reason given
+    - reason for return
+    - reason for the return
+    - reason stated
+    - cited reason
+    REFUND_REQUESTED:
+    - refund me
+    - refund my
+    - want my
+    - want a refund
+    - wants a refund
+    - wants the refund
+    - wants the * refund
+    - wanted a refund
+    - expect a refund
+    - expect a full refund
+    - expect the refund
+    - expecting a refund
+    - expecting the refund
+    - when will the refund
+    - when will i get
+    - when to expect the refund
+    - when can i expect
+    - waiting on refund
+    - waiting on the refund
+    - waiting for the refund
+    - waiting for my refund
+    - confirm refund
+    - confirm the refund
+    - confirm my refund
+    - refund to my card
+    - refund to my account
+    - money back
+    - please refund
+    - please process
+    - process my refund
+    - process the refund
+    - requested a refund
+    - requesting a refund
+    - asked for a refund
+    - asking for a refund
+    - asks for a refund
+    - refund request
+    - demand a refund
+    - would like a refund
+    - i'll receive
+    - receive my refund
+    - receive a refund
+    - receive the refund
+    - receive
+    REFUND_APPROVED:
+    - refund approved
+    - refund is approved
+    - refund was approved
+    - is approved
+    - approved
+    - approve it
+    - approve the refund
+    - approving the refund
+    - approval
+    - refund queued
+    - refund issued
+    - refund has been issued
+    - refund of * issued
+    - refund of * approved
+    - refund * approved
+    - refund * issued
+    - refund * to original tender
+    - to original tender
+    - i'll refund
+    - i will refund
+    - we'll refund
+    - we will refund
+    - refunding
+    - processing now
+    - processing the refund
+    - refund processed
+    - refund posted
+    - refund sent
+    - has been refunded
+    - will be refunded
+    - 'disposition:'
+    - 'disposition: * refund'
+    - full refund of
+    - refund of
+  negations: [not, 'no', never, without, isn't, wasn't, weren't, don't, didn't, doesn't, hasn't, haven't,
+    won't, wouldn't, couldn't, can't, cannot, neither, nor]
+  hedges:
+  - if
+  - whether
+  - might
+  - maybe
+  - unless
+  - perhaps
+  - possibly
+  - should
+llm:
+  prompt_version: llm-1
+  instructions: |-
+    You read retail customer-service documents (emails, chat threads and PDF return reports) and list what they mention.
+    - List every reference to an entity of the classes below: names, IDs, email addresses, ticket, case and return-authorization numbers, and phrases such as "the item" or "this return".
+    - Quote each reference exactly as it appears, character for character, and keep the quote as short as the reference itself.
+    - List a claim only when the text states it. Its quote is the sentence or message that states it; its subject and object are entities you listed.
+    - Never include anything that is not written in the document.
+  max_asset_chars: 24000
+  concurrency: 2
+  input_price_per_million: null
+  output_price_per_million: null

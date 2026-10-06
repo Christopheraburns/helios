@@ -14,7 +14,8 @@ from fastapi import APIRouter, HTTPException, Request
 from helios_core.index import IndexStore, impala_index_store
 from helios_core.index import ontology_versions as lakehouse_versions
 from helios_core.ontology.graph import OntologyGraph
-from helios_core.ontology.mapping import load_mappings
+from helios_core.index import mappings as stored_mappings
+from helios_core.ontology.mapping import SourceMapping, load_mappings, mapping_problems
 from helios_core.ontology.parser import ParseResult, parse
 from pydantic import BaseModel
 
@@ -158,15 +159,35 @@ def list_schemas() -> list[dict[str, Any]]:
     return sorted(schemas, key=lambda s: (order[s["layer"]], s["schema_path"]))
 
 
+def shipped_mappings() -> list[SourceMapping]:
+    """The example mappings in the repository, for importing."""
+    return load_mappings(ONTOLOGY_DIR / "mappings" / "ossie")
+
+
+def semantic_model(model: str) -> dict[str, Any] | None:
+    """The published semantic model a mapping names (its file under
+    models/published), or None if it is not there."""
+    name = Path(model).name
+    candidates = [name] if name.endswith((".yaml", ".yml")) else [f"{name}.ossie.yaml", f"{name}.yaml"]
+    for candidate in candidates:
+        path = REPO_ROOT / "models" / "published" / candidate
+        if path.is_file():
+            return yaml.safe_load(path.read_text())
+    return None
+
+
 def _parse(version: str, schema_path: str | None) -> ParseResult:
     if not schema_path:
         raise HTTPException(status_code=400, detail="schema_path is required")
     schema_file = (REPO_ROOT / schema_path).resolve()
     if ONTOLOGY_DIR.resolve() not in schema_file.parents or not schema_file.is_file():
         raise HTTPException(status_code=400, detail=f"schema file not found: {schema_path}")
-    mappings = load_mappings(ONTOLOGY_DIR / "mappings" / "ossie")
-    ossie_file = REPO_ROOT / "models" / "published" / "tpcds.ossie.yaml"
-    ossie_model = yaml.safe_load(ossie_file.read_text()) if ossie_file.exists() else None
+    # The active mappings in helios_index (CG-6); the shipped files only until one is stored.
+    index = index_store()
+    mappings = stored_mappings.active_mappings(index) if index is not None else []
+    if not mappings:
+        mappings = shipped_mappings()
+    ossie_model = semantic_model(mappings[0].model) if mappings else None
     try:
         return parse(str(schema_file), version=version, ossie_model=ossie_model, mappings=mappings)
     except Exception as exc:
@@ -338,6 +359,161 @@ def _summary(graph: OntologyGraph) -> dict[str, Any]:
         "edge_count": len(graph.edges),
         "enum_count": len(nodes_by_label.get("Enum", [])),
         "class_count": len(nodes_by_label.get("Class", [])),
+    }
+
+
+# --- source mappings (CG-6) -----------------------------------------------------------
+
+
+class MappingRequest(BaseModel):
+    mapping: dict[str, Any]
+    note: str = ""
+
+
+def _mapping_index() -> IndexStore:
+    index = index_store()
+    if index is None:
+        raise HTTPException(
+            status_code=503, detail="helios_index is not configured (no Impala settings)"
+        )
+    return index
+
+
+def _active_classes() -> set[str] | None:
+    """Class names of the active ontology version, or None if none is active."""
+    index = index_store()
+    active = lakehouse_versions.active(index) if index is not None else None
+    if active is None:
+        return None
+    for record in lakehouse_versions.versions(index):
+        if (record.version, record.content_hash) == (active.version, active.content_hash):
+            graph = lakehouse_versions.graph_of(record)
+            return {n.key for n in graph.nodes if n.label == "Class"}
+    return None
+
+
+def _checked(document: dict[str, Any]) -> tuple[SourceMapping | None, list[str], list[str]]:
+    """(mapping, problems, checks that could not be run)."""
+    from pydantic import ValidationError
+
+    try:
+        mapping = SourceMapping.model_validate(document)
+    except ValidationError as exc:
+        return (
+            None,
+            [f"{'.'.join(str(p) for p in e['loc']) or 'mapping'}: {e['msg']}" for e in exc.errors()],
+            [],
+        )
+    model = semantic_model(mapping.model)
+    classes = _active_classes()
+    skipped = []
+    if model is None:
+        skipped.append(f"tables and columns: no published semantic model named {mapping.model!r}")
+    if classes is None:
+        skipped.append("classes: no ontology version is active")
+    return mapping, mapping_problems(mapping, model, classes), skipped
+
+
+def _mapping_meta(record: Any, active: dict[str, Any]) -> dict[str, Any]:
+    current = active.get(record.model)
+    return {
+        "version": record.version,
+        "model": record.model,
+        "ontology_version": record.ontology_version,
+        "content_hash": record.content_hash,
+        "created_at": record.created_at,
+        "created_by": record.created_by,
+        "note": record.note,
+        "is_active": current is not None and current.version == record.version,
+    }
+
+
+@ontology_router.get("/mappings")
+def list_mappings() -> dict[str, Any]:
+    """Mapping versions, newest first, and which one is active for each semantic model."""
+    index = _mapping_index()
+    active = stored_mappings.active(index)
+    return {
+        "active": {model: record.version for model, record in active.items()},
+        "versions": [
+            _mapping_meta(r, active) for r in reversed(stored_mappings.versions(index))
+        ],
+    }
+
+
+@ontology_router.get("/mappings/shipped")
+def list_shipped_mappings() -> list[dict[str, Any]]:
+    """The example mappings shipped with Helios, to save as a first version."""
+    return [m.model_dump(mode="json", by_alias=True) for m in shipped_mappings()]
+
+
+@ontology_router.get("/mappings/{version}")
+def get_mapping(version: int) -> dict[str, Any]:
+    index = _mapping_index()
+    try:
+        record = stored_mappings.get(index, version)
+    except stored_mappings.UnknownMappingVersion as exc:
+        raise HTTPException(status_code=404, detail=f"mapping version {version} not found") from exc
+    return {
+        **_mapping_meta(record, stored_mappings.active(index)),
+        "mapping": json.loads(record.mapping_json),
+    }
+
+
+@ontology_router.post("/mappings:validate")
+def validate_mapping(body: MappingRequest) -> dict[str, Any]:
+    """Check a mapping against the published semantic model and the active
+    ontology. Nothing is written."""
+    _, problems, skipped = _checked(body.mapping)
+    return {"valid": not problems, "problems": problems, "not_checked": skipped}
+
+
+@ontology_router.post("/mappings", status_code=201)
+def save_mapping(
+    body: MappingRequest, http_request: Request, organization_id: str | None = None
+) -> dict[str, Any]:
+    """Save a mapping as a new immutable version (needs ontology.edit). Refused
+    with the list of problems if it does not validate. Saving does not activate."""
+    actor = require_ontology_edit(http_request, organization_id)
+    mapping, problems, skipped = _checked(body.mapping)
+    if mapping is None or problems:
+        raise HTTPException(
+            status_code=422, detail={"message": "invalid mapping", "problems": problems}
+        )
+    index = _mapping_index()
+    record, created = stored_mappings.save(index, mapping, actor, body.note)
+    return {
+        **_mapping_meta(record, stored_mappings.active(index)),
+        "created": created,
+        "not_checked": skipped,
+    }
+
+
+@ontology_router.post("/mappings/{version}:activate")
+def activate_mapping(
+    version: int, http_request: Request, organization_id: str | None = None
+) -> dict[str, Any]:
+    """Make a saved version the one crawls use for its semantic model (needs
+    ontology.edit). It is checked again first: the semantic model or the active
+    ontology may have changed since it was saved."""
+    actor = require_ontology_edit(http_request, organization_id)
+    index = _mapping_index()
+    try:
+        record = stored_mappings.get(index, version)
+    except stored_mappings.UnknownMappingVersion as exc:
+        raise HTTPException(status_code=404, detail=f"mapping version {version} not found") from exc
+    _, problems, _ = _checked(json.loads(record.mapping_json))
+    if problems:
+        raise HTTPException(
+            status_code=422,
+            detail={"message": "this mapping no longer validates", "problems": problems},
+        )
+    activation = stored_mappings.activate(index, version, actor)
+    return {
+        "version": activation.version,
+        "model": activation.model,
+        "activated_at": activation.activated_at,
+        "activated_by": activation.activated_by,
     }
 
 

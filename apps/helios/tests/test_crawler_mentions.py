@@ -12,8 +12,7 @@ from apps.helios.crawler.connectors import SourceAsset
 from apps.helios.crawler.crawl import MENTIONS, segment_rows
 from apps.helios.crawler.gazetteer import Gazetteer, has_names, is_low_specificity, tokens
 from apps.helios.crawler.mentions import extract_mentions
-from crawler_samples import chat_bytes, pdf_bytes
-from helios_core.crawler.settings import DEFAULT_SETTINGS
+from crawler_samples import RETAIL_SETTINGS, chat_bytes, pdf_bytes
 from helios_core.index.records import CrawlRunRecord
 from helios_core.ontology.mapping import load_mapping, resolution_config
 
@@ -109,7 +108,7 @@ ROWS = {
 
 @pytest.fixture(scope="module")
 def gazetteer():
-    return Gazetteer.from_rows(ROWS, CONFIG)
+    return Gazetteer.from_rows(ROWS, CONFIG, RETAIL_SETTINGS.dictionary)
 
 
 def _run(run_id="run-1"):
@@ -129,10 +128,10 @@ def _run(run_id="run-1"):
 def _mentions(gazetteer, mime, data, run=None):
     run = run or _run()
     asset = SourceAsset(asset_id="asset-1", source="ds-1", mime_type=mime, locator={}, version="v1")
-    analysis = analyze_asset(mime, data, DEFAULT_SETTINGS)
+    analysis = analyze_asset(mime, data, RETAIL_SETTINGS)
     assert analysis.status == "analyzed", analysis.detail
     segments = segment_rows(run, asset, analysis.segments)
-    mentions = extract_mentions(run, asset, segments, DEFAULT_SETTINGS, gazetteer, CONFIG)
+    mentions = extract_mentions(run, asset, segments, RETAIL_SETTINGS, gazetteer, CONFIG)
     return segments, mentions
 
 
@@ -206,10 +205,13 @@ def test_low_specificity_forms(gazetteer):
     assert not forms["Customer", "mr. smith"].low_specificity
     assert not forms["Customer", "angela raymond"].low_specificity
     assert not forms["Item", "ationoughtationation"].low_specificity
-    assert is_low_specificity("ought", 1)  # a TPC-DS number word
-    assert is_low_specificity("able", 1)
-    assert is_low_specificity("dr. smith", 444)  # shared by too many
-    assert not is_low_specificity("dr. smith", 44)
+    rules = RETAIL_SETTINGS.dictionary
+    assert is_low_specificity("ought", 1, rules=rules)  # a TPC-DS number word, listed as ordinary
+    assert is_low_specificity("able", 1, rules=rules)
+    assert is_low_specificity("dr. smith", 444, rules=rules)  # shared by too many
+    assert not is_low_specificity("dr. smith", 44, rules=rules)
+    assert not is_low_specificity("ought", 1)  # the engine itself calls no word ordinary
+    assert is_low_specificity("able", 1)  # ... but a short single word is never specific
 
 
 def test_key_lookup_and_class_of_key(gazetteer):
@@ -272,7 +274,7 @@ def test_build_reads_each_class_table_and_skips_classes_without_names():
                 "tpcds.reason": [(1, "AAAAAAAABAAAAAAA", "Package was damaged")],
             }[self.table]
 
-    built = Gazetteer.build(Cursor, CONFIG, ["Store", "Reason", "Sale", "Return"])
+    built = Gazetteer.build(Cursor, CONFIG, ["Store", "Reason", "Sale", "Return"], RETAIL_SETTINGS.dictionary)
     assert executed == [
         "SELECT DISTINCT s_store_sk, s_store_id, s_store_name, s_city FROM tpcds.store",
         "SELECT DISTINCT r_reason_sk, r_reason_id, r_reason_desc FROM tpcds.reason",
@@ -451,7 +453,7 @@ def test_one_class_per_span_chosen_by_the_nearest_cue(gazetteer):
         "Item": ROWS["Item"]
         + [{"i_item_sk": 4, "i_item_id": "AAAAAAAAEAAAAAAA", "i_product_name": "ese"}],
     }
-    both = Gazetteer.from_rows(with_item, CONFIG)
+    both = Gazetteer.from_rows(with_item, CONFIG, RETAIL_SETTINGS.dictionary)
     assert both.lookup("i_item_id", "AAAAAAAAEAAAAAAA") and both.lookup(
         "s_store_id", "AAAAAAAAEAAAAAAA"
     )
@@ -603,8 +605,8 @@ def test_crawl_writes_mentions_and_carries_them_forward(gazetteer, tmp_path):
             actor="test",
             ontology_version="0.2.0",
             settings=None,
-            settings_hash=DEFAULT_SETTINGS.content_hash(),
-            crawler_settings=DEFAULT_SETTINGS,
+            settings_hash=RETAIL_SETTINGS.content_hash(),
+            crawler_settings=RETAIL_SETTINGS,
             analyze=lambda run, fetched, segments, mentions: hook_calls.append(
                 (fetched.asset.asset_id, len(mentions))
             ),

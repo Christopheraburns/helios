@@ -245,7 +245,7 @@ describe("CrawlerPage", () => {
         .mockRejectedValue(new ApiUnavailableError("invalid settings\n• patterns.0.regex: not a valid regular expression")),
     };
     renderPage(api, "settings");
-    expect(await screen.findByText("the built-in defaults")).toBeTruthy();
+    expect(await screen.findByText("no saved settings")).toBeTruthy();
     fireEvent.click(screen.getByText("Validate and save"));
     expect(await screen.findByText(/not a valid regular expression/)).toBeTruthy();
 
@@ -331,5 +331,55 @@ describe("CrawlerPage", () => {
     renderPage(api, "scores");
     await screen.findByRole("columnheader", { name: "Strategy" });
     expect(screen.queryByRole("columnheader", { name: "Not in doc." })).not.toBeInTheDocument();
+  });
+
+  it("warns when the crawler has no rules and loads a preset into the editor", async () => {
+    const preset = { name: "retail-returns", title: "Retail returns", description: "Store returns over a warehouse." };
+    const api = {
+      crawlRuns: vi.fn(),
+      crawlerSettings: vi.fn().mockResolvedValue({
+        active_version: null,
+        using_defaults: true,
+        empty: true,
+        content_hash: "aaaaaaaaaaaa",
+        settings: { schema_version: "2", patterns: [] },
+        versions: [],
+      }),
+      crawlerSettingsPresets: vi.fn().mockResolvedValue([preset]),
+      crawlerSettingsPreset: vi.fn().mockResolvedValue({
+        ...preset,
+        content_hash: "bbbbbbbbbbbb",
+        settings: { schema_version: "2", patterns: [{ name: "ticket_number" }] },
+      }),
+    };
+    renderPage(api, "settings");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The crawler has no rules.");
+    expect(screen.getByText("Store returns over a warehouse.")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Start from “Retail returns”" }));
+    await waitFor(() => expect(api.crawlerSettingsPreset).toHaveBeenCalledWith("retail-returns"));
+    await waitFor(() =>
+      expect((screen.getByLabelText("Crawler settings JSON") as HTMLTextAreaElement).value).toContain(
+        "ticket_number",
+      ),
+    );
+  });
+
+  it("shows no warning once a version with rules is active", async () => {
+    const api = {
+      crawlRuns: vi.fn(),
+      crawlerSettings: vi.fn().mockResolvedValue({
+        active_version: 1,
+        using_defaults: false,
+        empty: false,
+        content_hash: "cccccccccccc",
+        settings: { schema_version: "2" },
+        versions: [],
+      }),
+      crawlerSettingsPresets: vi.fn().mockResolvedValue([]),
+    };
+    renderPage(api, "settings");
+    expect(await screen.findByText("version 1")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

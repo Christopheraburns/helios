@@ -8,7 +8,7 @@ import pytest
 from apps.helios.crawler import llm_arm
 from apps.helios.crawler.crawl import crawl, previous_run
 from apps.helios.crawler.llm_arm import LlmExtractor, Vocabulary, load_vocabulary, run_arm
-from helios_core.crawler.settings import DEFAULT_SETTINGS
+from crawler_samples import RETAIL_SETTINGS
 from helios_core.index import evidence
 from helios_core.index.store import duckdb_index_store
 from helios_core.llm.client import LLMError
@@ -23,7 +23,7 @@ from test_crawler_resolution import (  # noqa: F401 - fixtures
     warehouse,
 )
 
-VOCABULARY = load_vocabulary(REPO_ROOT / "ontology", CLASSES, list(DEFAULT_SETTINGS.claims.cues))
+VOCABULARY = load_vocabulary(REPO_ROOT / "ontology", CLASSES, list(RETAIL_SETTINGS.claims.cues))
 EMAIL_REPLY = {
     "entities": [
         {"id": "e1", "segment": 0, "quote": "Wilma.Graham@t.edu", "class": "Customer"},
@@ -63,7 +63,7 @@ class FakeLlm:
 
 def extractor(tmp_path, llm=None, sleep=None):
     return LlmExtractor(
-        llm or FakeLlm(), DEFAULT_SETTINGS, VOCABULARY, tmp_path / "cache", sleep or (lambda s: None)
+        llm or FakeLlm(), RETAIL_SETTINGS, VOCABULARY, tmp_path / "cache", sleep or (lambda s: None)
     )
 
 
@@ -71,12 +71,12 @@ def test_the_prompt_carries_the_ontology_and_never_the_answer_key():
     assert set(VOCABULARY.classes) == set(CLASSES)
     assert VOCABULARY.classes["Return"] == "The return of an item from an earlier sale."
     assert VOCABULARY.predicates["REFUND_REQUESTED"] == ("A customer asked for a refund.", "Customer", "Return")
-    prompt = llm_arm.system_prompt(DEFAULT_SETTINGS, VOCABULARY)
+    prompt = llm_arm.system_prompt(RETAIL_SETTINGS, VOCABULARY)
     assert "- Reason: A coded reason" in prompt
     assert "- PACKAGING_DAMAGED (subject: Item, object: Return)" in prompt
-    assert DEFAULT_SETTINGS.llm.instructions.splitlines()[0] in prompt
-    changed = DEFAULT_SETTINGS.model_copy(
-        update={"llm": DEFAULT_SETTINGS.llm.model_copy(update={"instructions": "Different."})}
+    assert RETAIL_SETTINGS.llm.instructions.splitlines()[0] in prompt
+    changed = RETAIL_SETTINGS.model_copy(
+        update={"llm": RETAIL_SETTINGS.llm.model_copy(update={"instructions": "Different."})}
     )
     assert llm_arm.system_prompt(changed, VOCABULARY) != prompt  # so the prompt hash changes
 
@@ -85,7 +85,7 @@ def test_quotes_are_grounded_and_resolved_by_exact_keys_only(gazetteer, tmp_path
     run = _run()
     assets, segments, _ = read_assets(run, gazetteer, {"a-email", "a-chat"})
     llm = extractor(tmp_path)
-    result = run_arm(run, assets, segments, llm, gazetteer, CONFIG, DEFAULT_SETTINGS)
+    result = run_arm(run, assets, segments, llm, gazetteer, CONFIG, RETAIL_SETTINGS)
 
     by_surface = {m.surface_form: m for m in result.mentions}
     assert set(by_surface) == {"Wilma.Graham@t.edu", "RMA-3056773", "Wilma", "AAAAAAAAGLMDAAAA"}
@@ -128,11 +128,11 @@ def test_quotes_are_grounded_and_resolved_by_exact_keys_only(gazetteer, tmp_path
 def test_a_rerun_comes_from_the_cache_and_gives_the_same_rows(gazetteer, tmp_path):  # noqa: F811
     run = _run()
     assets, segments, _ = read_assets(run, gazetteer, {"a-email"})
-    first = run_arm(run, assets, segments, extractor(tmp_path), gazetteer, CONFIG, DEFAULT_SETTINGS)
+    first = run_arm(run, assets, segments, extractor(tmp_path), gazetteer, CONFIG, RETAIL_SETTINGS)
     llm = FakeLlm()
-    priced = DEFAULT_SETTINGS.model_copy(
+    priced = RETAIL_SETTINGS.model_copy(
         update={
-            "llm": DEFAULT_SETTINGS.llm.model_copy(
+            "llm": RETAIL_SETTINGS.llm.model_copy(
                 update={"input_price_per_million": 2.0, "output_price_per_million": 6.0}
             )
         }
@@ -149,7 +149,7 @@ def test_a_rerun_comes_from_the_cache_and_gives_the_same_rows(gazetteer, tmp_pat
 
     other_model = FakeLlm()
     other_model.model = "fake-2"
-    run_arm(run, assets, segments, extractor(tmp_path, other_model), gazetteer, CONFIG, DEFAULT_SETTINGS)
+    run_arm(run, assets, segments, extractor(tmp_path, other_model), gazetteer, CONFIG, RETAIL_SETTINGS)
     assert len(other_model.calls) == 1  # another model never reuses a reply
 
 
@@ -158,7 +158,7 @@ def test_rate_limits_are_waited_out_and_other_failures_are_counted(gazetteer, tm
     assets, segments, _ = read_assets(run, gazetteer, {"a-email"})
     waits = []
     limited = extractor(tmp_path, FakeLlm(failures=2), waits.append)
-    result = run_arm(run, assets, segments, limited, gazetteer, CONFIG, DEFAULT_SETTINGS)
+    result = run_arm(run, assets, segments, limited, gazetteer, CONFIG, RETAIL_SETTINGS)
     assert waits == [15, 30] and result.counts["llm_rate_limited"] == 2
     assert len(result.mentions) == 4
 
@@ -167,7 +167,7 @@ def test_rate_limits_are_waited_out_and_other_failures_are_counted(gazetteer, tm
             raise LLMError("fake 500: boom")
 
     failed = run_arm(
-        run, assets, segments, extractor(tmp_path / "other", Broken()), gazetteer, CONFIG, DEFAULT_SETTINGS
+        run, assets, segments, extractor(tmp_path / "other", Broken()), gazetteer, CONFIG, RETAIL_SETTINGS
     )
     assert failed.mentions == [] and failed.counts["llm_failed"] == 1
 
@@ -205,7 +205,7 @@ def test_an_llm_crawl_records_its_strategy_and_stays_out_of_search(warehouse, ga
     def run_crawl(strategy, llm=None):
         return crawl(
             index, connector, "ds-1", actor="test", ontology_version="0.2.0", settings=None,
-            settings_hash=DEFAULT_SETTINGS.content_hash(), crawler_settings=DEFAULT_SETTINGS,
+            settings_hash=RETAIL_SETTINGS.content_hash(), crawler_settings=RETAIL_SETTINGS,
             gazetteer=gazetteer, resolution=CONFIG, warehouse_cursor=warehouse.cursor,
             strategy=strategy, llm=llm,
             embed=(lambda run, *_: embedded.append(run.crawl_run_id) or 0) if strategy == "deterministic" else None,
@@ -221,7 +221,7 @@ def test_an_llm_crawl_records_its_strategy_and_stays_out_of_search(warehouse, ga
         "model": "fake-1",
         "temperature": 0.0,
         "prompt_version": "llm-1",
-        "prompt_hash": llm_arm.system_prompt(DEFAULT_SETTINGS, VOCABULARY) and llm_run.settings["llm"]["prompt_hash"],
+        "prompt_hash": llm_arm.system_prompt(RETAIL_SETTINGS, VOCABULARY) and llm_run.settings["llm"]["prompt_hash"],
     }
     assert "never-recorded" not in json.dumps(llm_run.settings)
     assert llm_run.counts["llm_calls"] == 7 and llm_run.counts["mentions"] == 4
@@ -230,8 +230,8 @@ def test_an_llm_crawl_records_its_strategy_and_stays_out_of_search(warehouse, ga
     assert {m.extractor for m in mentions} == {"llm"}
 
     # Each strategy reuses only its own previous run, and search keeps the deterministic one.
-    assert previous_run(index, "ds-1", DEFAULT_SETTINGS.content_hash()).crawl_run_id == deterministic.crawl_run_id
-    assert previous_run(index, "ds-1", DEFAULT_SETTINGS.content_hash(), "llm").crawl_run_id == llm_run.crawl_run_id
+    assert previous_run(index, "ds-1", RETAIL_SETTINGS.content_hash()).crawl_run_id == deterministic.crawl_run_id
+    assert previous_run(index, "ds-1", RETAIL_SETTINGS.content_hash(), "llm").crawl_run_id == llm_run.crawl_run_id
     assert [r.crawl_run_id for r in evidence.latest_runs(index)] == [deterministic.crawl_run_id]
     assert embedded == [deterministic.crawl_run_id]
 

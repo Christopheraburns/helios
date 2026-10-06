@@ -5,13 +5,14 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helios_core.crawler.settings import DEFAULT_SETTINGS, CrawlerSettings, ontology_problems
+from helios_core.crawler.settings import CrawlerSettings, ontology_problems
 from helios_core.index import crawler_settings as versions
 from helios_core.index import ontology_versions, runs
 from helios_core.index.store import duckdb_index_store
 from helios_core.ontology.mapping import load_mappings
 from helios_core.ontology.parser import parse
 from pydantic import ValidationError
+from crawler_samples import RETAIL_SETTINGS
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EXTENSION = REPO_ROOT / "ontology/customers/example-tenant/extension.yaml"
@@ -25,7 +26,7 @@ def index():
 
 
 def _doc(**changes):
-    data = DEFAULT_SETTINGS.model_dump(mode="json")
+    data = RETAIL_SETTINGS.model_dump(mode="json")
     data.update(changes)
     return data
 
@@ -40,9 +41,9 @@ def _clock():
 
 def test_defaults_are_valid_and_cover_every_retail_predicate_and_text_type():
     assert (
-        CrawlerSettings.model_validate(DEFAULT_SETTINGS.model_dump(mode="json")) == DEFAULT_SETTINGS
+        CrawlerSettings.model_validate(RETAIL_SETTINGS.model_dump(mode="json")) == RETAIL_SETTINGS
     )
-    assert set(DEFAULT_SETTINGS.claims.cues) == {
+    assert set(RETAIL_SETTINGS.claims.cues) == {
         "PACKAGING_DAMAGED",
         "RETURN_REASON",
         "REFUND_REQUESTED",
@@ -51,9 +52,9 @@ def test_defaults_are_valid_and_cover_every_retail_predicate_and_text_type():
     assert all(
         a.enabled
         for a in (
-            DEFAULT_SETTINGS.analyzers.pdf,
-            DEFAULT_SETTINGS.analyzers.email,
-            DEFAULT_SETTINGS.analyzers.chat,
+            RETAIL_SETTINGS.analyzers.pdf,
+            RETAIL_SETTINGS.analyzers.email,
+            RETAIL_SETTINGS.analyzers.chat,
         )
     )
 
@@ -67,7 +68,7 @@ def test_default_patterns_find_what_the_corpus_contains():
         "$310.40 on June 14, 2001."
     )
     found = {}
-    for p in DEFAULT_SETTINGS.patterns:
+    for p in RETAIL_SETTINGS.patterns:
         m = re.search(p.regex, text, re.IGNORECASE if p.ignore_case else 0)
         if m:
             found[p.name] = m.group(p.group)
@@ -111,8 +112,8 @@ def test_ontology_problems_name_unknown_classes_and_predicates():
     settings = CrawlerSettings.model_validate(doc)
     problems = ontology_problems(
         settings,
-        {"Item", "Return", "Customer", "Store", "Sale", "Brand"},
-        set(DEFAULT_SETTINGS.claims.cues),
+        {"Item", "Return", "Customer", "Store", "Sale", "Brand", "Reason"},
+        set(RETAIL_SETTINGS.claims.cues),
     )
     assert problems == [
         "unknown ontology class 'Spaceship'",
@@ -125,9 +126,9 @@ def test_ontology_problems_name_unknown_classes_and_predicates():
 
 def test_versions_are_numbered_immutable_and_deduplicated(index):
     tick = _clock()
-    first, created = versions.save(index, DEFAULT_SETTINGS, "alice", "defaults", tick)
+    first, created = versions.save(index, RETAIL_SETTINGS, "alice", "defaults", tick)
     assert (first.version, created) == (1, True)
-    same, created_again = versions.save(index, DEFAULT_SETTINGS, "bob", "again", tick)
+    same, created_again = versions.save(index, RETAIL_SETTINGS, "bob", "again", tick)
     assert (same.version, created_again, same.created_by) == (1, False, "alice")
     doc = _doc()
     doc["analyzers"]["pdf"]["max_pages"] = 5
@@ -135,15 +136,16 @@ def test_versions_are_numbered_immutable_and_deduplicated(index):
         index, CrawlerSettings.model_validate(doc), "bob", "fewer pages", tick
     )
     assert second.version == 2
-    assert versions.settings_of(versions.get(index, 1)) == DEFAULT_SETTINGS
+    assert versions.settings_of(versions.get(index, 1)) == RETAIL_SETTINGS
 
 
-def test_active_falls_back_to_defaults_and_follows_the_latest_activation(index):
+def test_active_is_empty_until_a_version_is_activated_then_follows_the_latest(index):
     tick = _clock()
-    assert versions.active(index) == (None, DEFAULT_SETTINGS)
+    record, settings = versions.active(index)
+    assert record is None and settings.is_empty()  # the engine has no rules of its own
     with pytest.raises(versions.UnknownSettingsVersion):
         versions.activate(index, 7, "alice", tick)
-    versions.save(index, DEFAULT_SETTINGS, "alice", "", tick)
+    versions.save(index, RETAIL_SETTINGS, "alice", "", tick)
     doc = _doc()
     doc["analyzers"]["chat"]["enabled"] = False
     versions.save(index, CrawlerSettings.model_validate(doc), "alice", "", tick)
@@ -155,7 +157,7 @@ def test_active_falls_back_to_defaults_and_follows_the_latest_activation(index):
 
 
 def test_crawl_runs_record_the_settings_version_and_hash(index):
-    record, _ = versions.save(index, DEFAULT_SETTINGS, "alice")
+    record, _ = versions.save(index, RETAIL_SETTINGS, "alice")
     run = runs.start(
         index,
         connector="helios_ds_s3",
@@ -167,7 +169,7 @@ def test_crawl_runs_record_the_settings_version_and_hash(index):
         settings_hash=record.content_hash,
     )
     [stored] = runs.runs(index)
-    assert (stored.settings_version, stored.settings_hash) == (1, DEFAULT_SETTINGS.content_hash())
+    assert (stored.settings_version, stored.settings_hash) == (1, RETAIL_SETTINGS.content_hash())
     assert stored.crawl_run_id == run.crawl_run_id
 
 

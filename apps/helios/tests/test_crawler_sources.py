@@ -14,8 +14,7 @@ from apps.helios.crawler.connectors import (
     build,
 )
 from apps.helios.crawler.crawl import crawl
-from crawler_samples import email_bytes, pdf_bytes
-from helios_core.crawler.settings import DEFAULT_SETTINGS
+from crawler_samples import RETAIL_SETTINGS, email_bytes, pdf_bytes
 from helios_core.crawler.sources import catalog, validate_scope
 from helios_core.index.store import duckdb_index_store
 
@@ -69,8 +68,8 @@ def _crawl(index, connector, source_id):
         actor="srv",
         ontology_version="0.2.0",
         settings=None,
-        settings_hash=DEFAULT_SETTINGS.content_hash(),
-        crawler_settings=DEFAULT_SETTINGS,
+        settings_hash=RETAIL_SETTINGS.content_hash(),
+        crawler_settings=RETAIL_SETTINGS,
         source_snapshot={"id": source_id},
     )
 
@@ -185,13 +184,13 @@ def test_table_rows_become_documents_with_one_segment_per_text_column(warehouse)
     assert [a.asset_id for a in assets] == ["id=1", "id=2"]
     assert assets[0].semantic_timestamp == "2001-06-14"
     fetched = connector.fetch(assets[0])
-    result = analyze_asset(assets[0].mime_type, fetched.data, DEFAULT_SETTINGS)
+    result = analyze_asset(assets[0].mime_type, fetched.data, RETAIL_SETTINGS)
     assert [(s.locator, s.text) for s in result.segments] == [
         ({"column": "subject"}, "Damaged kettle"),
         ({"column": "body"}, "The box was crushed."),
     ]
     assert result.segments[0].fields["row_key"] == {"id": 1}
-    second = analyze_asset(assets[1].mime_type, connector.fetch(assets[1]).data, DEFAULT_SETTINGS)
+    second = analyze_asset(assets[1].mime_type, connector.fetch(assets[1]).data, RETAIL_SETTINGS)
     assert [s.locator for s in second.segments] == [{"column": "subject"}]  # NULL body skipped
 
 
@@ -220,7 +219,7 @@ def test_table_rows_crawl_end_to_end(warehouse):
 
 
 def test_text_files_are_one_segment_and_respect_the_size_setting():
-    doc = DEFAULT_SETTINGS.model_dump(mode="json")
+    doc = RETAIL_SETTINGS.model_dump(mode="json")
     doc["analyzers"]["text"]["max_chars"] = 10
     from helios_core.crawler.settings import CrawlerSettings
 

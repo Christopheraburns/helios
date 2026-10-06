@@ -44,7 +44,8 @@ from typing import Any, Literal
 from apps.helios.crawler import evaluate as harness
 from fastapi import APIRouter, HTTPException, Request
 from helios_core.config import impala_config
-from helios_core.crawler.settings import DEFAULT_SETTINGS, CrawlerSettings, ontology_problems
+from helios_core.crawler import settings as settings_model
+from helios_core.crawler.settings import EMPTY_SETTINGS, CrawlerSettings, ontology_problems
 from helios_core.engines.impala import ImpalaEngine, ImpalaProxyDelegationError, _same_user
 from helios_core.index import crawler_settings as versions
 from helios_core.index import ontology_versions, runs
@@ -113,6 +114,8 @@ def get_settings() -> dict[str, Any]:
     return {
         "active_version": active_version,
         "using_defaults": record is None,
+        # No rules at all: crawls find only what the warehouse dictionary names.
+        "empty": settings.is_empty(),
         "content_hash": settings.content_hash(),
         "settings": settings.model_dump(mode="json"),
         "versions": [_meta(r, active_version) for r in reversed(versions.versions(store))],
@@ -121,9 +124,30 @@ def get_settings() -> dict[str, Any]:
 
 @crawler_router.get("/settings/defaults")
 def get_defaults() -> dict[str, Any]:
+    """The engine's own defaults: an empty document (settings schema 2)."""
     return {
-        "content_hash": DEFAULT_SETTINGS.content_hash(),
-        "settings": DEFAULT_SETTINGS.model_dump(mode="json"),
+        "content_hash": EMPTY_SETTINGS.content_hash(),
+        "settings": EMPTY_SETTINGS.model_dump(mode="json"),
+    }
+
+
+@crawler_router.get("/settings/presets")
+def list_presets() -> list[dict[str, str]]:
+    """Shipped rule sets a user can load, edit and save as a version."""
+    return [{"name": name, **info} for name, info in settings_model.presets().items()]
+
+
+@crawler_router.get("/settings/presets/{name}")
+def get_preset(name: str) -> dict[str, Any]:
+    try:
+        preset = settings_model.load_preset(name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"no preset named {name!r}") from exc
+    return {
+        "name": name,
+        **settings_model.presets()[name],
+        "content_hash": preset.content_hash(),
+        "settings": preset.model_dump(mode="json"),
     }
 
 

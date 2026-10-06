@@ -9,6 +9,7 @@ import {
   type CrawlRunDetail,
   type CrawlRunSummary,
   type CrawlStrategy,
+  type CrawlerSettingsPreset,
   type CrawlTarget,
   type CrawlerSettingsSaveResult,
   type CrawlerSettingsState,
@@ -330,7 +331,7 @@ function RunsTab({ context }: CrawlerPageProps) {
                 <td className="num">{run.counts.segments ?? "—"}</td>
                 <td className="nowrap">{duration(run)}</td>
                 <td>{run.ontology_version}</td>
-                <td>{run.settings_version ?? "defaults"}</td>
+                <td>{run.settings_version ?? "none"}</td>
                 <td className="nowrap">
                   {run.actor}
                   {run.isolated === false && (
@@ -559,7 +560,7 @@ function RunDetail({ context, crawlRunId }: CrawlerPageProps & { crawlRunId: str
         </dd>
         <dt>Crawler / ontology / settings</dt>
         <dd>
-          {run.crawler_version} / {run.ontology_version} / {run.settings_version ?? "built-in defaults"}{" "}
+          {run.crawler_version} / {run.ontology_version} / {run.settings_version ?? "no saved settings"}{" "}
           <span className="mono muted">{short(run.settings_hash, 10)}</span>
         </dd>
         <dt>Strategy</dt>
@@ -995,7 +996,7 @@ function ScoresTab({ context }: CrawlerPageProps) {
                   </td>
                   <td>{e.strategy}</td>
                   <td>{e.run?.crawler_version ?? "—"}</td>
-                  <td>{e.run?.settings_version ?? "defaults"}</td>
+                  <td>{e.run?.settings_version ?? "none"}</td>
                   <td>
                     <span className={`crawler-badge ${statusClass(e.status)}`}>{e.status}</span>
                   </td>
@@ -1064,6 +1065,22 @@ function SettingsTab({ context }: CrawlerPageProps) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CrawlerSettingsSaveResult | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [presets, setPresets] = useState<CrawlerSettingsPreset[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const listed = (await crawlerClient().crawlerSettingsPresets?.()) ?? [];
+        if (active) setPresets(listed);
+      } catch {
+        if (active) setPresets([]); // presets are a convenience; the editor works without them
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [crawlerClient]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -1081,7 +1098,7 @@ function SettingsTab({ context }: CrawlerPageProps) {
     void load().then((data) => {
       if (data) {
         setText(JSON.stringify(data.settings, null, 2));
-        setEditing(data.using_defaults ? "built-in defaults" : `version ${data.active_version} (active)`);
+        setEditing(data.using_defaults ? "an empty configuration" : `version ${data.active_version} (active)`);
       }
     });
   }, [load]);
@@ -1142,10 +1159,18 @@ function SettingsTab({ context }: CrawlerPageProps) {
     <div className="crawler-settings">
       <div className="crawler-settings-status">
         Crawls use{" "}
-        <strong>{state.using_defaults ? "the built-in defaults" : `version ${state.active_version}`}</strong>{" "}
+        <strong>{state.using_defaults ? "no saved settings" : `version ${state.active_version}`}</strong>{" "}
         <span className="mono muted">{short(state.content_hash, 12)}</span>. Saving creates a new,
         immutable version; activating it applies it from the next crawl.
       </div>
+      {state.empty && (
+        <div className="crawler-settings-empty" role="alert">
+          <strong>The crawler has no rules.</strong> Helios does not come with any built in: with
+          {state.using_defaults ? " no version active" : " this version"}, a crawl reads and splits
+          documents but recognises no identifiers, labels or claims. Start from a preset below,
+          save it, then activate it.
+        </div>
+      )}
 
       <div className="crawler-settings-grid">
         <section>
@@ -1195,19 +1220,45 @@ function SettingsTab({ context }: CrawlerPageProps) {
               </tbody>
             </table>
           )}
+          <h2>Presets</h2>
+          <p className="muted">
+            Rules written for one kind of data. Loading one puts it in the editor; nothing changes
+            until you save and activate.
+          </p>
+          {(presets ?? []).map((preset) => (
+            <div className="crawler-preset" key={preset.name}>
+              <button
+                className="crawler-button"
+                onClick={() =>
+                  void loadInto(`the "${preset.title}" preset`, () =>
+                    crawlerClient().crawlerSettingsPreset!(preset.name),
+                  )
+                }
+              >
+                Start from “{preset.title}”
+              </button>
+              <div className="muted">{preset.description}</div>
+            </div>
+          ))}
           <button
             className="crawler-button"
-            onClick={() => void loadInto("built-in defaults", () => crawlerClient().crawlerSettingsDefaults!())}
+            onClick={() => void loadInto("an empty configuration", () => crawlerClient().crawlerSettingsDefaults!())}
           >
-            Start from the built-in defaults
+            Start from empty
           </button>
           <details className="crawler-help">
             <summary>What the sections mean</summary>
             <ul>
               <li><code>analyzers</code>: which asset types are read (pdf, email, chat) and their options.</li>
-              <li><code>patterns</code>: regular expressions for identifiers; <code>key</code> patterns are looked up in the listed TPC-DS columns.</li>
+              <li><code>patterns</code>: regular expressions for identifiers; <code>key</code> patterns are looked up in the listed warehouse columns. For an identifier that exists only in documents, <code>key_name</code> is the name it is stored under.</li>
               <li><code>pdf_labels</code>: PDF field labels and what kind of value follows them.</li>
               <li><code>contextual</code>: phrases such as “the item”, per ontology class.</li>
+              <li><code>class_cues</code>, <code>cue_window</code>: per class, words or patterns that confirm an ordinary-looking name when they appear within that many characters of it (“store” near a store’s name).</li>
+              <li><code>header_rules</code>: which class an email header’s field names (the sender’s display name is a customer).</li>
+              <li><code>dictionary</code>: words that are names in the warehouse but also ordinary text, and how short or widely shared a name may be.</li>
+              <li><code>date_formats</code>: how dates are written in the documents.</li>
+              <li><code>about</code>: which part of a document is its title, and which class a document is about when several are named.</li>
+              <li><code>resolution</code>: how many candidates a name may have, and how close a runner-up may be, before a link is only “possible”.</li>
               <li><code>cases</code>: which identifiers link documents into one case.</li>
               <li><code>claims</code>: cue words per claim predicate, plus negation and hedge words.</li>
             </ul>
