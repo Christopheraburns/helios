@@ -45,4 +45,6 @@ existing_pythonpath = os.environ.get("PYTHONPATH")
 if existing_pythonpath:
     python_paths.append(existing_pythonpath)
 env = dict(os.environ, PYTHONPATH=os.pathsep.join(python_paths))
+# Load the document-search embedding model at startup, not on the first search.
+env.setdefault("HELIOS_MCP_WARM_EMBEDDINGS", "1")
 raise SystemExit(subprocess.call(cmd, cwd=ROOT, env=env))

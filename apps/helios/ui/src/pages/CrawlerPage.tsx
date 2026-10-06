@@ -74,6 +74,7 @@ const PROBLEM_STATUSES = [
   "type_mismatch",
   "no_text",
   "invalid",
+  "embedding_failed",
 ];
 
 function problemCount(counts: Record<string, number>): number {
@@ -92,6 +93,7 @@ const FOUND_COUNTS: { key: string; label: string }[] = [
   { key: "cases_resolved", label: "cases matched to a warehouse row" },
   { key: "claims", label: "claims" },
   { key: "claim_evidence", label: "evidence passages" },
+  { key: "embedded", label: "searchable passages" },
 ];
 
 function statusClass(status: string): string {
@@ -255,7 +257,10 @@ function RunsTab({ context }: CrawlerPageProps) {
                 onClick={() => setSelected(selected === run.crawl_run_id ? null : run.crawl_run_id)}
               >
                 <td className="nowrap">{when(run.started_at)}</td>
-                <td className="mono">{short(run.source, 13)}</td>
+                <td className="mono">
+                  {short(run.source, 13)}
+                  {run.note && <div className="crawler-note-line">{run.note}</div>}
+                </td>
                 <td>
                   <span className={`crawler-badge ${statusClass(run.status)}`}>{run.status}</span>
                 </td>
@@ -350,7 +355,8 @@ function StartCrawl({
     setBusy(true);
     setFeedback(null);
     try {
-      const launched = await crawlerClient().startCrawl!(chosen, full, note || undefined);
+      const launched = await crawlerClient().startCrawl!(chosen, full, note.trim() || undefined);
+      setNote("");
       setFeedback({
         kind: "ok",
         text: `Crawl requested (Workbench job run ${launched.job_run_id}). It appears below once its container has started.`,
@@ -391,8 +397,9 @@ function StartCrawl({
           re-crawl
         </label>
         <input
-          placeholder="Note (optional)"
-          title="Label or description for this crawl"
+          className="crawler-start__note"
+          aria-label="Note for this crawl"
+          placeholder="Note (optional): a label to recognise this crawl by"
           value={note}
           maxLength={200}
           onChange={(e) => setNote(e.target.value)}
@@ -410,6 +417,7 @@ function StartCrawl({
           <span className="crawler-badge crawler-badge--running">{l.status.replace("ENGINE_", "")}</span>{" "}
           Crawl of {short(launchTarget(l), 13)} requested {when(l.created_at)}
           {l.requested_by ? ` by ${l.requested_by.split(":").pop()}` : ""} (job run {l.job_run_id})
+          {l.note ? `: ${l.note}` : ""}
         </div>
       ))}
       {!active.length && lastFinished && !lastFinished.status.endsWith("SUCCEEDED") && (

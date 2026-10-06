@@ -459,3 +459,16 @@
 .crawler-badge--inline {
   margin-left: 6px;
 }
+
+.crawler-start__form input.crawler-start__note {
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+
+.crawler-note-line {
+  max-width: 260px;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  color: var(--text-secondary, #4b5563);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

@@ -21,7 +21,7 @@ so a settings change always takes effect.
 
 from __future__ import annotations
 
-import os
+import logging
 from collections import Counter
 from collections.abc import Callable
 from typing import Any
@@ -32,14 +32,15 @@ from helios_core.index.records import (
     AssetRecord,
     CrawlerSettingsRecord,
     CrawlRunRecord,
+    EntityRecord,
     MentionRecord,
+    RelationshipRecord,
     SegmentRecord,
 )
 from helios_core.ontology.mapping import ResolutionConfig
 
 from .analyzers import Segment, analyze_asset
 from .claims import extract_claims
-from .embeddings import embed_segments, save_embeddings
 from .connectors import Connector, Fetched, SourceAsset, plan_incremental
 from .gazetteer import Gazetteer
 from .mentions import extract_mentions
@@ -60,6 +61,11 @@ CLAIM_EVIDENCE = "helios_index.claim_evidence"
 REUSABLE = {"analyzed", "carried_forward", "unsupported", "type_mismatch", "no_text", "invalid"}
 
 Analyzer = Callable[[CrawlRunRecord, Fetched, list[SegmentRecord], list[MentionRecord]], None]
+# Makes the run's segments searchable; returns how many it embedded (CR-11).
+Embed = Callable[
+    [CrawlRunRecord, list[SegmentRecord], list[EntityRecord], list[RelationshipRecord]], int
+]
+LOGGER = logging.getLogger(__name__)
 
 
 def _asset_row(
@@ -142,6 +148,7 @@ def crawl(
     gazetteer: Gazetteer | None = None,
     resolution: ResolutionConfig | None = None,
     warehouse_cursor: Callable[[], Any] | None = None,
+    embed: Embed | None = None,
 ) -> CrawlRunRecord:
     """Crawl one data source with ``connector``. ``full`` re-fetches and re-analyzes
     everything. ``source_snapshot`` (the data source's configuration, no secrets)
@@ -164,10 +171,6 @@ def crawl(
         settings_version=settings.version if settings else None,
         settings_hash=settings_hash,
     )
-    # CR-11: User-provided note for labeling this crawl
-    note = os.environ.get("HELIOS_CRAWL_NOTE")
-    if note:
-        run.note = note
     try:
         assets = connector.list_assets()
         previous = None if full else previous_run(index, source_id, settings_hash)
@@ -217,30 +220,10 @@ def crawl(
                 rows.append(_asset_row(run, asset, before.status, detail))
         index.append(ASSETS, rows)
         index.append(SEGMENTS, segments)
-        
-        # CR-11: Embed segments for semantic search
-        try:
-            from .embeddings import embed_segments, save_embeddings
-            segment_dicts = [
-                {
-                    "segment_id": seg.segment_id,
-                    "asset_id": seg.asset_id,
-                    "text": seg.text,
-                    "locators": seg.locators.model_dump(),
-                }
-                for seg in segments
-            ]
-            embeddings = embed_segments(run.crawl_run_id, segment_dicts)
-            if embeddings:
-                saved = save_embeddings(embeddings)
-                run.notes.setdefault("embeddings", {})["saved"] = saved
-        except ImportError:
-            pass  # Embedding dependencies not installed
-        except Exception as e:
-            # Log but don't fail the crawl
-            run.notes.setdefault("embeddings", {})["error"] = str(e)
         index.append(MENTIONS, mentions)
         resolution_counts: dict[str, int] = {}
+        entities: list[EntityRecord] = []
+        relationships: list[RelationshipRecord] = []
         if gazetteer is not None and resolution is not None:
             resolved = resolve(
                 run,
@@ -269,6 +252,16 @@ def crawl(
             index.append(CLAIMS, extracted.claims)
             index.append(CLAIM_EVIDENCE, extracted.evidence)
             resolution_counts = {**resolved.counts, **extracted.counts}
+            entities, relationships = resolved.entities, resolved.relationships
+        # The index is complete without embeddings, so a failure here is counted
+        # on the run instead of failing it.
+        embedding_counts: dict[str, int] = {}
+        if embed is not None:
+            try:
+                embedding_counts = {"embedded": embed(run, segments, entities, relationships)}
+            except Exception:
+                LOGGER.exception("embedding the segments of %s failed", run.crawl_run_id)
+                embedding_counts = {"embedding_failed": 1}
         counts = Counter(r.status for r in rows)
         return runs.finish(
             index,
@@ -279,6 +272,7 @@ def crawl(
                 "segments": len(segments),
                 "mentions": len(mentions),
                 **resolution_counts,
+                **embedding_counts,
             },
         )
     except Exception as exc:

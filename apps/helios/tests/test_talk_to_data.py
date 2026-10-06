@@ -1945,6 +1945,86 @@ def test_session_model_provider_override_is_private_and_drives_conversation(
     ) is None
 
 
+
+def test_openai_compatible_provider_uses_the_deployments_token_and_model(
+    persistent_auth_stack,
+    monkeypatch,
+):
+    monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "environment-secret")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "environment-model")
+    monkeypatch.setenv("INFERENCE_BASE_URL", "https://inference.example/v1")
+    monkeypatch.setenv("INFERENCE_MODEL", "deployment-model")
+    monkeypatch.setenv("INFERENCE_TOKEN", "deployment-token")
+    monkeypatch.delenv("INFERENCE_API_KEY", raising=False)
+    monkeypatch.setenv("HELIOS_MCP_URL", "https://mcp.example/mcp")
+    monkeypatch.setenv("HELIOS_MCP_TOKEN", "mcp-token")
+    monkeypatch.setenv("HELIOS_MCP_DELEGATION_SECRET", SECRET)
+    captured = []
+
+    async def fake_turn(self, _principal, _organization_id, model_id, _message, history=None):
+        captured.append(
+            (self.llm.provider, self.llm.model, self.llm.api_key, self.llm.base_url)
+        )
+        return {
+            "model_id": model_id,
+            "answer": "ok",
+            "tool_trace": [],
+            "query_result": None,
+            "provenance": {},
+            "request_id": "provider-request",
+        }
+
+    monkeypatch.setattr(ConversationService, "turn", fake_turn)
+    previous = dict(app.state._state)
+    app.state._state.pop("resource_store", None)
+    app.state._state.pop("authorization_policy", None)
+    app.state._state.pop("conversation_service", None)
+    app.state.metadata_repository = persistent_auth_stack.repository
+    app.state.model_provider_settings = SessionModelProviderStore()
+    headers = {
+        "x-forwarded-user": "owner",
+        "x-helios-session-id": "3d9d44df-4c14-4c35-8575-d3817589e18a",
+    }
+    url = "/api/v1/model-provider-settings"
+    ask = {"message": "Use the deployment model"}
+    try:
+        with TestClient(app) as client:
+            offered = client.get(url, headers=headers)
+            chosen = client.put(url, headers=headers, json={"provider": "openai"})
+            client.post("/api/v1/models/customer360/conversations", headers=headers, json=ask)
+            own = client.put(
+                url,
+                headers=headers,
+                json={"provider": "openai", "model": "my-model", "api_key": "my-key"},
+            )
+            client.post("/api/v1/models/customer360/conversations", headers=headers, json=ask)
+            no_key = client.put(url, headers=headers, json={"provider": "mistral", "model": "m"})
+            monkeypatch.delenv("INFERENCE_TOKEN")
+            no_token = client.put(url, headers=headers, json={"provider": "openai"})
+    finally:
+        app.state._state.clear()
+        app.state._state.update(previous)
+
+    by_id = {p["id"]: p for p in offered.json()["providers"]}
+    assert by_id["openai"] | {"available": True} == {
+        "id": "openai",
+        "available": True,
+        "default_model": "deployment-model",
+        "key_configured": True,
+    }
+    assert by_id["mistral"]["key_configured"] is False
+    assert chosen.status_code == 200
+    assert (chosen.json()["source"], chosen.json()["model"]) == ("session", "deployment-model")
+    assert "deployment-token" not in offered.text + chosen.text
+    assert captured == [
+        ("openai", "deployment-model", "deployment-token", "https://inference.example/v1"),
+        ("openai", "my-model", "my-key", "https://inference.example/v1"),
+    ]
+    assert own.status_code == 200
+    assert no_key.status_code == 422 and no_token.status_code == 422
+
+
 def test_mcp_client_config_reads_validated_timeout_from_environment(
     monkeypatch,
 ):

@@ -152,18 +152,20 @@ describe("CrawlerPage", () => {
       .mockResolvedValue({ available: true, reason: null, job_name: "helios-crawl", launches: [launch] });
     const startCrawl = vi.fn().mockResolvedValue(launch);
     renderPage({
-      crawlRuns: vi.fn().mockResolvedValue([{ ...RUN, actor: "cburns", isolated: false }]),
+      crawlRuns: vi.fn().mockResolvedValue([{ ...RUN, actor: "cburns", isolated: false, note: "baseline run" }]),
       crawlTargets: vi.fn().mockResolvedValue([target]),
       crawlLaunches,
       startCrawl,
     });
 
     expect(await screen.findByText("not isolated")).toBeInTheDocument();
+    expect(screen.getByText("baseline run")).toBeInTheDocument();
     const button = await screen.findByRole("button", { name: "Start crawl" });
     await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.change(screen.getByLabelText("Note for this crawl"), { target: { value: " after the pattern fix " } });
     fireEvent.click(button);
 
-    await waitFor(() => expect(startCrawl).toHaveBeenCalledWith(target, false));
+    await waitFor(() => expect(startCrawl).toHaveBeenCalledWith(target, false, "after the pattern fix"));
     expect(await screen.findByText(/job run run-9\)\. It appears below/)).toBeInTheDocument();
     expect(await screen.findByText("SCHEDULING")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Start crawl" })).toBeDisabled());

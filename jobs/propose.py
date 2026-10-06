@@ -9,7 +9,7 @@ Environment:
   LLM_PROVIDER        mistral | anthropic | openai
   MISTRAL_API_KEY, MISTRAL_MODEL            for Mistral (default: mistral-small-latest)
   ANTHROPIC_API_KEY, ANTHROPIC_MODEL          for the Anthropic API
-  INFERENCE_BASE_URL, INFERENCE_API_KEY, INFERENCE_MODEL   for Cloudera AI Inference (OpenAI-compatible)
+  INFERENCE_BASE_URL, INFERENCE_TOKEN, INFERENCE_MODEL   for Cloudera AI Inference (OpenAI-compatible)
   HELIOS_TABLES       optional comma-separated subset of database.table to propose for (useful for testing)
   HELIOS_MODEL_ID     stable Helios Model ID (legacy fallback: harvested database)
 """

@@ -88,4 +88,8 @@ def impala_config() -> ImpalaConfig | None:
 
 
 def inference_config() -> InferenceConfig:
-    return InferenceConfig(_env("INFERENCE_BASE_URL"), _env("INFERENCE_API_KEY"), _env("INFERENCE_MODEL"))
+    return InferenceConfig(
+        _env("INFERENCE_BASE_URL"),
+        _env("INFERENCE_TOKEN") or _env("INFERENCE_API_KEY"),
+        _env("INFERENCE_MODEL"),
+    )

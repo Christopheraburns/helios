@@ -9,6 +9,7 @@ Runs are started by the Helios API (POST /api/v1/crawler/runs; the Crawler page'
   HELIOS_CRAWL_DATASET       a READY Helios-DS dataset ID
   HELIOS_CRAWL_FULL          "1" to re-fetch and re-analyze everything
   HELIOS_CRAWL_REQUESTED_BY  who asked for the crawl (recorded on the run)
+  HELIOS_CRAWL_NOTE          the requester's note (recorded on the run)
 
 The crawl connects as this Job's WORKLOAD_USER. To crawl as the crawler machine
 user, set WORKLOAD_USER and WORKLOAD_PASSWORD in the Job's environment.

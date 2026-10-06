@@ -122,6 +122,7 @@ def launch_view(run: Any) -> dict[str, Any]:
         "dataset_id": environment.get("HELIOS_CRAWL_DATASET") or None,
         "full": environment.get("HELIOS_CRAWL_FULL") == "1",
         "requested_by": environment.get("HELIOS_CRAWL_REQUESTED_BY") or None,
+        "note": environment.get("HELIOS_CRAWL_NOTE") or None,
     }
 
 

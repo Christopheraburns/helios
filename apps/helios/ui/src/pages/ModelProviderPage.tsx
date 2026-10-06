@@ -54,7 +54,7 @@ const PROVIDERS: Array<{
     id: "openai",
     label: "OpenAI-compatible",
     description:
-      "Use the Cloudera LiteLLM gateway. Your API key stays in this browser session.",
+      "Use the OpenAI-compatible endpoint configured for this deployment, or the Cloudera LiteLLM gateway when none is configured.",
     models: ["claude-haiku-4-5"],
   },
 ];
@@ -78,10 +78,21 @@ export default function ModelProviderPage({
     () => PROVIDERS.find((item) => item.id === provider) ?? PROVIDERS[0],
     [provider],
   );
-  const customModelSelected = !selectedProvider.models.includes(model);
   const availability = new Map(
     settings?.providers.map((item) => [item.id, item.available]) ?? [],
   );
+  const deployment = (id: ModelProviderId) =>
+    settings?.providers.find((item) => item.id === id);
+  const modelsFor = (id: ModelProviderId) => {
+    const suggested = PROVIDERS.find((item) => item.id === id)?.models ?? [];
+    const configured = deployment(id)?.default_model;
+    return configured
+      ? [configured, ...suggested.filter((item) => item !== configured)]
+      : suggested;
+  };
+  const models = modelsFor(provider);
+  const customModelSelected = !models.includes(model);
+  const keyConfigured = deployment(provider)?.key_configured === true;
 
   useEffect(() => {
     let active = true;
@@ -204,9 +215,7 @@ export default function ModelProviderPage({
             onChange={(event) => {
               const next = event.currentTarget.value as ModelProviderId;
               setProvider(next);
-              setModel(
-                PROVIDERS.find((item) => item.id === next)?.models[0] ?? "",
-              );
+              setModel(modelsFor(next)[0] ?? "");
               setSaveState("idle");
             }}
           >
@@ -240,9 +249,12 @@ export default function ModelProviderPage({
               setSaveState("idle");
             }}
           >
-            {selectedProvider.models.map((item) => (
+            {models.map((item) => (
               <option value={item} key={item}>
                 {item}
+                {item === deployment(provider)?.default_model
+                  ? " (deployment default)"
+                  : ""}
               </option>
             ))}
             <option value="__custom__">Custom model ID…</option>
@@ -269,17 +281,23 @@ export default function ModelProviderPage({
             aria-label="API key"
             type="password"
             value={apiKey}
-            required
+            required={!keyConfigured}
             maxLength={10_000}
             autoComplete="off"
             placeholder={
-              settings?.api_key_configured
-                ? "Enter a key to replace the current session key"
-                : "Enter an API key"
+              keyConfigured
+                ? "Leave blank to use the deployment's token"
+                : settings?.api_key_configured
+                  ? "Enter a key to replace the current session key"
+                  : "Enter an API key"
             }
             onChange={(event) => setApiKey(event.currentTarget.value)}
           />
-          <small>The existing key is never displayed or returned.</small>
+          <small>
+            {keyConfigured
+              ? "This deployment has a token for this provider. Enter a key only to use your own instead."
+              : "The existing key is never displayed or returned."}
+          </small>
         </label>
 
         {message ? (
@@ -298,7 +316,7 @@ export default function ModelProviderPage({
             disabled={
               saveState === "saving"
               || !model.trim()
-              || !apiKey.trim()
+              || (!apiKey.trim() && !keyConfigured)
               || availability.get(provider) === false
             }
           >

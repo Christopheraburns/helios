@@ -1042,6 +1042,12 @@ _security = TransportSecuritySettings(
 )
 _mcp_app = server.streamable_http_app(transport_security=_security, stateless_http=True, json_response=True)
 
+# Set by the Application launcher (app.py), so importing this module elsewhere loads nothing.
+if os.environ.get("HELIOS_MCP_WARM_EMBEDDINGS") == "1":
+    from helios_core.index import evidence as _evidence
+
+    _evidence.warm_up()
+
 _TOKEN = os.environ.get("HELIOS_MCP_TOKEN")
 _DELEGATION_SECRET = os.environ.get("HELIOS_MCP_DELEGATION_SECRET")
 _DEFAULT_PRINCIPAL_ID = os.environ.get("HELIOS_MCP_DEFAULT_PRINCIPAL")
@@ -1081,150 +1087,63 @@ def _request_caller(headers: dict[str, str]) -> MCPCaller | None:
     return None
 
 
-# CR-11: Unstructured data tools for semantic search over crawled documents
+# Evidence from crawled documents (CR-11). Both tools need query.execute on the
+# caller's model, like run_query. The crawl index is read as this server's
+# workload user, so Ranger does not filter document text per caller.
+
+MAX_EVIDENCE_TEXT = 1500
 
 
-@server.tool(
-    description=(
-        "Search crawled documents for segments matching a semantic query. "
-        "Returns document excerpts with their locators (page number, email part, etc.). "
-        "Use this to ground an answer in evidence from unstructured data. "
-        "Optionally filter by asset type (document, message) or crawl run."
-    )
-)
-def search_evidence(
-    query: str,
-    limit: int = 10,
-    asset_type: str | None = None,
-) -> dict:
-    """Search for document segments by semantic similarity to a query.
-
-    Args:
-        query: Natural language search, e.g. "customer complained about damage"
-        limit: Max segments to return (1-100)
-        asset_type: Optional filter: "document", "message", or None for all
-
-    Returns:
-        Segments sorted by relevance, each with text and locators for finding it.
-    """
-    try:
-        from apps.helios.crawler.embeddings import search_segments
-    except ImportError:
-        return _error(
-            "embeddings_unavailable",
-            "Embeddings are not available. Run a crawl to index documents.",
-        )
-
-    safe_limit = min(max(limit, 1), 100)
-    try:
-        filters = {}
-        if asset_type:
-            filters["asset_type"] = asset_type
-
-        segments = search_segments(query, limit=safe_limit, filter_dict=filters)
-        return {
-            "segments": [
-                {
-                    "segment_id": seg["segment_id"],
-                    "asset_id": seg["asset_id"],
-                    "text": seg["text"],
-                    "locators": seg["locators"],
-                    "relevance": round(1.0 - seg["score"], 3),  # Convert distance to similarity
-                }
-                for seg in segments
-            ],
-            "query": query,
-            "count": len(segments),
-        }
-    except Exception as exc:
-        return _error(
-            "search_failed",
-            f"Semantic search failed: {exc}",
-        )
-
-
-@server.tool(
-    description=(
-        "Get claims and evidence about an entity from crawled documents. "
-        "Shows what documents say about a customer, product, store, or return: "
-        "claims extracted, supporting evidence passages, and related documents."
-    )
-)
-def explain(
-    entity_key: str,
-    entity_class: str | None = None,
-) -> dict:
-    """Explain an entity by showing what documents say about it.
-
-    Args:
-        entity_key: The entity identifier, e.g., "customer:54201", "item:142857"
-        entity_class: Optional: Customer, Item, Brand, Store, Sale, Return, Reason
-
-    Returns:
-        Claims about the entity with evidence passages, document excerpts, and related entities.
-    """
-    from helios_core.index import IndexStore
+@server.tool(description=(
+    "Search crawled documents (emails, chats, PDF reports) for passages about a topic, by meaning. "
+    "Use it for what people wrote or said: complaints, reasons, requests, approvals. "
+    "Pass the user's question in their own words as the query; do not shorten it to keywords. "
+    "Returns one passage per document: a whole email, an excerpt of a chat, or a PDF page. "
+    "Each passage lists the entities its document is linked to, with warehouse keys such as "
+    "tpcds.customer:c_customer_sk=12345 that can be used as filters in run_query; "
+    "that key means field tpcds.customer.c_customer_sk with value 12345."
+))
+@_audited_tool("search_evidence")
+def search_evidence(query: str, limit: int = 8, model: str | None = None) -> dict:
+    _, _, denied = _authorized_tool(authz.Action.QUERY_EXECUTE, model)
+    if denied:
+        return denied
+    from helios_core.index import evidence
 
     try:
-        index = IndexStore()
-    except Exception:
+        found = evidence.search(query, min(max(limit, 1), 20))
+    except evidence.EvidenceUnavailable as exc:
         return _error(
-            "index_unavailable",
-            "The index is not available.",
+            "evidence_unavailable",
+            f"Crawled documents cannot be searched: {exc}",
         )
+    for segment in found:
+        if len(segment["text"]) > MAX_EVIDENCE_TEXT:
+            segment["text"] = segment["text"][:MAX_EVIDENCE_TEXT] + "…"
+    return {"query": query, "count": len(found), "segments": found}
 
-    try:
-        # Find all mentions of this entity
-        mentions = index.query(
-            "helios_index.entity_links",
-            filters={"external_id": entity_key} if entity_key else None,
-            limit=1000,
-        )
 
-        # Find claims involving this entity
-        claims = index.query(
-            "helios_index.claims",
-            filters={"subject_external_id": entity_key},
-            limit=100,
-        )
+@server.tool(description=(
+    "What crawled documents claim about an entity (a customer, item, store, sale or return): "
+    "the claims extracted from them, such as PACKAGING_DAMAGED or REFUND_REQUESTED, with the "
+    "supporting passages. Give a name, part of a name, or a warehouse key from search_evidence. "
+    "Optionally keep one predicate."
+))
+@_audited_tool("entity_claims")
+def entity_claims(entity: str, predicate: str | None = None, model: str | None = None) -> dict:
+    _, _, denied = _authorized_tool(authz.Action.QUERY_EXECUTE, model)
+    if denied:
+        return denied
+    from helios_core.index import evidence, impala_index_store
 
-        # Get evidence for those claims
-        evidence_segments = {}
-        for claim in claims:
-            for seg_id in claim.get("evidence_segment_ids", []):
-                if seg_id not in evidence_segments:
-                    segs = index.query("helios_index.segments", filters={"segment_id": seg_id})
-                    if segs:
-                        evidence_segments[seg_id] = segs[0]
-
-        return {
-            "entity": {
-                "key": entity_key,
-                "class": entity_class,
-            },
-            "mentions_count": len(mentions),
-            "claims_count": len(claims),
-            "claims": [
-                {
-                    "predicate": claim.get("predicate"),
-                    "object": claim.get("object"),
-                    "evidence": [
-                        {
-                            "segment_id": seg_id,
-                            "text": evidence_segments.get(seg_id, {}).get("text", ""),
-                            "locators": evidence_segments.get(seg_id, {}).get("locators"),
-                        }
-                        for seg_id in claim.get("evidence_segment_ids", [])
-                    ],
-                }
-                for claim in claims
-            ],
-        }
-    except Exception as exc:
+    index = impala_index_store()
+    if index is None:
         return _error(
-            "explain_failed",
-            f"Could not explain entity: {exc}",
+            "evidence_unavailable",
+            "The crawl index is not configured on the server",
+            retryable=True,
         )
+    return evidence.entity_claims(index, entity, predicate)
 
 
 # One failed-authentication audit event per client per minute; the rest are counted.

@@ -51,11 +51,32 @@ def crawl_request() -> dict[str, Any]:
     """Who asked for this crawl and the Workbench run doing it, when the API started it."""
     request = {
         "requested_by": os.environ.get("HELIOS_CRAWL_REQUESTED_BY"),
+        "note": os.environ.get("HELIOS_CRAWL_NOTE", "").strip()[:200],
         "engine_id": os.environ.get("CDSW_ENGINE_ID")
         if os.environ.get("HELIOS_CRAWL_REQUESTED_BY")
         else None,
     }
     return {key: value for key, value in request.items() if value}
+
+
+def embed_hook(development_index: bool) -> Any:
+    """The step that makes a run's segments searchable, or None with the reason printed."""
+    import importlib.util
+
+    if development_index:
+        print("embeddings: off (a development index must not replace the searchable set)")
+        return None
+    if os.environ.get("HELIOS_CRAWL_EMBEDDINGS", "1") == "0":
+        print("embeddings: off (HELIOS_CRAWL_EMBEDDINGS=0)")
+        return None
+    missing = [m for m in ("lancedb", "sentence_transformers") if importlib.util.find_spec(m) is None]
+    if missing:
+        print(f"embeddings: off ({', '.join(missing)} not installed)")
+        return None
+    from helios_core.index.evidence import embed_run, location
+
+    print(f"embeddings: on ({location()})")
+    return embed_run
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -185,6 +206,7 @@ def main(argv: list[str] | None = None) -> int:
         gazetteer=gazetteer,
         resolution=resolution,
         warehouse_cursor=connection.cursor,
+        embed=embed_hook(bool(args.index_duckdb)),
     )
     print(f"{run.crawl_run_id}: {run.status} {run.counts}")
     return 0 if run.status == "SUCCEEDED" else 1

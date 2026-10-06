@@ -66,8 +66,6 @@ class CrawlRunRecord(BaseModel):
     # Added with CR-0e: the crawler settings version the run used.
     settings_version: int | None = None
     settings_hash: str | None = None
-    # User-provided label or note for this crawl (CR-11).
-    note: str | None = None
 
 
 # --- what was read ------------------------------------------------------------------
