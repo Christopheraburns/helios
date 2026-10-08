@@ -1307,6 +1307,10 @@ export interface CrawlRunAsset {
 }
 
 export interface CrawlRunDetail extends CrawlRunSummary {
+  /** What the crawl saw but had no rule for: identifier shapes and PDF labels, commonest first. */
+  coverage?: Array<{ signal: string; value: string; count: number; example: string }>;
+  /** The mapping the crawl resolved against, when the run recorded it. */
+  mapping?: { model: string; version: number; content_hash: string; database: string } | null;
   asset_counts: { by_status: Record<string, number>; by_class: Record<string, number> };
   assets: CrawlRunAsset[];
 }
@@ -1356,6 +1360,59 @@ export interface DataSourceTestResult {
   detail: string;
   sample: Array<{ asset_id: string; mime_type: string; size_bytes: number | null; semantic_timestamp: string | null }>;
   tested_as?: string;
+}
+
+export interface MappingVersion {
+  version: number;
+  model: string;
+  ontology_version: string;
+  content_hash: string;
+  created_at: string;
+  created_by: string;
+  note: string;
+  is_active: boolean;
+}
+
+export interface MappingList {
+  /** Active version per semantic model. */
+  active: Record<string, number>;
+  versions: MappingVersion[];
+}
+
+export interface MappingModelColumn {
+  name: string;
+  label: string;
+  datatype: string;
+  /** What Helios DS made of the column when it profiled the table ("identifier", ...). */
+  role: string;
+}
+
+export interface MappingModel {
+  model: string;
+  name: string;
+  database: string;
+  tables: Array<{ name: string; source: string; label: string; description: string; columns: MappingModelColumn[] }>;
+  relationships: Array<{ name: string; from: string; to: string; from_columns: string[]; to_columns: string[] }>;
+}
+
+export interface MappingCheck {
+  valid: boolean;
+  problems: string[];
+  /** Checks that could not be run (no semantic model, no active ontology). */
+  not_checked: string[];
+}
+
+export interface MappingProbe {
+  kind: "entity" | "anchor";
+  class: string;
+  table?: string;
+  rows?: number;
+  distinct_keys?: number;
+  key_is_unique?: boolean;
+  columns: string[];
+  sample: Array<Array<string | number | boolean | null>>;
+  findings: string[];
+  sql: string[];
 }
 
 export interface CrawlerSettingsVersion {
@@ -1544,6 +1601,21 @@ export interface HeliosApi {
     note: string,
   ): Promise<CrawlerSettingsSaveResult>;
   activateCrawlerSettings?(version: number): Promise<{ version: number }>;
+  mappings?(): Promise<MappingList>;
+  shippedMappings?(): Promise<Array<Record<string, unknown>>>;
+  mappingVersion?(version: number): Promise<MappingVersion & { mapping: Record<string, unknown> }>;
+  mappingModels?(): Promise<{ models: string[]; classes: string[] | null }>;
+  mappingModel?(model: string): Promise<MappingModel>;
+  validateMapping?(mapping: Record<string, unknown>): Promise<MappingCheck>;
+  saveMapping?(
+    mapping: Record<string, unknown>,
+    note: string,
+  ): Promise<MappingVersion & { created: boolean; not_checked: string[] }>;
+  activateMapping?(version: number): Promise<{ version: number; model: string }>;
+  probeMapping?(
+    mapping: Record<string, unknown>,
+    target: { entity: string } | { anchor: string },
+  ): Promise<MappingProbe>;
   dataSourceTypes?(): Promise<DataSourceType[]>;
   dataSources?(organizationId: string): Promise<DataSourceView[]>;
   dataSource?(organizationId: string, id: string): Promise<DataSourceView>;
@@ -1942,6 +2014,48 @@ export class HeliosApiClient implements HeliosApi {
 
   activateCrawlerSettings(version: number): Promise<{ version: number }> {
     return this.post<{ version: number }>(`/api/v1/crawler/settings/${version}:activate`);
+  }
+
+  mappings(): Promise<MappingList> {
+    return this.get<MappingList>("/api/v1/ontology/mappings");
+  }
+
+  shippedMappings(): Promise<Array<Record<string, unknown>>> {
+    return this.get("/api/v1/ontology/mappings/shipped");
+  }
+
+  mappingVersion(version: number): Promise<MappingVersion & { mapping: Record<string, unknown> }> {
+    return this.get(`/api/v1/ontology/mappings/${version}`);
+  }
+
+  mappingModels(): Promise<{ models: string[]; classes: string[] | null }> {
+    return this.get("/api/v1/ontology/mappings/models");
+  }
+
+  mappingModel(model: string): Promise<MappingModel> {
+    return this.get<MappingModel>(`/api/v1/ontology/mappings/models/${encodeURIComponent(model)}`);
+  }
+
+  validateMapping(mapping: Record<string, unknown>): Promise<MappingCheck> {
+    return this.post<MappingCheck>("/api/v1/ontology/mappings:validate", { mapping });
+  }
+
+  saveMapping(
+    mapping: Record<string, unknown>,
+    note: string,
+  ): Promise<MappingVersion & { created: boolean; not_checked: string[] }> {
+    return this.post("/api/v1/ontology/mappings", { mapping, note });
+  }
+
+  activateMapping(version: number): Promise<{ version: number; model: string }> {
+    return this.post(`/api/v1/ontology/mappings/${version}:activate`);
+  }
+
+  probeMapping(
+    mapping: Record<string, unknown>,
+    target: { entity: string } | { anchor: string },
+  ): Promise<MappingProbe> {
+    return this.post<MappingProbe>("/api/v1/ontology/mappings:probe", { mapping, ...target });
   }
   dataSourceTypes(): Promise<DataSourceType[]> {
     return this.get<DataSourceType[]>("/api/v1/data-source-types");

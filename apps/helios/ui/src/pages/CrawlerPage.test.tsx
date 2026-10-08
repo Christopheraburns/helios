@@ -387,4 +387,57 @@ describe("CrawlerPage", () => {
     expect(await screen.findByText("version 1")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  it("shows what a crawl could not explain", async () => {
+    const counts = {
+      ...RUN.counts,
+      segments: 1003,
+      segments_without_mentions: 312,
+      assets_without_links: 4,
+      cases: 101,
+      cases_unresolved: 7,
+      unmatched_identifiers: 330,
+      unknown_labels: 100,
+      claims_dropped_weak_cue: 217,
+      claims_dropped_undefined: 0,
+    };
+    const api = {
+      crawlRuns: vi.fn().mockResolvedValue([{ ...RUN, counts }]),
+      crawlerSettings: vi.fn(),
+      crawlRun: vi.fn().mockResolvedValue({
+        ...RUN,
+        counts,
+        asset_counts: { by_status: {}, by_class: {} },
+        assets: [],
+        coverage: [
+          { signal: "unmatched_identifier", value: "AAA-9999999", count: 330, example: "RMA-3056773" },
+          { signal: "unknown_label", value: "Policy number", count: 100, example: "P-88" },
+        ],
+      }),
+    };
+    renderPage(api);
+    fireEvent.click((await screen.findAllByText("1ca99f86-e6a0…")).find((el) => el.tagName === "TD")!);
+
+    const block = (await screen.findByText(/Nothing recognised in/)).closest(".crawler-coverage") as HTMLElement;
+    expect(block).toHaveTextContent("Nothing recognised in 312 of 1,003 passages (31%); no linked entity in 4 documents.");
+    expect(block).toHaveTextContent("7 of 101 cases were not matched to a warehouse row.");
+    expect(block).toHaveTextContent("217 (a general word, and the sentence did not name the subject)");
+    expect(block).not.toHaveTextContent("not defined"); // a reason with nothing dropped is not listed
+    expect(within(block).getByText("RMA-3056773").closest("li")).toHaveAttribute(
+      "title",
+      "Shape AAA-9999999: letters as A, digits as 9",
+    );
+    expect(within(block).getByTitle("Seen above: P-88")).toHaveTextContent("Policy number ×100");
+  });
+
+  it("says when an older run has no coverage recorded", async () => {
+    const api = {
+      crawlRuns: vi.fn().mockResolvedValue([RUN]),
+      crawlerSettings: vi.fn(),
+      crawlRun: vi.fn().mockResolvedValue({ ...RUN, asset_counts: { by_status: {}, by_class: {} }, assets: [] }),
+    };
+    renderPage(api);
+    fireEvent.click((await screen.findAllByText("1ca99f86-e6a0…")).find((el) => el.tagName === "TD")!);
+    expect(await screen.findByText("Not recorded for this run (older crawler).")).toBeInTheDocument();
+  });
 });

@@ -228,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
     ontology = ontology_versions.active(catalog)
     ontology_version = ontology.version if ontology else "unpublished"
 
-    resolution = resolution_for(ontology_version, catalog)
+    resolution, mapping_used = resolution_for(ontology_version, catalog)
     gazetteer = None
     if resolution is not None:
         if args.classes:
@@ -265,44 +265,46 @@ def main(argv: list[str] | None = None) -> int:
         embed=embed_hook(bool(args.index_duckdb), args.strategy),
         strategy=args.strategy,
         llm=extractor,
+        mapping=mapping_used,
     )
     print(f"{run.crawl_run_id}: {run.status} {run.counts}")
     return 0 if run.status == "SUCCEEDED" else 1
 
 
-def resolution_for(ontology_version: str, catalog: Any) -> Any:
-    """The resolver's view of the active mapping for ``ontology_version``, from
-    ``helios_index`` (CG-6). Falls back to the only active mapping there is.
-    The repository's mapping files are not read here: they are shipped
-    examples, imported once through the API."""
+def resolution_for(ontology_version: str, catalog: Any) -> tuple[Any, dict[str, Any] | None]:
+    """(the resolver's view of the active mapping for ``ontology_version``, what to
+    record about it on the run), from ``helios_index`` (CG-6). The repository's
+    mapping files are not read here: they are shipped examples, imported once
+    through the API."""
     from helios_core.index import mappings as stored
     from helios_core.ontology.mapping import resolution_config
 
-    active = stored.active(catalog)
-    if not active:
+    if not stored.active(catalog):
         print(
             "warning: no mapping is active, so mentions are not extracted. Import or save one "
             "and activate it: POST /api/v1/ontology/mappings, then /mappings/{version}:activate."
         )
-        return None
-    records = list(active.values())
-    matching = [
-        r
-        for r in records
-        if r.ontology_version == ontology_version or r.ontology_version.endswith(f"@{ontology_version}")
-    ]
-    if not matching and len(records) == 1:
-        matching = records
-        print(
-            f"warning: no mapping for ontology {ontology_version}; using {records[0].model} "
-            f"(for {records[0].ontology_version})"
-        )
-    if not matching:
+        return None, None
+    chosen = stored.choose(catalog, ontology_version)
+    if chosen is None:
         print(f"warning: no mapping for ontology {ontology_version}; mentions are not extracted")
-        return None
-    chosen = matching[0]
+        return None, None
+    if not (
+        chosen.ontology_version == ontology_version
+        or chosen.ontology_version.endswith(f"@{ontology_version}")
+    ):
+        print(
+            f"warning: no mapping for ontology {ontology_version}; using {chosen.model} "
+            f"(for {chosen.ontology_version})"
+        )
     print(f"mapping: {chosen.model} version {chosen.version} ({chosen.content_hash[:12]})")
-    return resolution_config(stored.mapping_of(chosen))
+    config = resolution_config(stored.mapping_of(chosen))
+    return config, {
+        "model": chosen.model,
+        "version": chosen.version,
+        "content_hash": chosen.content_hash,
+        "database": config.database,
+    }
 
 
 def source_uri(source: Any, connector: Any) -> str:

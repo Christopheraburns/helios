@@ -6,15 +6,18 @@ answer key compare directly:
 
 - email: ``{"header": "From"}``, ``{"part": "subject"}``, ``{"part": "body"}``. Body
   text uses "\\n" line endings, as ground-truth body offsets do.
-- chat: ``{"message_id": ...}``, one segment per message.
+- chat: ``{"message_id": ...}``, one segment per message. Where a chat export keeps
+  its messages, their text, sender and role is a *layout* in the crawler
+  settings (``analyzers.chat.layouts``); a file must fit one of them.
 - PDF: ``{"page": n}`` (1-based), one segment per page, text as extracted.
 - plain text: ``{"part": "text"}``, the whole file.
 - table row: ``{"column": name}``, one segment per text column.
 
 PDF pages also get ``fields``: label/value pairs (a known field label on one line,
 its value on the next) and table rows (a run of column headers followed by one
-value per header). Labels come from the crawler settings (``pdf_labels``), so
-the same rules apply to any report layout that uses them.
+value per header). Labels come from the crawler settings (``pdf_labels``), and
+so does what tells a value from a column heading (``analyzers.pdf``), so the
+same rules apply to any report layout that uses them.
 """
 
 from __future__ import annotations
@@ -26,9 +29,10 @@ import io
 import json
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 
-from helios_core.crawler.settings import CrawlerSettings
+from helios_core.crawler.settings import ChatLayout, CrawlerSettings, PdfAnalyzer
 
 # Declared MIME type -> analyzer.
 ANALYZER_FOR_MIME = {
@@ -58,8 +62,32 @@ class Analysis:
     segments: list[Segment] = field(default_factory=list)
 
 
-def detect(data: bytes) -> str | None:
-    """The asset type the bytes actually are: pdf, chat, email, or None."""
+def at(document: Any, path: str | None) -> Any:
+    """The value at a dotted ``path`` in parsed JSON, or None."""
+    if not path:
+        return None
+    for part in path.split("."):
+        if not isinstance(document, dict):
+            return None
+        document = document.get(part)
+    return document
+
+
+def chat_layout(document: Any, layouts: list[ChatLayout]) -> ChatLayout | None:
+    """The first layout the file fits: its ``match`` fields have their values
+    and its messages are a list."""
+    for layout in layouts:
+        if all(str(at(document, key)) == value for key, value in layout.match.items()) and isinstance(
+            at(document, layout.messages), list
+        ):
+            return layout
+    return None
+
+
+def detect(data: bytes, settings: CrawlerSettings | None = None) -> str | None:
+    """The asset type the bytes actually are: pdf, chat, email, text, row, or None.
+    JSON is a chat when its messages are where one of the settings' chat layouts
+    (or, without settings, the default layout) keeps them."""
     head = data[:1024].lstrip()
     if head.startswith(b"%PDF-"):
         return "pdf"
@@ -68,7 +96,10 @@ def detect(data: bytes) -> str | None:
             document = json.loads(data)
         except (ValueError, UnicodeDecodeError):
             return None
-        if isinstance(document, dict) and "messages" in document:
+        layouts = settings.analyzers.chat.layouts if settings is not None else [ChatLayout(name="default")]
+        if isinstance(document, dict) and any(
+            isinstance(at(document, layout.messages), list) for layout in layouts
+        ):
             return "chat"
         if isinstance(document, dict) and "row_key" in document and "text" in document:
             return "row"
@@ -90,7 +121,7 @@ def analyze_asset(mime_type: str, data: bytes, settings: CrawlerSettings) -> Ana
     declared = ANALYZER_FOR_MIME.get(mime_type)
     if declared is None:
         return Analysis("unsupported", f"no analyzer for {mime_type}")
-    actual = detect(data)
+    actual = detect(data, settings)
     if actual != declared:
         return Analysis(
             "type_mismatch", f"declared {mime_type}, content looks like {actual or 'unknown'}"
@@ -201,27 +232,31 @@ def _row(data: bytes) -> Analysis:
 
 def _chat(data: bytes, settings: CrawlerSettings) -> Analysis:
     thread = json.loads(data)
-    schema = thread.get("schema")
-    if schema not in settings.analyzers.chat.schemas:
-        return Analysis("invalid", f"chat schema {schema!r} is not accepted by the settings")
-    roles = {p.get("sender"): p.get("role") for p in thread.get("participants", [])}
+    layout = chat_layout(thread, settings.analyzers.chat.layouts)
+    if layout is None:
+        return Analysis("invalid", "the file fits none of the chat layouts in the settings")
+    roles = {}
+    for participant in at(thread, layout.participants) or []:
+        if isinstance(participant, dict):
+            roles[at(participant, layout.participant_id)] = at(participant, layout.participant_role)
     segments = []
-    for message in thread.get("messages", []):
-        message_id = message.get("message_id")
-        text = message.get("text")
+    for message in at(thread, layout.messages):
+        message_id = at(message, layout.message_id)
+        text = at(message, layout.text)
         if not message_id or not isinstance(text, str):
-            return Analysis("invalid", "a chat message lacks message_id or text")
+            return Analysis("invalid", "a chat message lacks its ID or its text")
+        sender = at(message, layout.sender)
         segments.append(
             Segment(
                 "message",
                 {"message_id": message_id},
                 text,
                 {
-                    "sender": message.get("sender"),
-                    "sender_name": message.get("sender_name"),
-                    "role": roles.get(message.get("sender")),
-                    "timestamp": message.get("timestamp"),
-                    "thread_id": thread.get("thread_id"),
+                    "sender": sender,
+                    "sender_name": at(message, layout.sender_name),
+                    "role": at(message, layout.role) if layout.role else roles.get(sender),
+                    "timestamp": at(message, layout.timestamp),
+                    "thread_id": at(thread, layout.thread_id),
                 },
             )
         )
@@ -231,8 +266,6 @@ def _chat(data: bytes, settings: CrawlerSettings) -> Analysis:
 
 
 # --- PDF -----------------------------------------------------------------------------------
-
-_VALUE_LIKE = re.compile(r"[\d$@]|^[A-P]{16}$")
 
 
 def _pdf(data: bytes, settings: CrawlerSettings) -> Analysis:
@@ -244,20 +277,35 @@ def _pdf(data: bytes, settings: CrawlerSettings) -> Analysis:
     segments = []
     for number, page in enumerate(reader.pages[:limit], start=1):
         text = page.extract_text() or ""
-        segments.append(Segment("page", {"page": number}, text, _pdf_fields(text, labels)))
+        segments.append(
+            Segment("page", {"page": number}, text, _pdf_fields(text, labels, settings.analyzers.pdf))
+        )
     if not any(s.text.strip() for s in segments):
         return Analysis("no_text", "no page has a text layer (a scanned PDF needs OCR)")
     detail = f"read {limit} of {len(reader.pages)} pages" if len(reader.pages) > limit else ""
     return Analysis("analyzed", detail, segments)
 
 
-def _is_header_like(line: str) -> bool:
+@lru_cache(maxsize=32)
+def _value_like(patterns: tuple[str, ...]) -> re.Pattern[str] | None:
+    return re.compile("|".join(patterns)) if patterns else None
+
+
+def _is_header_like(line: str, rules: PdfAnalyzer) -> bool:
+    """A short capitalised line that does not look like a value: a column heading."""
     words = line.split()
-    return 0 < len(words) <= 3 and line[:1].isupper() and not _VALUE_LIKE.search(line)
+    value_like = _value_like(tuple(rules.value_patterns))
+    return (
+        0 < len(words) <= rules.header_max_words
+        and line[:1].isupper()
+        and not (value_like is not None and value_like.search(line))
+    )
 
 
-def _pdf_fields(text: str, labels: dict[str, Any]) -> dict[str, Any]:
-    """Label/value pairs and table rows recognised on one page."""
+def _pdf_fields(text: str, labels: dict[str, Any], rules: PdfAnalyzer | None = None) -> dict[str, Any]:
+    """Label/value pairs and table rows recognised on one page. ``rules`` is the
+    settings' ``analyzers.pdf`` section; without it the engine's defaults apply."""
+    rules = rules or PdfAnalyzer()
     lines = [line.strip() for line in text.split("\n")]
     used: set[int] = set()
     tables = []
@@ -267,11 +315,15 @@ def _pdf_fields(text: str, labels: dict[str, Any]) -> dict[str, Any]:
         # lines; the same number of lines after it are one row of values.
         if lines[i].lower() in labels:
             end = i
-            while end + 1 < len(lines) and _is_header_like(lines[end + 1]):
+            while end + 1 < len(lines) and _is_header_like(lines[end + 1], rules):
                 end += 1
             width = end - i + 1
             known = sum(1 for line in lines[i : end + 1] if line.lower() in labels)
-            if width >= 4 and known >= 2 and end + width < len(lines):
+            if (
+                width >= rules.table_min_columns
+                and known >= rules.table_min_labels
+                and end + width < len(lines)
+            ):
                 columns = lines[i : end + 1]
                 values = lines[end + 1 : end + 1 + width]
                 tables.append(

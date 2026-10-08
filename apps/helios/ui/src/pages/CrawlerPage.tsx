@@ -15,6 +15,7 @@ import {
   type CrawlerSettingsState,
 } from "../api/client";
 import { ErrorState, LoadingState } from "../components/AsyncState";
+import MappingTab from "../features/crawler/MappingTab";
 import SettingsForm, { type Settings, type TryRule } from "../features/crawler/SettingsForm";
 import TryPanel from "../features/crawler/TryPanel";
 import type { ApplicationContextState } from "../hooks/useApplicationContext";
@@ -24,11 +25,12 @@ interface CrawlerPageProps {
   context: ApplicationContextState;
 }
 
-type Tab = "runs" | "scores" | "settings";
+type Tab = "runs" | "scores" | "settings" | "mapping";
 const TABS: { id: Tab; label: string }[] = [
   { id: "runs", label: "Runs" },
   { id: "scores", label: "Scores" },
   { id: "settings", label: "Settings" },
+  { id: "mapping", label: "Mapping" },
 ];
 
 function message(err: unknown, fallback: string): string {
@@ -135,7 +137,7 @@ function statusClass(status: string): string {
 export default function CrawlerPage({ context }: CrawlerPageProps) {
   const [params, setParams] = useSearchParams();
   const requested = params.get("tab");
-  const tab: Tab = requested === "settings" || requested === "scores" ? requested : "runs";
+  const tab: Tab = requested === "settings" || requested === "scores" || requested === "mapping" ? requested : "runs";
   const setTab = (next: Tab) => {
     const updated = new URLSearchParams(params);
     updated.set("tab", next);
@@ -168,6 +170,7 @@ export default function CrawlerPage({ context }: CrawlerPageProps) {
       {tab === "runs" && <RunsTab context={context} />}
       {tab === "scores" && <ScoresTab context={context} />}
       {tab === "settings" && <SettingsTab context={context} />}
+      {tab === "mapping" && <MappingTab api={context.crawlerClient} />}
     </div>
   );
 }
@@ -597,6 +600,12 @@ function RunDetail({ context, crawlRunId }: CrawlerPageProps & { crawlRunId: str
             .map((s) => `${run.counts[s]} ${s.replace(/_/g, " ")}`)
             .join(" · ") || "None"}
         </dd>
+        <dt title="What this crawl saw but could not explain. Each line is a place to look, not an error.">
+          Coverage
+        </dt>
+        <dd>
+          <CoverageSummary run={run} />
+        </dd>
         {run.note && (
           <>
             <dt>Note</dt>
@@ -673,6 +682,74 @@ function RunDetail({ context, crawlRunId }: CrawlerPageProps & { crawlRunId: str
 }
 
 // --- evaluation ------------------------------------------------------------------
+
+const DROPPED_REASONS: Record<string, string> = {
+  claims_dropped_undefined: "cue words for a kind of claim that is not defined",
+  claims_dropped_speaker: "the speaker may not make that claim",
+  claims_dropped_weak_cue: "a general word, and the sentence did not name the subject",
+  claims_dropped_no_subject: "no subject could be found",
+  claims_dropped_no_object: "no object could be found",
+};
+
+/** What the crawl could not explain (CG-10): totals from its counts, examples from its rows. */
+function CoverageSummary({ run }: { run: CrawlRunDetail }) {
+  const counts = run.counts;
+  if (counts.segments_without_mentions == null) {
+    return <span className="muted">Not recorded for this run (older crawler).</span>;
+  }
+  const share = (part: number, whole: number) =>
+    whole ? ` (${Math.round((part / whole) * 100)}%)` : "";
+  const examples = (signal: string) => (run.coverage ?? []).filter((c) => c.signal === signal);
+  const dropped = Object.entries(DROPPED_REASONS).filter(([key]) => counts[key]);
+  const shapes = examples("unmatched_identifier");
+  const labels = examples("unknown_label");
+  return (
+    <div className="crawler-coverage">
+      <div>
+        Nothing recognised in <strong>{counts.segments_without_mentions.toLocaleString()}</strong> of{" "}
+        {(counts.segments ?? 0).toLocaleString()} passages
+        {share(counts.segments_without_mentions, counts.segments ?? 0)}; no linked entity in{" "}
+        <strong>{(counts.assets_without_links ?? 0).toLocaleString()}</strong> documents.
+      </div>
+      {counts.cases != null && (
+        <div>
+          <strong>{(counts.cases_unresolved ?? 0).toLocaleString()}</strong> of {counts.cases.toLocaleString()} cases
+          were not matched to a warehouse row.
+        </div>
+      )}
+      {dropped.length > 0 && (
+        <div>
+          Cue phrases that made no claim:{" "}
+          {dropped.map(([key, text]) => `${counts[key].toLocaleString()} (${text})`).join("; ")}.
+        </div>
+      )}
+      {shapes.length > 0 && (
+        <div>
+          Looks like an identifier, but no pattern matched ({(counts.unmatched_identifiers ?? 0).toLocaleString()} in all):
+          <ul className="crawler-coverage__examples">
+            {shapes.map((c) => (
+              <li key={c.value} title={`Shape ${c.value}: letters as A, digits as 9`}>
+                <code>{c.example}</code> <span className="muted">×{c.count.toLocaleString()}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {labels.length > 0 && (
+        <div>
+          Looks like a PDF field label, but has no label rule:
+          <ul className="crawler-coverage__examples">
+            {labels.map((c) => (
+              <li key={c.value} title={`Seen above: ${c.example}`}>
+                {c.value} <span className="muted">×{c.count.toLocaleString()}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function EvaluatePanel({ context, run }: CrawlerPageProps & { run: CrawlRunDetail }) {
   const { crawlerClient } = context;
@@ -1283,7 +1360,7 @@ function SettingsTab({ context }: CrawlerPageProps) {
             </ul>
             <p>
               How classes are identified (keys, aliases, alias templates, thresholds) is part of the
-              ontology mapping, not these settings. See <code>docs/crawler-analysis.md</code>.
+              mapping, not these settings: see the <Link to="/crawler?tab=mapping">Mapping tab</Link>.
             </p>
           </details>
         </details>

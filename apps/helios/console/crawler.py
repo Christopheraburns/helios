@@ -413,6 +413,16 @@ def get_run(crawl_run_id: str) -> dict[str, Any]:
     return {
         **_run_view(run, _latest_evaluations_by_run(store).get(crawl_run_id)),
         "asset_counts": {"by_status": by_status, "by_class": by_class},
+        # What the crawl saw but had no rule for (CG-10): examples behind the run's coverage counts.
+        "coverage": sorted(
+            (
+                {"signal": c.signal, "value": c.value, "count": c.count, "example": c.example}
+                for c in store.read("helios_index.coverage", {"crawl_run_id": crawl_run_id})
+            ),
+            key=lambda c: (c["signal"], -c["count"], c["value"]),
+        ),
+        # The mapping the crawl resolved against, when the run recorded it.
+        "mapping": (run.settings or {}).get("mapping"),
         "assets": [
             {
                 "asset_id": a.asset_id,

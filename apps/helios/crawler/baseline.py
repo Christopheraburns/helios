@@ -111,7 +111,9 @@ def fingerprint(
         from . import evaluate as harness
 
         truth = harness.load_truth(truth_cursor, dataset_id)
-        metrics = harness.score(truth, harness.load_index(index, run.crawl_run_id), run)
+        metrics = harness.score(
+            truth, harness.load_index(index, run.crawl_run_id), run, harness.profile_for(index, run)
+        )
         result["dataset_id"] = dataset_id
         result["scorecard"] = scorecard_fingerprint(metrics, harness.summarize(metrics))
     return result
@@ -131,8 +133,10 @@ def compare(baseline: dict[str, Any], current: dict[str, Any]) -> list[str]:
             differences.append(f"{name}: {before['rows']} rows in the baseline, {after['rows']} now")
         elif before["sha256"] != after["sha256"]:
             differences.append(f"{name}: same number of rows ({before['rows']}), different content")
+    # A count the baseline has must be reproduced. A count it has never had (a
+    # newer crawler reports more) says nothing about what was found.
     before_counts, after_counts = baseline.get("counts", {}), current.get("counts", {})
-    for name in sorted(set(before_counts) | set(after_counts)):
+    for name in sorted(before_counts):
         if before_counts.get(name) != after_counts.get(name):
             differences.append(
                 f"count {name}: baseline {before_counts.get(name)}, now {after_counts.get(name)}"

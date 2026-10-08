@@ -172,6 +172,15 @@ CREATE TABLE IF NOT EXISTS helios_index.evaluations (
   error STRING
 ) STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
 
+CREATE TABLE IF NOT EXISTS helios_index.coverage (
+  crawl_run_id STRING,
+  signal STRING,
+  value STRING,
+  count BIGINT,
+  example STRING,
+  ontology_version STRING
+) STORED AS ICEBERG TBLPROPERTIES ('format-version'='2');
+
 CREATE TABLE IF NOT EXISTS helios_index.mappings (
   version BIGINT,
   model STRING,

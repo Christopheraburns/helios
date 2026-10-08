@@ -20,6 +20,16 @@ from helios_core.index.records import (
     SegmentRecord,
 )
 from helios_core.index.store import duckdb_index_store
+from crawler_samples import RETAIL_SETTINGS
+
+# What the harness is told about this data: the mapping's database, and the
+# retail preset's relationship names and case classes.
+PROFILE = harness.ScoringProfile.from_settings("tpcds", RETAIL_SETTINGS)
+
+
+@pytest.fixture(autouse=True)
+def retail_profile(monkeypatch):
+    monkeypatch.setattr(harness, "profile_for", lambda index, run: PROFILE)
 
 DATASET = "ds-1"
 ONT = "0.2.0"
@@ -37,7 +47,7 @@ TRUTH_ENTITIES = {
     "E_art_chat": ("Artifact", {"artifact_id": "b-chat"}),
     "E_art_pdf": ("Artifact", {"artifact_id": "c-pdf"}),
 }
-KEY = {name: harness.truth_key({"source_key": key}) for name, (_, key) in TRUTH_ENTITIES.items()}
+KEY = {name: harness.truth_key({"source_key": key}, "tpcds") for name, (_, key) in TRUTH_ENTITIES.items()}
 
 HEADER = "Wilma Graham <Wilma.Graham@t.edu>"
 SUBJECT = "Return RMA-4853189 damaged item"
@@ -416,9 +426,14 @@ def test_truth_keys_follow_the_crawler_external_id_convention():
     assert KEY["E_cust"] == "tpcds.customer:c_customer_sk=96292"
     assert KEY["E_ret"] == "tpcds.store_returns:sr_item_sk=2606,sr_ticket_number=234309"
     assert KEY["E_art_pdf"] == "c-pdf"
-    assert harness.truth_key({"source_key": {"i_brand": "exportinameless #1", "table": "item"}}) == (
+    assert harness.truth_key({"source_key": {"i_brand": "exportinameless #1", "table": "item"}}, "tpcds") == (
         "tpcds.item:i_brand=exportinameless #1"
     )
+    # The database is the mapping's, not the harness's own.
+    assert harness.truth_key({"source_key": {"visit_id": 4, "table": "visits"}}, "clinic") == "clinic.visits:visit_id=4"
+    assert harness.truth_key({"_key": "already-worked-out"}) == "already-worked-out"
+    with pytest.raises(ValueError, match="needs the source database"):
+        harness.truth_key({"source_key": {"visit_id": 4, "table": "visits"}})
 
 
 def test_truth_is_loaded_per_dataset_with_json_decoded(truth):

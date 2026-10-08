@@ -53,6 +53,7 @@ def test_correct_isolation_passes():
     user, checks = run(
         lambda: FakeCursor({"helios_ds.crawlable_artifacts", "tpcds.customer", "helios_index"}),
         FakeS3(["helios-db/source/datasets/"]),
+        "tpcds.customer",
     )
     assert user == "srv_helios_crawler"
     assert all(c.ok for c in checks), [(c.name, c.outcome) for c in checks]
@@ -68,7 +69,18 @@ def test_ground_truth_access_and_manifest_access_fail_the_check():
         "helios_ds.artifacts",
         "helios_ds.scenario_plans",
     }
-    _, checks = run(lambda: FakeCursor(everything), FakeS3(["helios-db/source/"]))
+    _, checks = run(lambda: FakeCursor(everything), FakeS3(["helios-db/source/"]), "tpcds.customer")
     failed = {c.name for c in checks if not c.ok}
     assert "SELECT from helios_ground_truth.claims" in failed
     assert "read a generation manifest" in failed
+
+
+def test_the_warehouse_table_comes_from_the_caller_and_is_reported_when_absent():
+    allowed = {"helios_ds.crawlable_artifacts", "clinic.visits", "helios_index"}
+    _, checks = run(lambda: FakeCursor(allowed), FakeS3(["helios-db/source/datasets/"]), "clinic.visits")
+    assert next(c for c in checks if c.name == "SELECT from clinic.visits").ok
+    _, checks = run(lambda: FakeCursor(allowed), FakeS3(["helios-db/source/datasets/"]))
+    missing = next(c for c in checks if c.name == "SELECT from a warehouse table")
+    assert not missing.ok and "no mapping is active" in missing.outcome
+    _, checks = run(lambda: FakeCursor(allowed), FakeS3([]), "clinic.visits; DROP TABLE x")
+    assert all("DROP" not in c.name for c in checks)

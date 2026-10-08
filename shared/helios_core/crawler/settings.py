@@ -44,6 +44,29 @@ class _Model(BaseModel):
 class PdfAnalyzer(_Model):
     enabled: bool = True
     max_pages: int = Field(50, ge=1, le=10_000, description="Pages beyond this are not read")
+    # Reading a table: a run of short heading lines, then one value per heading.
+    value_patterns: list[str] = Field(
+        default_factory=lambda: [r"[\d$@]"],
+        description=(
+            "Regular expressions that mark a line as a value, not a column heading "
+            "(a digit, a currency sign, an ID format)"
+        ),
+    )
+    header_max_words: int = Field(3, ge=1, le=20, description="A column heading has at most this many words")
+    table_min_columns: int = Field(4, ge=2, le=100, description="Fewer headings in a row are not a table")
+    table_min_labels: int = Field(
+        2, ge=1, le=100, description="How many of the headings must be known field labels"
+    )
+
+    @field_validator("value_patterns")
+    @classmethod
+    def _patterns_compile(cls, values: list[str]) -> list[str]:
+        for value in values:
+            try:
+                re.compile(value)
+            except re.error as exc:
+                raise ValueError(f"{value!r} is not a valid regular expression: {exc}") from exc
+        return values
 
 
 class EmailAnalyzer(_Model):
@@ -56,11 +79,47 @@ class EmailAnalyzer(_Model):
     )
 
 
+class ChatLayout(_Model):
+    """How one chat export format is laid out, as paths into its JSON. A path is
+    a field name, or several joined by dots (``data.messages``, ``author.id``)."""
+
+    name: str = Field(min_length=1, description="A label for this format")
+    match: dict[str, str] = Field(
+        default_factory=dict,
+        description="Top-level fields a file must have with these values, e.g. its format name",
+    )
+    messages: str = Field("messages", description="The list of messages")
+    # Within a message:
+    message_id: str = "message_id"
+    text: str = "text"
+    sender: str | None = "sender"
+    sender_name: str | None = "sender_name"
+    timestamp: str | None = "timestamp"
+    role: str | None = Field(None, description="The speaker's role, when each message carries it")
+    # In the file:
+    thread_id: str | None = "thread_id"
+    participants: str | None = Field("participants", description="The list of people in the thread")
+    # Within a participant:
+    participant_id: str = Field("sender", description="What a message's sender refers to")
+    participant_role: str | None = "role"
+
+
 class ChatAnalyzer(_Model):
     enabled: bool = True
-    schemas: list[str] = Field(
-        default_factory=lambda: ["helios-ds/chat-thread/1.0"], description="Accepted chat schemas"
+    layouts: list[ChatLayout] = Field(
+        default_factory=list, description="Chat export formats read; a file must fit one"
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_schema_names(cls, data: Any) -> Any:
+        """Settings saved before layouts existed listed accepted format names
+        (``schemas``); the one layout the code then knew is ChatLayout's defaults."""
+        if isinstance(data, dict) and "schemas" in data:
+            data = dict(data)
+            names = data.pop("schemas") or []
+            data["layouts"] = [{"name": name, "match": {"schema": name}} for name in names]
+        return data
 
 
 class TextAnalyzer(_Model):
@@ -296,6 +355,22 @@ class Claims(_Model):
     confidence: Confidence = Field(default_factory=Confidence)
 
 
+class TruthRelationship(_Model):
+    """How a ground-truth dataset names a relationship the ontology has."""
+
+    type: str = Field(min_length=1, description="The ontology relationship class")
+    reversed: bool = Field(False, description="The ground truth states it the other way round")
+
+
+class Evaluation(_Model):
+    """Only for data that comes with an answer key: how the scoring harness reads it."""
+
+    truth_relationships: dict[str, TruthRelationship] = Field(
+        default_factory=dict,
+        description="Relationship name in the ground truth -> the ontology's relationship",
+    )
+
+
 class LlmExtraction(_Model):
     """The LLM crawler (strategy ``llm``, CR-L1). The instructions are the
     versioned part of its prompt; the ontology classes, claim vocabulary and
@@ -353,6 +428,7 @@ class CrawlerSettings(_Model):
     resolution: ResolutionRules = Field(default_factory=ResolutionRules)
     cases: CaseLinking = Field(default_factory=CaseLinking)
     claims: Claims = Field(default_factory=Claims)
+    evaluation: Evaluation = Field(default_factory=Evaluation)
     llm: LlmExtraction = Field(default_factory=LlmExtraction)
 
     @model_validator(mode="before")
@@ -371,6 +447,17 @@ class CrawlerSettings(_Model):
             ]
             # A schema 1 claims section held only cue words; the kinds of claim were in code.
             merged["claims"] = {**legacy.get("claims", {}), **(data.get("claims") or {})}
+            # Likewise each analyzer's options: what the document does not say, the code decided.
+            own = data.get("analyzers") or {}
+            before = legacy.get("analyzers", {})
+            analyzers = {}
+            for kind in {**before, **own}:
+                mine = own.get(kind) or {}
+                if kind == "chat" and "schemas" in mine:
+                    analyzers[kind] = mine  # its own list of formats, converted below
+                else:
+                    analyzers[kind] = {**(before.get(kind) or {}), **mine}
+            merged["analyzers"] = analyzers
             return merged
         return data
 

@@ -25,7 +25,7 @@ from apps.helios.crawler.mentions import extract_mentions
 from apps.helios.crawler.resolution import resolve
 from helios_core.index import ids
 from helios_core.index.records import SegmentRecord
-from crawler_samples import RETAIL_SETTINGS
+from crawler_samples import RETAIL_SETTINGS, found
 
 CONFIG = resolution_fixtures.CONFIG
 RETURN_A, RETURN_B = resolution_fixtures.RETURN_A, resolution_fixtures.RETURN_B
@@ -262,7 +262,7 @@ def test_one_claim_per_predicate_per_case_with_evidence_from_several_documents(w
     assert sum(1 for c in world.claims if c[0] == "PACKAGING_DAMAGED" and c[2] == RETURN_B) == 1
     assert len({c.claim_id for c in world.extraction.claims}) == len(world.extraction.claims)
     assert len({e.evidence_id for e in world.extraction.evidence}) == len(world.extraction.evidence)
-    assert world.extraction.counts == {
+    assert found(world.extraction.counts) == {
         "claims": len(world.extraction.claims),
         "claim_evidence": len(world.extraction.evidence),
         "claims_unanchored": world.extraction.unanchored,

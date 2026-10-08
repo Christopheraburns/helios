@@ -5,7 +5,8 @@ RAZ policies are in place:
 
     python -m apps.helios.crawler.access_check [--connection "S3 Object Store"]
 
-Must be allowed: SELECT on helios_ds.crawlable_artifacts and on tpcds, creating
+Must be allowed: SELECT on helios_ds.crawlable_artifacts and on the warehouse the
+mapping names (a table of the active mapping, or ``--warehouse-table``), creating
 and writing tables in helios_index, and reading artifact objects under
 helios-db/source/datasets/. Must be denied: helios_ground_truth.*,
 the helios_ds base tables, and generation manifests (_manifests/), which hold
@@ -16,12 +17,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 CRAWLABLE = "helios_ds.crawlable_artifacts"
+_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 MUST_DENY_TABLES = (
     "helios_ground_truth.claims",
     "helios_ground_truth.entity_mentions",
@@ -55,7 +58,11 @@ def _attempt(action: Callable[[], Any]) -> str:
         return "denied" if denied else f"error: {text[:200]}"
 
 
-def run(cursor_factory: Callable[[], Any], s3_client: Any | None) -> tuple[str, list[Check]]:
+def run(
+    cursor_factory: Callable[[], Any], s3_client: Any | None, warehouse_table: str | None = None
+) -> tuple[str, list[Check]]:
+    """``warehouse_table`` (database.table) is a table the crawler must be able to
+    read to build its dictionary; with none the check is reported as not run."""
     cursor = cursor_factory()
     cursor.execute("SELECT EFFECTIVE_USER()")
     user = str(cursor.fetchone()[0])
@@ -73,12 +80,17 @@ def run(cursor_factory: Callable[[], Any], s3_client: Any | None) -> tuple[str, 
 
     checks.append(Check(f"SELECT from {CRAWLABLE}", "allowed", _attempt(read_view)))
 
-    def read_tpcds() -> None:
+    def read_warehouse() -> None:
         c = cursor_factory()
-        c.execute("SELECT 1 FROM tpcds.customer LIMIT 1")
+        c.execute(f"SELECT 1 FROM {warehouse_table} LIMIT 1")
         c.fetchall()
 
-    checks.append(Check("SELECT from tpcds.customer", "allowed", _attempt(read_tpcds)))
+    if warehouse_table and all(_NAME.match(part) for part in warehouse_table.split(".")):
+        checks.append(Check(f"SELECT from {warehouse_table}", "allowed", _attempt(read_warehouse)))
+    else:
+        checks.append(
+            Check("SELECT from a warehouse table", "allowed", "not run: no mapping is active")
+        )
 
     def write_index() -> None:
         # A permanent probe table: the crawler may create, insert and read in
@@ -128,9 +140,30 @@ def run(cursor_factory: Callable[[], Any], s3_client: Any | None) -> tuple[str, 
     return user, checks
 
 
+def _mapped_table() -> str | None:
+    """database.table of the first class in an active mapping, if there is one."""
+    from helios_core.index import impala_index_store
+    from helios_core.index import mappings as stored
+    from helios_core.ontology.mapping import resolution_config
+
+    try:
+        index = impala_index_store()
+        for record in stored.active(index).values() if index is not None else ():
+            mapping = stored.mapping_of(record)
+            if mapping.entities:
+                return f"{resolution_config(mapping).database}.{mapping.entities[0].ossie_element}"
+    except Exception as exc:  # noqa: BLE001 - the mapping tables are themselves under test here
+        print(f"could not read the active mapping: {type(exc).__name__}: {exc}")
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--connection", default="S3 Object Store", help="Workbench data connection")
+    parser.add_argument(
+        "--warehouse-table",
+        help="database.table the crawler must be able to read; default: the first table of the active mapping",
+    )
     args = parser.parse_args(argv)
 
     from helios_core.config import impala_config
@@ -150,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
         s3 = None
 
     try:
-        user, checks = run(connection.cursor, s3)
+        user, checks = run(connection.cursor, s3, args.warehouse_table or _mapped_table())
     except Exception as exc:
         if "401" in str(exc) or "Unauthorized" in str(exc):
             print(

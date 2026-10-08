@@ -11,6 +11,12 @@ analyzers:
   pdf:
     enabled: true
     max_pages: 50
+    value_patterns:
+    - '[\d$@]'
+    - ^[A-P]{16}$
+    header_max_words: 3
+    table_min_columns: 4
+    table_min_labels: 2
   email:
     enabled: true
     identity_headers:
@@ -18,8 +24,21 @@ analyzers:
     html_when_no_plain: true
   chat:
     enabled: true
-    schemas:
-    - helios-ds/chat-thread/1.0
+    layouts:
+    - name: helios-ds/chat-thread/1.0
+      match:
+        schema: helios-ds/chat-thread/1.0
+      messages: messages
+      message_id: message_id
+      text: text
+      sender: sender
+      sender_name: sender_name
+      timestamp: timestamp
+      role: null
+      thread_id: thread_id
+      participants: participants
+      participant_id: sender
+      participant_role: role
   text:
     enabled: true
     max_chars: 2000000
@@ -476,6 +495,32 @@ claims:
     strong: 0.95
     medium: 0.85
     weak: 0.7
+evaluation:
+  truth_relationships:
+    REFERS_TO_SALE:
+      type: ReturnOf
+      reversed: false
+    CONTAINS:
+      type: Contains
+      reversed: false
+    RETURNS_ITEM:
+      type: Contains
+      reversed: false
+    OCCURRED_AT:
+      type: LocatedAt
+      reversed: false
+    RETURNED_AT:
+      type: LocatedAt
+      reversed: false
+    PURCHASED_IN:
+      type: PartyTo
+      reversed: true
+    RETURNED_BY:
+      type: PartyTo
+      reversed: false
+    HAS_REASON:
+      type: HasReason
+      reversed: false
 llm:
   prompt_version: llm-1
   instructions: |-
