@@ -37,6 +37,7 @@ from helios_core.index.records import (
     AssetRecord,
     CrawlerSettingsRecord,
     CrawlRunRecord,
+    EntityLinkRecord,
     EntityRecord,
     MentionRecord,
     RelationshipRecord,
@@ -44,6 +45,7 @@ from helios_core.index.records import (
 )
 from helios_core.ontology.mapping import ResolutionConfig
 
+from . import coverage
 from .analyzers import Segment, analyze_asset
 from .claims import extract_claims
 from .connectors import Connector, Fetched, SourceAsset, plan_incremental
@@ -172,6 +174,7 @@ def crawl(
     embed: Embed | None = None,
     strategy: str = "deterministic",
     llm: LlmExtractor | None = None,
+    mapping: dict | None = None,
 ) -> CrawlRunRecord:
     """Crawl one data source with ``connector``. ``full`` re-fetches and re-analyzes
     everything. ``source_snapshot`` (the data source's configuration, no secrets)
@@ -196,6 +199,8 @@ def crawl(
             "full": full,
             "strategy": strategy,
             **({"llm": llm.provenance()} if strategy == "llm" and llm else {}),
+            # Which mapping the crawl resolved against (model, version, hash, database).
+            **({"mapping": mapping} if mapping else {}),
             **({"request": request} if request else {}),
         },
         settings_version=settings.version if settings else None,
@@ -254,6 +259,7 @@ def crawl(
         resolution_counts: dict[str, int] = {}
         entities: list[EntityRecord] = []
         relationships: list[RelationshipRecord] = []
+        links: list[EntityLinkRecord] = []
         readable = [r for r in rows if r.status in ("analyzed", "carried_forward")]
         if strategy == "llm" and llm is not None and gazetteer is not None and resolution is not None:
             arm = run_arm(run, readable, segments, llm, gazetteer, resolution, crawler_settings)
@@ -266,6 +272,7 @@ def crawl(
             index.append(CLAIM_EVIDENCE, arm.evidence)
             resolution_counts = arm.counts
             entities, relationships = arm.resolution.entities, arm.resolution.relationships
+            links = arm.resolution.links
         elif gazetteer is not None and resolution is not None:
             index.append(MENTIONS, mentions)
             resolved = resolve(
@@ -296,8 +303,18 @@ def crawl(
             index.append(CLAIM_EVIDENCE, extracted.evidence)
             resolution_counts = {**resolved.counts, **extracted.counts}
             entities, relationships = resolved.entities, resolved.relationships
+            links = resolved.links
         else:
             index.append(MENTIONS, mentions)
+        # What the crawl could not explain (CG-10): totals on the run, examples as rows.
+        coverage_counts, coverage_rows = coverage.measure(
+            run, segments, mentions, links, crawler_settings
+        )
+        index.append(coverage.COVERAGE, coverage_rows)
+        if "cases" in resolution_counts:
+            resolution_counts["cases_unresolved"] = (
+                resolution_counts["cases"] - resolution_counts.get("cases_resolved", 0)
+            )
         # The index is complete without embeddings, so a failure here is counted
         # on the run instead of failing it.
         embedding_counts: dict[str, int] = {}
@@ -317,6 +334,7 @@ def crawl(
                 "segments": len(segments),
                 "mentions": len(mentions),
                 **resolution_counts,
+                **coverage_counts,
                 **embedding_counts,
             },
         )

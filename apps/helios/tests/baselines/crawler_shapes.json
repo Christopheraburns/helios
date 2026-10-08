@@ -1,20 +1,4 @@
 {
-  "files": {
-    "apps/helios/crawler/access_check.py": {
-      "class:Customer": 2,
-      "identifier:tpcds": 2,
-      "word:tpcds": 2
-    },
-    "apps/helios/crawler/evaluate.py": {
-      "class:Contains": 2,
-      "class:HasReason": 1,
-      "class:LocatedAt": 2,
-      "class:PartyTo": 2,
-      "class:Return": 6,
-      "class:ReturnOf": 1,
-      "class:Sale": 1,
-      "identifier:tpcds": 1
-    }
-  },
-  "total_uses": 22
+  "files": {},
+  "total_uses": 0
 }

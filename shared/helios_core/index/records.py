@@ -231,6 +231,21 @@ class CrawlerSettingsActivationRecord(BaseModel):
     activated_by: str
 
 
+# --- coverage (CG-10) ------------------------------------------------------------------
+
+
+class CoverageRecord(BaseModel):
+    """Something a crawl saw but had no rule for, with how often and an example:
+    the shape of an identifier no pattern matched, a PDF label with no rule."""
+
+    crawl_run_id: str
+    signal: str = Field(description="unmatched_identifier or unknown_label")
+    value: str = Field(description="The shape (letters as A, digits as 9) or the label")
+    count: int
+    example: str = ""
+    ontology_version: str = ""
+
+
 # --- source mappings (CG-6) -----------------------------------------------------------
 
 

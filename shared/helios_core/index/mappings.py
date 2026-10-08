@@ -110,5 +110,19 @@ def active(store: IndexStore) -> dict[str, MappingRecord]:
     return {model: get(store, activation.version) for model, activation in sorted(latest.items())}
 
 
+def choose(store: IndexStore, ontology_version: str) -> MappingRecord | None:
+    """The active mapping a crawl with ``ontology_version`` uses: the one written
+    for that version, else the only active one, else none."""
+    records = list(active(store).values())
+    matching = [
+        r
+        for r in records
+        if r.ontology_version == ontology_version or r.ontology_version.endswith(f"@{ontology_version}")
+    ]
+    if matching:
+        return matching[0]
+    return records[0] if len(records) == 1 else None
+
+
 def active_mappings(store: IndexStore) -> list[SourceMapping]:
     return [mapping_of(record) for record in active(store).values()]

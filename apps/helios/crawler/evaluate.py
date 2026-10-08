@@ -28,7 +28,7 @@ from __future__ import annotations
 import json
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -49,24 +49,43 @@ from helios_core.index.records import (
 HARNESS_VERSION = "0.1.0"
 EVALUATIONS = "helios_index.evaluations"
 TRUTH = "helios_ground_truth"
-SOURCE = "tpcds"
 ANALYZED = {"analyzed", "carried_forward"}
 MIN_CONTAINMENT = 5  # surface forms this long may match by containment
 TOP_DIAGNOSTICS = 25
 
-# Ground-truth predicate -> (ontology relationship class, swap source and target).
-RELATIONSHIP_MAP: dict[str, tuple[str, bool]] = {
+# Ground-truth relationship name -> (ontology relationship class, swap source and
+# target). These two are the core ontology's own; a dataset's other relationship
+# names are mapped in the crawler settings (``evaluation.truth_relationships``).
+CORE_RELATIONSHIPS: dict[str, tuple[str, bool]] = {
     "MENTIONS": ("Mentions", False),
     "DISCUSSES": ("About", False),
-    "REFERS_TO_SALE": ("ReturnOf", False),
-    "CONTAINS": ("Contains", False),
-    "RETURNS_ITEM": ("Contains", False),
-    "OCCURRED_AT": ("LocatedAt", False),
-    "RETURNED_AT": ("LocatedAt", False),
-    "PURCHASED_IN": ("PartyTo", True),
-    "RETURNED_BY": ("PartyTo", False),
-    "HAS_REASON": ("HasReason", False),
 }
+
+
+@dataclass(frozen=True)
+class ScoringProfile:
+    """What the harness must be told about the data it scores: the warehouse
+    database the ground truth's keys are in, how the ground truth names
+    relationships, and which classes a case can be about."""
+
+    source: str
+    relationships: dict[str, tuple[str, bool]] = field(default_factory=dict)
+    case_classes: tuple[str, ...] = ()
+
+    @classmethod
+    def from_settings(cls, source: str, settings: Any) -> ScoringProfile:
+        return cls(
+            source=source,
+            relationships={
+                **CORE_RELATIONSHIPS,
+                **{
+                    name: (rule.type, rule.reversed)
+                    for name, rule in settings.evaluation.truth_relationships.items()
+                },
+            },
+            case_classes=tuple(settings.claims.case_classes),
+        )
+
 
 TRUTH_QUERIES = {
     "entities": "SELECT entity_id, entity_type, source_key, canonical_name",
@@ -191,14 +210,19 @@ def load_index(index: IndexStore, crawl_run_id: str) -> IndexRows:
 # --- keys and locators ---------------------------------------------------------------
 
 
-def truth_key(entity: Row) -> str:
-    """The crawler's external ID for a ground-truth entity: ``tpcds.<table>:<keys>``,
-    or the artifact ID for an Artifact entity."""
+def truth_key(entity: Row, source: str | None = None) -> str:
+    """The crawler's external ID for a ground-truth entity: ``<source>.<table>:<keys>``,
+    or the artifact ID for an Artifact entity. ``score`` works the key out once
+    per entity, for its profile's source, and the entity then carries it."""
+    if "_key" in entity:
+        return str(entity["_key"])
+    if source is None:
+        raise ValueError("truth_key needs the source database of the ground truth's keys")
     source_key = dict(entity.get("source_key") or {})
     if "artifact_id" in source_key:
         return str(source_key["artifact_id"])
     table = source_key.pop("table", None) or entity.get("entity_type", "").lower()
-    return ids.external_id(SOURCE, str(table), source_key)
+    return ids.external_id(source, str(table), source_key)
 
 
 def _rate(numerator: int, denominator: int) -> float | None:
@@ -608,24 +632,25 @@ def score_cases(
     mentions: Sequence[MentionRecord],
     links: Sequence[EntityLinkRecord],
     entities: Sequence[EntityRecord],
+    case_classes: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Pairwise precision/recall of assets grouped into one case: crawler groups =
-    assets sharing an About target (else any SameAs Return entity); truth groups =
-    the hidden scenario of each artifact."""
+    assets sharing an About target (else any SameAs entity of a case class); truth
+    groups = the hidden scenario of each artifact."""
     about: dict[str, set[str]] = defaultdict(set)
     for r in relationships:
         if r.relationship_type == "About" and r.source_kind == "asset":
             about[r.source_id].add(r.target_id)
     grouping = "About"
     if not about:
-        grouping = "SameAs Return"
-        returns = {e.entity_id for e in entities if e.ontology_class == "Return"}
+        grouping = "SameAs a case entity"
+        case_entities = {e.entity_id for e in entities if e.ontology_class in case_classes}
         asset_of = {m.mention_id: m.asset_id for m in mentions}
         for l in links:
-            if l.link_type == "SameAs" and l.entity_id in returns and l.mention_id in asset_of:
+            if l.link_type == "SameAs" and l.entity_id in case_entities and l.mention_id in asset_of:
                 about[asset_of[l.mention_id]].add(l.entity_id)
     if not about:
-        return {"skipped": True, "reason": "no About relationships or SameAs Return links"}
+        return {"skipped": True, "reason": "no About relationships or links to a case entity"}
     truth_groups: dict[str, set[str]] = defaultdict(set)
     for t in truth_mentions:
         if t.get("scenario_id"):
@@ -659,15 +684,18 @@ def score_relationships(
     truth_entities: Sequence[Row],
     relationships: Sequence[RelationshipRecord],
     entities: Sequence[EntityRecord],
+    relationship_map: dict[str, tuple[str, bool]] | None = None,
 ) -> dict[str, Any]:
     """Precision/recall per ontology relationship class over (type, source key,
-    target key) triples; truth predicates mapped with RELATIONSHIP_MAP."""
+    target key) triples; truth predicates mapped with ``relationship_map`` (the
+    profile's; the core ontology's two when not given)."""
+    relationship_map = CORE_RELATIONSHIPS if relationship_map is None else relationship_map
     truth_key_of = {e["entity_id"]: truth_key(e) for e in truth_entities}
     keys_of = _entity_keys(entities)
     truth_triples: dict[tuple[str, str, str], str] = {}  # triple -> truth predicate
     unmapped_truth: Counter = Counter()
     for r in truth_relationships:
-        mapped = RELATIONSHIP_MAP.get(r["predicate"])
+        mapped = relationship_map.get(r["predicate"])
         if mapped is None:
             unmapped_truth[r["predicate"]] += 1
             continue
@@ -841,6 +869,7 @@ def score_questions(
     rows: IndexRows,
     claim_matches: dict[str, list[str]],
     matched_evidence: Iterable[str] = (),
+    source: str = "",
 ) -> dict[str, Any]:
     """Retrieval-level checks per golden question: required entities linked,
     artifacts analyzed, claims found, evidence inside segments (and, once the
@@ -871,7 +900,7 @@ def score_questions(
             structured = q.get("required_structured") or {}
             key = structured.get("key") or {}
             table = structured.get("table") or "item"
-            external = ids.external_id(SOURCE, table, key) if key else None
+            external = ids.external_id(source, table, key) if key else None
             checks["no_links"] = external is not None and external not in linked_keys
             checks["no_mentions"] = external is not None and external not in mentioned_keys
         else:
@@ -935,8 +964,20 @@ def score_questions(
 # --- the whole scorecard --------------------------------------------------------------
 
 
-def score(truth: Truth, rows: IndexRows, run: CrawlRunRecord | None = None) -> dict[str, Any]:
-    """Every metric for one run against one dataset. Deterministic for the same input."""
+def score(
+    truth: Truth,
+    rows: IndexRows,
+    run: CrawlRunRecord | None = None,
+    profile: ScoringProfile | None = None,
+) -> dict[str, Any]:
+    """Every metric for one run against one dataset. Deterministic for the same
+    input. ``profile`` says which database the ground truth's keys are in and how
+    it names relationships (``profile_for`` works it out for a run)."""
+    if profile is None:
+        raise ValueError("score needs a ScoringProfile (see profile_for)")
+    truth = replace(
+        truth, entities=[{**e, "_key": truth_key(e, profile.source)} for e in truth.entities]
+    )
     mention_matches = match_mentions(truth.entity_mentions, rows.mentions)
     mentions = score_mentions(truth.entity_mentions, rows.mentions, rows.assets, mention_matches)
     diagnostics = {"mentions": mentions.pop("diagnostics")}
@@ -968,16 +1009,18 @@ def score(truth: Truth, rows: IndexRows, run: CrawlRunRecord | None = None) -> d
             mention_matches,
         ),
         "cases": score_cases(
-            truth.entity_mentions, rows.relationships, rows.mentions, rows.links, rows.entities
+            truth.entity_mentions, rows.relationships, rows.mentions, rows.links, rows.entities,
+            profile.case_classes,
         ),
         "relationships": score_relationships(
-            truth.relationships, truth.entities, rows.relationships, rows.entities
+            truth.relationships, truth.entities, rows.relationships, rows.entities,
+            profile.relationships,
         ),
         "claims": score_claims(truth.claims, truth.entities, rows.claims, rows.entities, claim_matches),
         "evidence": evidence,
         "questions": score_questions(
             truth.expected_queries, truth.entities, truth.evidence, rows, claim_matches,
-            matched_evidence,
+            matched_evidence, profile.source,
         ),
         "diagnostics": diagnostics,
     }
@@ -1032,6 +1075,25 @@ def _llm(run: CrawlRunRecord | None) -> dict[str, Any] | None:
     }
 
 
+def profile_for(index: IndexStore, run: CrawlRunRecord) -> ScoringProfile:
+    """The scoring profile of a run: the database of the mapping it used (recorded
+    on runs since CG-9; the active mapping's for older ones) and the evaluation
+    and case settings of its settings version."""
+    from helios_core.crawler.settings import EMPTY_SETTINGS
+    from helios_core.index import crawler_settings, mappings
+    from helios_core.ontology.mapping import resolution_config
+
+    settings = EMPTY_SETTINGS
+    if run.settings_version is not None:
+        settings = crawler_settings.settings_of(crawler_settings.get(index, run.settings_version))
+    source = str(((run.settings or {}).get("mapping") or {}).get("database") or "")
+    if not source:
+        chosen = mappings.choose(index, run.ontology_version)
+        if chosen is not None:
+            source = resolution_config(mappings.mapping_of(chosen)).database
+    return ScoringProfile.from_settings(source, settings)
+
+
 def _now() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -1052,6 +1114,7 @@ def evaluate(
     evaluator: str,
     evaluator_mode: str,
     clock: Callable[[], str] = _now,
+    profile: ScoringProfile | None = None,
 ) -> EvaluationRecord:
     """Score ``crawl_run_id`` (read from ``index``) against ``dataset_id`` (read from
     helios_ground_truth through ``truth_cursor_factory``, called once) and append
@@ -1072,7 +1135,7 @@ def evaluate(
     try:
         truth = load_truth(truth_cursor_factory, dataset_id)
         rows = load_index(index, crawl_run_id)
-        metrics = score(truth, rows, run)
+        metrics = score(truth, rows, run, profile or profile_for(index, run))
         record = EvaluationRecord(
             **base,
             evaluated_at=clock(),

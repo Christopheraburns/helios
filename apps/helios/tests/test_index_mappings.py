@@ -204,7 +204,7 @@ def test_activation_rechecks_against_the_current_ontology(client, index):
 def test_the_crawler_reads_the_active_stored_mapping_not_the_file(index, capsys, monkeypatch):
     from apps.helios.crawler import __main__ as crawler_main
 
-    assert crawler_main.resolution_for("0.2.0", index) is None
+    assert crawler_main.resolution_for("0.2.0", index) == (None, None)
     assert "no mapping is active" in capsys.readouterr().out
 
     stored.save(index, SHIPPED, ALICE)
@@ -214,7 +214,10 @@ def test_the_crawler_reads_the_active_stored_mapping_not_the_file(index, capsys,
     monkeypatch.setattr(  # reading the repository file at crawl time would be a regression
         "helios_core.ontology.mapping.load_mapping", lambda path: pytest.fail("read the mapping file")
     )
-    config = crawler_main.resolution_for("0.2.0", index)
+    config, used = crawler_main.resolution_for("0.2.0", index)
+    # What the run records about the mapping it resolved against.
+    assert (used["model"], used["version"], used["database"]) == ("tpcds.ossie.yaml", 2, "tpcds")
+    assert used["content_hash"] == stored.get(index, 2).content_hash
     assert config.thresholds.alias_min_score == 0.97
     assert config == resolution_config(stricter)
     assert "mapping: tpcds.ossie.yaml version 2" in capsys.readouterr().out
@@ -262,3 +265,82 @@ def test_a_bare_on_key_is_rejected_because_yaml_reads_it_as_true():
 
     with pytest.raises(ValidationError):
         RelatedRecord.model_validate(document)
+
+
+# --- what the mapping editor asks for (CG-8) ----------------------------------------------
+
+
+def test_the_editor_can_list_a_models_tables_and_columns(client):
+    listed = client.get("/api/v1/ontology/mappings/models").json()
+    assert "tpcds.ossie.yaml" in listed["models"] and "Customer" in listed["classes"]
+
+    model = client.get("/api/v1/ontology/mappings/models/tpcds.ossie.yaml").json()
+    assert model["database"] == "tpcds"
+    customer = next(t for t in model["tables"] if t["name"] == "customer")
+    key = next(c for c in customer["columns"] if c["name"] == "c_customer_sk")
+    assert key["role"] == "identifier" and key["datatype"] == "Integer" and key["label"]
+    assert any(r["from"] == "store_returns" and r["to"] == "customer" for r in model["relationships"])
+
+    assert client.get("/api/v1/ontology/mappings/models/nothing.yaml").status_code == 404
+
+
+@pytest.fixture
+def clinic_client(client, monkeypatch):
+    """The API with the clinic's warehouse behind it (second_domain.py)."""
+    import second_domain as clinic
+    from apps.helios.console import ontology
+
+    warehouse = clinic.build_warehouse()
+    warehouse.execute("INSERT INTO clinic.clinicians VALUES (7, 'C-07b', 'Amara Lee-Hart')")  # a repeated key
+    asked = []
+    monkeypatch.setattr(ontology, "_active_classes", lambda: {*clinic.CLASSES, "AttendedBy", "SeenBy"})
+    monkeypatch.setattr(ontology, "warehouse_connection", lambda principal: asked.append(principal) or warehouse.cursor())
+    monkeypatch.setattr(ontology, "_actor", lambda request: ALICE)
+    client.asked = asked
+    client.mapping = clinic.MAPPING.model_dump(mode="json", by_alias=True)
+    return client
+
+
+def test_probing_a_class_reports_its_key_and_shows_its_identifiers(clinic_client):
+    probe = lambda name: clinic_client.post(  # noqa: E731
+        "/api/v1/ontology/mappings:probe", json={"mapping": clinic_client.mapping, "entity": name}
+    )
+    patients = probe("Patient").json()
+    assert patients["table"] == "clinic.patients" and patients["rows"] == 3 and patients["key_is_unique"]
+    assert patients["columns"] == ["patient_id", "mrn", "email", "first_name", "last_name"]
+    assert patients["sample"][0] == [10, "MRN-000010", "dana.kim@example.org", "Dana", "Kim"]
+    assert patients["findings"] == []
+
+    clinicians = probe("Clinician").json()
+    assert (clinicians["rows"], clinicians["distinct_keys"], clinicians["key_is_unique"]) == (3, 2, False)
+    assert "not unique" in clinicians["findings"][0]
+
+    assert probe("Pharmacy").status_code == 404
+    assert clinic_client.asked and all(p.endswith("alice") for p in clinic_client.asked)  # as the user
+
+
+def test_probing_an_anchor_runs_the_query_a_crawl_would(clinic_client):
+    body = clinic_client.post(
+        "/api/v1/ontology/mappings:probe", json={"mapping": clinic_client.mapping, "anchor": "Visit"}
+    ).json()
+    assert body["kind"] == "anchor" and len(body["sample"]) == 3 and body["findings"] == []
+    assert "FROM clinic.visits" in body["sql"][0]
+
+
+def test_a_probe_reports_what_the_warehouse_says_and_never_runs_an_invalid_mapping(clinic_client):
+    wrong_column = copy.deepcopy(clinic_client.mapping)
+    wrong_column["entities"][0]["identifiers"]["secondary"] = ["nhs_number"]
+    refused = clinic_client.post("/api/v1/ontology/mappings:probe", json={"mapping": wrong_column, "entity": "Patient"})
+    assert refused.status_code == 422
+    assert refused.json()["detail"]["message"] == "the warehouse refused the query"
+    assert "nhs_number" in refused.json()["detail"]["problems"][0]
+
+    asked = len(clinic_client.asked)
+    injected = copy.deepcopy(clinic_client.mapping)
+    injected["entities"][0]["identifiers"]["primary"] = ["patient_id; DROP TABLE clinic.patients"]
+    refused = clinic_client.post("/api/v1/ontology/mappings:probe", json={"mapping": injected, "entity": "Patient"})
+    assert refused.status_code == 422 and refused.json()["detail"]["message"] == "invalid mapping"
+    assert len(clinic_client.asked) == asked  # the warehouse was not reached
+
+    both = clinic_client.post("/api/v1/ontology/mappings:probe", json={"mapping": clinic_client.mapping})
+    assert both.status_code == 400

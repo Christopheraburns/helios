@@ -104,6 +104,30 @@ describe("SettingsForm", () => {
     expect(seen.current.claims.predicates).toEqual({});
   });
 
+  it("describes a chat export format by where its fields are", () => {
+    const seen = { current: SETTINGS };
+    render(<Harness seen={seen} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Documents" }));
+    expect(screen.getByText(/chat files will not be read/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add a chat format" }));
+    fireEvent.change(screen.getByLabelText("Chat format 1 List of messages"), { target: { value: "data.events" } });
+    fireEvent.change(screen.getByLabelText("Chat format 1 Message: sender’s name"), { target: { value: "" } });
+    const match = screen.getByLabelText("Add to chat format 1 match");
+    fireEvent.change(match, { target: { value: "export.kind=support-desk" } });
+    fireEvent.keyDown(match, { key: "Enter" });
+    const layout = seen.current.analyzers.chat.layouts[0];
+    expect(layout.messages).toBe("data.events");
+    expect(layout.sender_name).toBeNull(); // cleared: not recorded
+    expect(layout.match).toEqual({ "export.kind": "support-desk" });
+    expect(layout.participant_id).toBe("sender");
+
+    const values = screen.getByLabelText("Add to pdf value patterns");
+    fireEvent.change(values, { target: { value: "^[A-Z]{2}-\\d+$" } });
+    fireEvent.keyDown(values, { key: "Enter" });
+    expect(seen.current.analyzers.pdf.value_patterns).toEqual(["^[A-Z]{2}-\\d+$"]);
+  });
+
   it("links cases by ticking identifier patterns", () => {
     const seen = { current: SETTINGS };
     render(<Harness seen={seen} />);

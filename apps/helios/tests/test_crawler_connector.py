@@ -7,7 +7,7 @@ import duckdb
 import pytest
 from apps.helios.crawler.connectors import HeliosDsConnector, object_reader
 from apps.helios.crawler.crawl import crawl
-from crawler_samples import RETAIL_SETTINGS, chat_bytes, email_bytes, pdf_bytes
+from crawler_samples import RETAIL_SETTINGS, chat_bytes, email_bytes, found, pdf_bytes
 from helios_core.index import runs
 from helios_core.index.store import duckdb_index_store
 
@@ -112,7 +112,7 @@ def test_second_crawl_carries_assets_and_segments_forward(corpus, index):
 
     seen.clear()
     second = _crawl(index, connector, analyze=_seen(seen))
-    assert second.counts == {
+    assert found(second.counts) == {
         "listed": 3,
         "carried_forward": 3,
         "segments": first.counts["segments"],

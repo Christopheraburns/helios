@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from apps.helios.crawler.crawl import crawl
-from crawler_samples import RETAIL_SETTINGS
+from crawler_samples import RETAIL_SETTINGS, found
 from helios_core.crawler.settings import (
     EMPTY_SETTINGS,
     SCHEMA_VERSION,
@@ -46,11 +46,17 @@ def test_the_preset_is_exactly_the_rules_that_used_to_be_built_in():
             assert {k: v for k, v in now["cases"].items() if k != "max_hub_documents"} == before
         elif section == "claims":  # the cue words; the kinds of claim were in code
             assert {k: now["claims"][k] for k in before} == before
+        elif section == "analyzers":  # each type's options; layouts and table rules were in code
+            for kind, options in before.items():
+                kept = {k: v for k, v in options.items() if k != "schemas"}
+                assert {k: now["analyzers"][kind][k] for k in kept} == kept, kind
+            assert [l["name"] for l in now["analyzers"]["chat"]["layouts"]] == before["chat"]["schemas"]
         else:
             assert now[section] == before, section
     moved_from_code = set(now) - set(SCHEMA_1)
     assert moved_from_code == {
         "class_cues", "cue_window", "header_rules", "dictionary", "date_formats", "about", "resolution",
+        "evaluation",
     }
     assert preset_document("retail-returns")["schema_version"] == "2"
     with pytest.raises(KeyError):
@@ -115,7 +121,12 @@ def _crawl(tmp_path, settings, gazetteer=None, warehouse=None):  # noqa: F811
 def test_an_empty_configuration_crawls_and_finds_only_segments(tmp_path):
     run = _crawl(tmp_path, EMPTY_SETTINGS)
     assert run.status == "SUCCEEDED"
-    assert run.counts == {"listed": 7, "analyzed": 7, "segments": 13, "mentions": 0}
+    # Emails and PDFs need no rules to be read. A chat export does: the engine knows no
+    # chat format, so the three chat files are recorded as not readable.
+    assert found(run.counts) == {"listed": 7, "analyzed": 4, "type_mismatch": 3, "segments": 8, "mentions": 0}
+    with_layout = EMPTY_SETTINGS.model_copy(update={"analyzers": RETAIL_SETTINGS.analyzers})
+    read_all = _crawl(tmp_path / "chats", with_layout)
+    assert found(read_all.counts) == {"listed": 7, "analyzed": 7, "segments": 13, "mentions": 0}
 
 
 def test_empty_settings_with_a_mapping_find_only_what_the_dictionary_names(
@@ -123,11 +134,11 @@ def test_empty_settings_with_a_mapping_find_only_what_the_dictionary_names(
 ):
     empty = _crawl(tmp_path / "a", EMPTY_SETTINGS, gazetteer, warehouse)
     full = _crawl(tmp_path / "b", RETAIL_SETTINGS, gazetteer, warehouse)
-    assert empty.status == "SUCCEEDED" and empty.counts["segments"] == 13
+    assert empty.status == "SUCCEEDED" and empty.counts["segments"] == 8  # no chat layout: chats unread
     assert 0 < empty.counts["mentions"] < full.counts["mentions"]  # names, no patterns or labels
     assert empty.counts["claims"] == 0 and full.counts["claims"] > 0
     # Nothing links documents into cases without identifier patterns: one case per document.
-    assert empty.counts["cases"] == 7 and full.counts["cases"] == 4
+    assert empty.counts["cases"] == 4 and full.counts["cases"] == 4  # four readable documents, unlinked
 
 
 @pytest.fixture

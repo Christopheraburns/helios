@@ -102,3 +102,19 @@ def chat_bytes(schema: str = "helios-ds/chat-thread/1.0") -> bytes:
 from helios_core.crawler.settings import load_preset  # noqa: E402
 
 RETAIL_SETTINGS = load_preset("retail-returns")
+
+
+COVERAGE_COUNTS = {
+    "segments_without_mentions",
+    "assets_without_links",
+    "unmatched_identifiers",
+    "unknown_labels",
+    "cases_unresolved",
+}
+
+
+def found(counts: dict) -> dict:
+    """A run's counts without the coverage signals (CG-10): what it listed and found."""
+    return {
+        k: v for k, v in counts.items() if k not in COVERAGE_COUNTS and not k.startswith("claims_dropped_")
+    }

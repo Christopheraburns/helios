@@ -923,3 +923,55 @@
   text-decoration: line-through;
   background: #e5e7eb;
 }
+
+.crawler-coverage {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.crawler-coverage__examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 0;
+  margin: 3px 0 0;
+  list-style: none;
+}
+
+.crawler-coverage__examples code {
+  overflow-wrap: anywhere;
+}
+
+/* --- mapping editor (CG-8) ---------------------------------------------------- */
+
+.settings-rule h4 {
+  margin: 14px 0 4px;
+  font-size: 13px;
+}
+
+.mapping-warning {
+  margin: 6px 0;
+  padding: 6px 10px;
+  font-size: 13px;
+  background: #fff7db;
+  border-left: 4px solid #b7791f;
+  border-radius: 4px;
+}
+
+.mapping-sample {
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.mapping-sample td,
+.mapping-sample th {
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.mapping-sql {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}

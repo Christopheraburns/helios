@@ -79,7 +79,7 @@ export function setAt(root: Settings, path: (string | number)[], value: unknown)
   return copy;
 }
 
-function without<T>(items: T[], index: number): T[] {
+export function without<T>(items: T[], index: number): T[] {
   return items.filter((_item, at) => at !== index);
 }
 
@@ -145,7 +145,7 @@ export function Chips({
   );
 }
 
-function Field({ label, help, children }: { label: string; help?: string; children: ReactNode }) {
+export function Field({ label, help, children }: { label: string; help?: string; children: ReactNode }) {
   return (
     <label className="settings-field">
       <span className="settings-field__label">{label}</span>
@@ -155,7 +155,7 @@ function Field({ label, help, children }: { label: string; help?: string; childr
   );
 }
 
-function NumberInput({
+export function NumberInput({
   label,
   help,
   value,
@@ -180,7 +180,7 @@ function NumberInput({
   );
 }
 
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (next: boolean) => void }) {
+export function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (next: boolean) => void }) {
   return (
     <label className="settings-toggle">
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /> {label}
@@ -188,7 +188,7 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   );
 }
 
-function ClassInput({
+export function ClassInput({
   label,
   value,
   classes,
@@ -218,7 +218,7 @@ function ClassInput({
   );
 }
 
-function Section({ title, help, children }: { title: string; help?: string; children: ReactNode }) {
+export function Section({ title, help, children }: { title: string; help?: string; children: ReactNode }) {
   return (
     <section className="settings-section">
       <h3>{title}</h3>
@@ -359,6 +359,7 @@ export default function SettingsForm({ settings, vocabulary, onChange, onTry }: 
   const classes = vocabulary?.classes ?? [];
   const set = (path: (string | number)[], value: unknown) => onChange(setAt(settings, path, value));
   const analyzers = settings.analyzers ?? {};
+  const layouts: Settings[] = analyzers.chat?.layouts ?? [];
   const patterns: Settings[] = settings.patterns ?? [];
   const labels: Settings[] = settings.pdf_labels ?? [];
   const headerRules: Settings[] = settings.header_rules ?? [];
@@ -404,9 +405,100 @@ export default function SettingsForm({ settings, vocabulary, onChange, onTry }: 
             <Field label="Email headers that identify people" help="Usually From; add To or Cc if those people matter">
               <Chips label="email identity headers" values={analyzers.email?.identity_headers ?? []} onChange={(v) => set(["analyzers", "email", "identity_headers"], v)} />
             </Field>
-            <Field label="Chat export formats read">
-              <Chips label="chat formats" mono values={analyzers.chat?.schemas ?? []} onChange={(v) => set(["analyzers", "chat", "schemas"], v)} />
+          </Section>
+
+          <Section
+            title="Chat export formats"
+            help="Where each format keeps its messages and who sent them. A path is a field name, or several joined by dots: data.messages, user.id. A chat file must fit one of these to be read."
+          >
+            {layouts.length === 0 && <p className="muted">No chat format yet: chat files will not be read.</p>}
+            {layouts.map((layout, index) => {
+              const at = (key: string) => ["analyzers", "chat", "layouts", index, key];
+              const text = (key: string, label: string, help?: string) => (
+                <Field label={label} help={help}>
+                  <input
+                    className="mono"
+                    aria-label={`Chat format ${index + 1} ${label}`}
+                    value={layout[key] ?? ""}
+                    placeholder="(not recorded)"
+                    onChange={(event) => set(at(key), event.target.value.trim() || null)}
+                  />
+                </Field>
+              );
+              return (
+                <div className="settings-rule" key={index}>
+                  <div className="settings-rule__row">
+                    <Field label="Name">
+                      <input aria-label={`Chat format ${index + 1} name`} value={layout.name ?? ""} onChange={(event) => set(at("name"), event.target.value)} />
+                    </Field>
+                    <Field label="A file is this format when" help="field=value, for example schema=support/1.0">
+                      <Chips
+                        label={`chat format ${index + 1} match`}
+                        mono
+                        values={Object.entries(layout.match ?? {}).map(([key, value]) => `${key}=${String(value)}`)}
+                        placeholder="field=value"
+                        onChange={(pairs) =>
+                          set(
+                            at("match"),
+                            Object.fromEntries(
+                              pairs
+                                .map((pair) => pair.split("="))
+                                .filter((parts) => parts.length >= 2 && parts[0].trim())
+                                .map(([key, ...rest]) => [key.trim(), rest.join("=").trim()]),
+                            ),
+                          )
+                        }
+                      />
+                    </Field>
+                  </div>
+                  <div className="settings-rule__row">
+                    {text("messages", "List of messages")}
+                    {text("thread_id", "Thread ID")}
+                    {text("participants", "List of people")}
+                  </div>
+                  <div className="settings-rule__row">
+                    {text("message_id", "Message: ID")}
+                    {text("text", "Message: text")}
+                    {text("sender", "Message: sender")}
+                    {text("sender_name", "Message: sender’s name")}
+                    {text("timestamp", "Message: time")}
+                    {text("role", "Message: role", "If each message carries it")}
+                  </div>
+                  <div className="settings-rule__row">
+                    {text("participant_id", "Person: ID", "What a message’s sender refers to")}
+                    {text("participant_role", "Person: role")}
+                  </div>
+                  <div className="settings-rule__actions">
+                    <button type="button" className="crawler-button" aria-label={`Remove chat format ${layout.name || index + 1}`} onClick={() => set(["analyzers", "chat", "layouts"], without(layouts, index))}>
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            <button
+              type="button"
+              className="crawler-button"
+              onClick={() =>
+                set(["analyzers", "chat", "layouts"], [
+                  ...layouts,
+                  { name: `format ${layouts.length + 1}`, match: {}, messages: "messages", message_id: "message_id", text: "text", sender: "sender", sender_name: "sender_name", timestamp: "timestamp", role: null, thread_id: "thread_id", participants: "participants", participant_id: "sender", participant_role: "role" },
+                ])
+              }
+            >
+              Add a chat format
+            </button>
+          </Section>
+
+          <Section title="Tables in PDFs" help="A table is a run of short heading lines followed by one value per heading.">
+            <Field label="A line is a value, not a heading, when it matches" help="Regular expressions: a digit, a currency sign, an ID format">
+              <Chips label="pdf value patterns" mono values={analyzers.pdf?.value_patterns ?? []} onChange={(v) => set(["analyzers", "pdf", "value_patterns"], v)} />
             </Field>
+            <div className="settings-grid">
+              <NumberInput label="Most words in a heading" value={analyzers.pdf?.header_max_words} onChange={(v) => set(["analyzers", "pdf", "header_max_words"], v)} />
+              <NumberInput label="Fewest columns in a table" value={analyzers.pdf?.table_min_columns} onChange={(v) => set(["analyzers", "pdf", "table_min_columns"], v)} />
+              <NumberInput label="Headings that must be known labels" value={analyzers.pdf?.table_min_labels} onChange={(v) => set(["analyzers", "pdf", "table_min_labels"], v)} />
+            </div>
           </Section>
         </>
       )}

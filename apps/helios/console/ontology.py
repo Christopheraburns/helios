@@ -15,7 +15,12 @@ from helios_core.index import IndexStore, impala_index_store
 from helios_core.index import ontology_versions as lakehouse_versions
 from helios_core.ontology.graph import OntologyGraph
 from helios_core.index import mappings as stored_mappings
-from helios_core.ontology.mapping import SourceMapping, load_mappings, mapping_problems
+from helios_core.ontology.mapping import (
+    SourceMapping,
+    load_mappings,
+    mapping_problems,
+    resolution_config,
+)
 from helios_core.ontology.parser import ParseResult, parse
 from pydantic import BaseModel
 
@@ -447,6 +452,82 @@ def list_shipped_mappings() -> list[dict[str, Any]]:
     return [m.model_dump(mode="json", by_alias=True) for m in shipped_mappings()]
 
 
+def _published_models() -> list[str]:
+    folder = REPO_ROOT / "models" / "published"
+    return sorted(p.name for p in folder.glob("*.yaml")) if folder.is_dir() else []
+
+
+def _field_role(field: dict[str, Any]) -> str:
+    """The role Helios DS gave a column when it profiled the table ("identifier",
+    "attribute", ...), or "" when the model does not say."""
+    for extension in field.get("custom_extensions") or []:
+        try:
+            role = json.loads(extension.get("data") or "{}").get("role")
+        except (TypeError, ValueError):
+            continue
+        if role:
+            return str(role)
+    return ""
+
+
+@ontology_router.get("/mappings/models")
+def list_mapping_models() -> dict[str, Any]:
+    """The published semantic models a mapping can be written against, and the
+    class names of the active ontology (None when no version is active)."""
+    classes = _active_classes()
+    return {"models": _published_models(), "classes": sorted(classes) if classes is not None else None}
+
+
+@ontology_router.get("/mappings/models/{model}")
+def get_mapping_model(model: str) -> dict[str, Any]:
+    """The tables, columns and table relationships of one published semantic
+    model: what a mapping editor offers to pick from."""
+    document = semantic_model(model)
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"no published semantic model named {model!r}")
+    tables = []
+    databases: dict[str, int] = {}
+    for dataset in document.get("datasets", []):
+        source = str(dataset.get("source") or "")
+        if "." in source:
+            database = source.rsplit(".", 1)[0]
+            databases[database] = databases.get(database, 0) + 1
+        tables.append(
+            {
+                "name": dataset["name"],
+                "source": source,
+                "label": dataset.get("label") or "",
+                "description": dataset.get("description") or "",
+                "columns": [
+                    {
+                        "name": f["name"],
+                        "label": f.get("label") or "",
+                        "datatype": f.get("datatype") or "",
+                        "role": _field_role(f),
+                    }
+                    for f in dataset.get("fields", [])
+                ],
+            }
+        )
+    return {
+        "model": Path(model).name,
+        "name": document.get("name") or "",
+        # Where most of its tables live: the default for a new mapping's database.
+        "database": max(databases, key=lambda d: databases[d]) if databases else "",
+        "tables": tables,
+        "relationships": [
+            {
+                "name": r.get("name") or "",
+                "from": r.get("from"),
+                "to": r.get("to"),
+                "from_columns": r.get("from_columns") or [],
+                "to_columns": r.get("to_columns") or [],
+            }
+            for r in document.get("relationships", [])
+        ],
+    }
+
+
 @ontology_router.get("/mappings/{version}")
 def get_mapping(version: int) -> dict[str, Any]:
     index = _mapping_index()
@@ -466,6 +547,133 @@ def validate_mapping(body: MappingRequest) -> dict[str, Any]:
     ontology. Nothing is written."""
     _, problems, skipped = _checked(body.mapping)
     return {"valid": not problems, "problems": problems, "not_checked": skipped}
+
+
+class MappingProbeRequest(BaseModel):
+    mapping: dict[str, Any]
+    # Probe one mapped class's table, or one anchor's query; exactly one of the two.
+    entity: str | None = None
+    anchor: str | None = None
+
+
+PROBE_SAMPLE = 5
+
+
+def warehouse_connection(principal_id: str) -> Any:
+    """A warehouse connection as the signed-in principal (the probe must not
+    show a user rows they could not query themselves)."""
+    from .crawler import _truth_connection
+
+    return _truth_connection(principal_id)[0]
+
+
+def _cell(value: Any) -> Any:
+    return value if value is None or isinstance(value, (int, float, str, bool)) else str(value)
+
+
+def _probe_entity(cursor: Any, mapping: SourceMapping, class_name: str) -> dict[str, Any]:
+    entity = next((e for e in mapping.entities if e.class_name == class_name), None)
+    if entity is None:
+        raise HTTPException(status_code=404, detail=f"class {class_name} has no entity mapping")
+    ids = entity.identifiers
+    table = f"{resolution_config(mapping).database}.{entity.ossie_element}"
+    key = ", ".join(ids.primary)
+    # Distinct keys are counted through a grouped subquery: it works for a
+    # key of several columns, which COUNT(DISTINCT a, b) does not everywhere.
+    count_sql = f"SELECT COUNT(*) FROM {table}"
+    distinct_sql = f"SELECT COUNT(*) FROM (SELECT {key} FROM {table} GROUP BY {key}) k"
+    cursor.execute(count_sql)
+    rows = int(cursor.fetchone()[0])
+    cursor.execute(distinct_sql)
+    distinct = int(cursor.fetchone()[0])
+    shown = list(dict.fromkeys([*ids.primary, *ids.secondary, *ids.display, *ids.aliases]))
+    sample_sql = f"SELECT {', '.join(shown)} FROM {table} LIMIT {PROBE_SAMPLE}"
+    cursor.execute(sample_sql)
+    sample = [[_cell(v) for v in row] for row in cursor.fetchall()]
+    findings = []
+    if rows == 0:
+        findings.append("The table is empty: nothing can be resolved to this class.")
+    elif distinct < rows:
+        findings.append(
+            f"The key is not unique: {rows:,} rows but {distinct:,} different keys. "
+            "Two records would be treated as the same one."
+        )
+    if not ids.secondary and not ids.display and not ids.aliases:
+        findings.append("No identifier or name column is mapped: documents can only name this class by its key.")
+    return {
+        "kind": "entity",
+        "class": class_name,
+        "table": table,
+        "rows": rows,
+        "distinct_keys": distinct,
+        "key_is_unique": rows == distinct,
+        "columns": shown,
+        "sample": sample,
+        "findings": findings,
+        "sql": [count_sql, distinct_sql, sample_sql],
+    }
+
+
+def _probe_anchor(cursor: Any, mapping: SourceMapping, class_name: str) -> dict[str, Any]:
+    from apps.helios.crawler import anchors
+
+    config = resolution_config(mapping)
+    plan = next((p for p in anchors.plans(config) if p.anchor.identifiers.class_name == class_name), None)
+    if plan is None:
+        raise HTTPException(status_code=404, detail=f"class {class_name} is not an anchor in this mapping")
+    # The query a crawl would run, without a document's values to narrow it:
+    # it proves the tables join and the columns exist.
+    sql, params = anchors.build_query(plan, anchors.Constraints())
+    cursor.execute(sql, params)
+    columns = [d[0] for d in cursor.description or []]
+    rows = [[_cell(v) for v in row] for row in cursor.fetchall()][:PROBE_SAMPLE]
+    findings = [] if rows else ["The query returned no rows: no case could be tied to a record."]
+    return {
+        "kind": "anchor",
+        "class": class_name,
+        "columns": columns,
+        "sample": rows,
+        "findings": findings,
+        "sql": [sql],
+    }
+
+
+@ontology_router.post("/mappings:probe")
+def probe_mapping(body: MappingProbeRequest, request: Request) -> dict[str, Any]:
+    """Ask the warehouse about a mapping being edited, as the signed-in user:
+    for a class, whether its key is unique and what its identifiers look like;
+    for an anchor, whether its query runs. Nothing is written."""
+    from helios_core.engines.impala import ImpalaProxyDelegationError
+    from helios_core.ontology.mapping import _PLAIN
+
+    if (body.entity is None) == (body.anchor is None):
+        raise HTTPException(status_code=400, detail="name one class to probe: entity or anchor")
+    mapping, problems, _ = _checked(body.mapping)
+    if mapping is None or problems:
+        # Names go into SQL as written, so only a mapping that validates is probed.
+        raise HTTPException(status_code=422, detail={"message": "invalid mapping", "problems": problems})
+    if not _PLAIN.match(resolution_config(mapping).database) or not all(
+        _PLAIN.match(e.ossie_element) for e in mapping.entities
+    ):
+        raise HTTPException(status_code=422, detail={"message": "invalid mapping", "problems": ["the database and table names must be plain names"]})
+    actor = _actor(request)
+    if actor == "unknown":
+        raise HTTPException(status_code=401, detail="authenticated principal is required")
+    try:
+        connection = warehouse_connection(actor)
+    except ImpalaProxyDelegationError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    try:
+        cursor = connection.cursor()
+        if body.entity is not None:
+            return _probe_entity(cursor, mapping, body.entity)
+        return _probe_anchor(cursor, mapping, body.anchor or "")
+    except HTTPException:
+        raise
+    except Exception as exc:  # the warehouse's own words are the useful part
+        raise HTTPException(status_code=422, detail={"message": "the warehouse refused the query", "problems": [str(exc).splitlines()[0][:500]]}) from exc
+    finally:
+        connection.close()
 
 
 @ontology_router.post("/mappings", status_code=201)

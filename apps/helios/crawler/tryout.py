@@ -86,7 +86,7 @@ def _label(settings: CrawlerSettings, rule: dict[str, Any], passage: Passage) ->
     wanted = str(rule.get("label") or "").lower()
     starts = _line_starts(passage.text)
     matches = []
-    for pair in _pdf_fields(passage.text, labels).get("labels", []):
+    for pair in _pdf_fields(passage.text, labels, settings.analyzers.pdf).get("labels", []):
         if wanted and pair["label"].lower() != wanted:
             continue
         at = _locate(passage.text, starts, int(pair["line"]), str(pair["value"]))

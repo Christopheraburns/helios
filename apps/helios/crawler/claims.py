@@ -395,6 +395,8 @@ class Extraction:
     evidence: list[ClaimEvidenceRecord]
     unanchored: int = 0
     units: int = 0
+    # Cue hits that made no claim, by why (CG-10).
+    dropped: dict[str, int] = field(default_factory=dict)
 
     @property
     def counts(self) -> dict[str, int]:
@@ -402,6 +404,7 @@ class Extraction:
             "claims": len(self.claims),
             "claim_evidence": len(self.evidence),
             "claims_unanchored": self.unanchored,
+            **{f"claims_dropped_{why}": count for why, count in sorted(self.dropped.items())},
         }
 
     def __iter__(self):
@@ -448,6 +451,7 @@ def extract_claims(
     context = Context(clusters, segments, mentions, links, entities, relationships, rules)
     analyzed = {a.asset_id for a in assets}
     pending: dict[str, _Pending] = {}
+    dropped = {"undefined": 0, "speaker": 0, "weak_cue": 0, "no_subject": 0, "no_object": 0}
     unanchored = 0
     units = 0
     for segment in sorted(segments, key=lambda s: (s.asset_id, s.ordinal)):
@@ -462,24 +466,28 @@ def extract_claims(
             for predicate in sorted(hits):
                 shape = rules.predicates.get(predicate)
                 if shape is None:
-                    continue  # cue words for a kind of claim the settings do not define
+                    dropped["undefined"] += 1  # cue words for a kind of claim not defined
+                    continue
                 hit = hits[predicate]
                 if voice in shape.blocked_speakers or (
                     shape.unknown_speaker_needs_strong_cue
                     and voice == "unknown"
                     and hit.cue.strength != "strong"
                 ):
-                    continue  # not this speaker's claim to make
+                    dropped["speaker"] += 1  # not this speaker's claim to make
+                    continue
                 if (
                     hit.cue.strength == "weak"
                     and context.in_unit(unit, shape.subject.class_name) is None
                 ):
                     unanchored += 1  # a general word needs the unit to name its subject
+                    dropped["weak_cue"] += 1
                     continue
                 subject = context.entity_for(unit, shape.subject)
                 obj = context.entity_for(unit, shape.object)
                 if subject is None or obj is None:
                     unanchored += 1
+                    dropped["no_subject" if subject is None else "no_object"] += 1
                     continue
                 claim_id = ids.claim_id(predicate, subject, obj)
                 claim = pending.setdefault(claim_id, _Pending(predicate, subject, obj))
@@ -517,7 +525,7 @@ def extract_claims(
                     ontology_version=ontology_version,
                 )
             )
-    return Extraction(claims, evidence, unanchored, units)
+    return Extraction(claims, evidence, unanchored, units, dropped)
 
 
 __all__ = [
