@@ -31,16 +31,9 @@ import threading
 from collections.abc import Callable, Iterable, Sequence
 from typing import Any
 
-from . import runs
-from .records import (
-    ClaimEvidenceRecord,
-    ClaimRecord,
-    CrawlRunRecord,
-    EntityRecord,
-    RelationshipRecord,
-    SegmentRecord,
-)
-from .store import IndexStore
+from helios_core.index import runs
+from helios_core.index.records import ClaimEvidenceRecord, ClaimRecord, CrawlRunRecord, EntityRecord, RelationshipRecord, SegmentRecord
+from helios_core.index.store import IndexStore
 
 MODEL_NAME = os.environ.get("HELIOS_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 MAX_ENTITIES_PER_ASSET = 12

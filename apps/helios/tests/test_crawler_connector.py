@@ -134,7 +134,7 @@ def test_second_crawl_carries_assets_and_segments_forward(corpus, index):
 
 
 def test_changed_settings_reanalyze_unchanged_assets(corpus, index):
-    from helios_core.crawler.settings import CrawlerSettings
+    from helios_core._pending.crawler.settings import CrawlerSettings
 
     connector, _ = corpus
     _crawl(index, connector)

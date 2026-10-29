@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-from helios_core.crawler.settings import CrawlerSettings, LabelRule, PatternRule
+from helios_core._pending.crawler.settings import CrawlerSettings, LabelRule, PatternRule
 from helios_core.index import ids
 from helios_core.index.records import CrawlRunRecord, MentionRecord, SegmentRecord
 from helios_core.ontology.mapping import ResolutionConfig

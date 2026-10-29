@@ -24,7 +24,7 @@ from crawler_samples import RETAIL_SETTINGS
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 # The crawler's code: the package itself and the shared settings model.
-SCANNED = ("apps/helios/crawler", "packages/helios-core/src/helios_core/crawler")
+SCANNED = ("apps/helios/crawler", "packages/helios-core/src/helios_core/_pending/crawler")
 
 # Ordinary words that are also retail class names or vocabulary. They are a
 # shape only where they are unmistakably the retail thing: a string constant

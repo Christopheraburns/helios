@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from helios_core.crawler.settings import CrawlerSettings
+from helios_core._pending.crawler.settings import CrawlerSettings
 from helios_core.index import ids
 from helios_core.index.records import (
     AssetRecord,

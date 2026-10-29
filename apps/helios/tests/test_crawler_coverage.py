@@ -4,7 +4,7 @@ import pytest
 from apps.helios.crawler import coverage
 from apps.helios.crawler.crawl import crawl
 from crawler_samples import RETAIL_SETTINGS
-from helios_core.crawler.settings import EMPTY_SETTINGS, CrawlerSettings
+from helios_core._pending.crawler.settings import EMPTY_SETTINGS, CrawlerSettings
 from helios_core.index.records import MentionRecord, SegmentRecord
 from helios_core.index.store import duckdb_index_store
 from test_crawler_llm import _connector

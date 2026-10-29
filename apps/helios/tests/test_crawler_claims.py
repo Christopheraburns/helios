@@ -465,7 +465,7 @@ def test_crawl_writes_claims_and_evidence(warehouse, gazetteer, tmp_path):
 
 
 def test_default_cue_lexicons_name_only_retail_predicates():
-    from helios_core.crawler.settings import ontology_problems
+    from helios_core._pending.crawler.settings import ontology_problems
 
     classes = {"Customer", "Item", "Brand", "Store", "Reason", "Sale", "Return"}
     classes |= {"Contains", "HasReason", "PartyTo"}  # relationship types the claim rules follow

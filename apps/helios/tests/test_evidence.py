@@ -2,7 +2,8 @@
 
 import pytest
 from apps.helios.crawler.crawl import crawl
-from helios_core.index import evidence, runs
+from helios_core.index import runs
+from helios_core._pending import evidence
 from helios_core.index.records import (
     ClaimEvidenceRecord,
     ClaimRecord,

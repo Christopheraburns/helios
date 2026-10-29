@@ -20,7 +20,7 @@ import re
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 
-from helios_core.crawler.settings import CrawlerSettings
+from helios_core._pending.crawler.settings import CrawlerSettings
 from helios_core.index.records import (
     CoverageRecord,
     CrawlRunRecord,

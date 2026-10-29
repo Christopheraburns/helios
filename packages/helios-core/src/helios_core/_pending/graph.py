@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
 from helios_core import authz
-from helios_core import review as review_store
+from helios_core._pending import review as review_store
 from helios_core.artifacts import ArtifactStore
 from helios_core.domain import Model
 

@@ -12,7 +12,7 @@ from apps.helios.console.assistant import (
 )
 from apps.helios.console.journeys import JOURNEYS, evaluate
 from apps.helios.console.main import app
-from helios_core.graph import ArtifactGraphRepository
+from helios_core._pending.graph import ArtifactGraphRepository
 from helios_core.llm import ToolCall, ToolTurn
 
 PROVIDER_ENV = (

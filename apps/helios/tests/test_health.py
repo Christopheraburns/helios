@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from helios_core import health
+from helios_core._pending import health
 
 
 class Metadata:

@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.helios.console.main import app
-from helios_core.graph import ArtifactGraphRepository, _proposal_detail
+from helios_core._pending.graph import ArtifactGraphRepository, _proposal_detail
 
 
 class FakeAtlas:

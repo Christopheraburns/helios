@@ -9,7 +9,7 @@ from apps.helios.crawler import llm_arm
 from apps.helios.crawler.crawl import crawl, previous_run
 from apps.helios.crawler.llm_arm import LlmExtractor, claim_shapes, load_vocabulary, run_arm
 from crawler_samples import RETAIL_SETTINGS
-from helios_core.index import evidence
+from helios_core._pending import evidence
 from helios_core.index.store import duckdb_index_store
 from helios_core.llm.client import LLMError
 from test_crawler_resolution import (  # noqa: F401 - fixtures

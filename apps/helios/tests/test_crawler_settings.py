@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helios_core.crawler.settings import CrawlerSettings, ontology_problems
-from helios_core.index import crawler_settings as versions
+from helios_core._pending.crawler.settings import CrawlerSettings, ontology_problems
+from helios_core._pending import crawler_settings as versions
 from helios_core.index import ontology_versions, runs
 from helios_core.index.store import duckdb_index_store
 from helios_core.ontology.mapping import load_mappings

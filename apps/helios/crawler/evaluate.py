@@ -1079,8 +1079,9 @@ def profile_for(index: IndexStore, run: CrawlRunRecord) -> ScoringProfile:
     """The scoring profile of a run: the database of the mapping it used (recorded
     on runs since CG-9; the active mapping's for older ones) and the evaluation
     and case settings of its settings version."""
-    from helios_core.crawler.settings import EMPTY_SETTINGS
-    from helios_core.index import crawler_settings, mappings
+    from helios_core._pending.crawler.settings import EMPTY_SETTINGS
+    from helios_core.index import mappings
+    from helios_core._pending import crawler_settings
     from helios_core.ontology.mapping import resolution_config
 
     settings = EMPTY_SETTINGS

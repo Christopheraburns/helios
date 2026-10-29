@@ -47,7 +47,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from helios_core.crawler.settings import CaseEdge, ClaimRole, Claims, CrawlerSettings
+from helios_core._pending.crawler.settings import CaseEdge, ClaimRole, Claims, CrawlerSettings
 from helios_core.index import ids
 from helios_core.index.records import (
     AssetRecord,

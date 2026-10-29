@@ -3,7 +3,8 @@
 import pytest
 from apps.helios.crawler import tryout
 from crawler_samples import RETAIL_SETTINGS
-from helios_core.index import browse, runs
+from helios_core.index import runs
+from helios_core._pending import browse
 from helios_core.index.records import SegmentRecord
 from helios_core.index.store import duckdb_index_store
 

@@ -6,9 +6,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.helios.console.main import app
-from helios_core import health as system_health
+from helios_core._pending import health as system_health
 from helios_core import runs as runstore
-from helios_core.graph import ArtifactGraphRepository
+from helios_core._pending.graph import ArtifactGraphRepository
 from helios_core.metadata import SemanticRevision, TraceRun, TraceSpan
 
 

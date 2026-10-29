@@ -12,7 +12,7 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from helios_core.crawler.sources import TableRowsScope
+from helios_core._pending.crawler.sources import TableRowsScope
 
 from .base import Connector, SourceAsset
 

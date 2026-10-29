@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from helios_core.crawler.sources import validate_scope
+from helios_core._pending.crawler.sources import validate_scope
 
 from .base import ConnectionTest, Connector, Fetched, SourceAsset, plan_incremental
 from .helios_ds import HeliosDsConnector, object_reader

@@ -31,7 +31,7 @@ from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
-from helios_core.crawler.settings import CrawlerSettings
+from helios_core._pending.crawler.settings import CrawlerSettings
 from helios_core.index import IndexStore, ids, runs
 from helios_core.index.records import (
     AssetRecord,

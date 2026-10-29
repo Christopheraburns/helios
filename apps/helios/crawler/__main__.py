@@ -77,7 +77,7 @@ def embed_hook(development_index: bool, strategy: str = "deterministic") -> Any:
     if missing:
         print(f"embeddings: off ({', '.join(missing)} not installed)")
         return None
-    from helios_core.index.evidence import embed_run, location
+    from helios_core._pending.evidence import embed_run, location
 
     print(f"embeddings: on ({location()})")
     return embed_run
@@ -159,10 +159,11 @@ def main(argv: list[str] | None = None) -> int:
         return baseline_main(args)
 
     from helios_core.config import impala_config
-    from helios_core.crawler.sources import is_crawlable
+    from helios_core._pending.crawler.sources import is_crawlable
     from helios_core.domain import DataSource
     from helios_core.engines.impala import ImpalaEngine
-    from helios_core.index import crawler_settings, impala_index_store, ontology_versions
+    from helios_core.index import impala_index_store, ontology_versions
+    from helios_core._pending import crawler_settings
     from helios_core.index.store import duckdb_index_store
 
     from .connector import s3_client_from_connection

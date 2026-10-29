@@ -3,7 +3,7 @@
 import pytest
 from apps.helios.crawler.analyzers import analyze_asset, detect
 from crawler_samples import RETAIL_SETTINGS, REPORT_LINES, chat_bytes, email_bytes, pdf_bytes
-from helios_core.crawler.settings import CrawlerSettings
+from helios_core._pending.crawler.settings import CrawlerSettings
 
 
 def test_detect_uses_the_bytes_not_the_declared_type():
@@ -175,7 +175,7 @@ def test_settings_saved_with_format_names_still_read_those_formats():
 
 def test_what_counts_as_a_table_heading_is_a_setting():
     from apps.helios.crawler.analyzers import _pdf_fields
-    from helios_core.crawler.settings import PdfAnalyzer
+    from helios_core._pending.crawler.settings import PdfAnalyzer
 
     labels = {rule.label.lower(): rule for rule in RETAIL_SETTINGS.pdf_labels}
     page = "\n".join(["Item ID", "Description", "Brand", "Units", "AAAAAAAAFCOBAAAA", "side tables", "scholarnameless", "64"])

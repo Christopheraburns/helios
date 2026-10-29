@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from apps.helios.crawler.crawl import crawl
 from crawler_samples import RETAIL_SETTINGS, found
-from helios_core.crawler.settings import (
+from helios_core._pending.crawler.settings import (
     EMPTY_SETTINGS,
     SCHEMA_VERSION,
     CrawlerSettings,
@@ -14,7 +14,7 @@ from helios_core.crawler.settings import (
     preset_document,
     presets,
 )
-from helios_core.index import crawler_settings as versions
+from helios_core._pending import crawler_settings as versions
 from helios_core.index.store import duckdb_index_store
 from test_crawler_llm import _connector
 from test_crawler_resolution import CONFIG, gazetteer, warehouse  # noqa: F401 - fixtures
@@ -225,7 +225,7 @@ def test_ordinary_words_and_thresholds_shape_the_dictionary(warehouse):  # noqa:
     from apps.helios.crawler.gazetteer import Gazetteer
     from test_crawler_resolution import CLASSES
 
-    from helios_core.crawler.settings import Dictionary
+    from helios_core._pending.crawler.settings import Dictionary
 
     tuned = Gazetteer.build(warehouse.cursor, CONFIG, CLASSES, RETAIL_SETTINGS.dictionary)
     assert tuned.forms["Store", "ese"].low_specificity  # three letters: too short to be a name alone
@@ -357,7 +357,7 @@ def test_speaker_rules_and_role_finding_are_generic():
     from types import SimpleNamespace
 
     from apps.helios.crawler.claims import Context
-    from helios_core.crawler.settings import Claims
+    from helios_core._pending.crawler.settings import Claims
 
     rules = Claims.model_validate(
         {

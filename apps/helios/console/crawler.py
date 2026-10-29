@@ -44,10 +44,10 @@ from typing import Any, Literal
 from apps.helios.crawler import evaluate as harness
 from fastapi import APIRouter, HTTPException, Request
 from helios_core.config import impala_config
-from helios_core.crawler import settings as settings_model
-from helios_core.crawler.settings import EMPTY_SETTINGS, CrawlerSettings, ontology_problems
+from helios_core._pending.crawler import settings as settings_model
+from helios_core._pending.crawler.settings import EMPTY_SETTINGS, CrawlerSettings, ontology_problems
 from helios_core.engines.impala import ImpalaEngine, ImpalaProxyDelegationError, _same_user
-from helios_core.index import crawler_settings as versions
+from helios_core._pending import crawler_settings as versions
 from helios_core.index import ontology_versions, runs
 from helios_core.index.records import AssetRecord
 from pydantic import BaseModel, Field, ValidationError
@@ -151,7 +151,7 @@ def try_settings_rule(body: TryRequest) -> dict[str, Any]:
     the passages of the latest crawl (of ``source``, or of every source). The
     crawler's own code is used, nothing is written and the warehouse is not asked."""
     from apps.helios.crawler import tryout
-    from helios_core.index import browse
+    from helios_core._pending import browse
 
     try:
         settings = CrawlerSettings.model_validate(body.settings)
@@ -365,7 +365,7 @@ def _run_view(run: Any, evaluation: Any = None) -> dict[str, Any]:
 def list_entities(classes: str, q: str = "", limit: int = 50) -> dict[str, Any]:
     """Entities the crawler found for the given ontology classes (comma-separated),
     from each source's latest successful crawl; most-documented first."""
-    from helios_core.index import browse
+    from helios_core._pending import browse
 
     wanted = [c.strip() for c in classes.split(",") if c.strip()]
     if not wanted:
@@ -376,7 +376,7 @@ def list_entities(classes: str, q: str = "", limit: int = 50) -> dict[str, Any]:
 @crawler_router.get("/entities/{entity_id}")
 def get_entity(entity_id: str, run: str) -> dict[str, Any]:
     """One entity: its documents, the passages that mention it, related entities and claims."""
-    from helios_core.index import browse
+    from helios_core._pending import browse
 
     found = browse.entity_documents(_store(), run, entity_id)
     if found is None:
@@ -677,7 +677,7 @@ def _workbench():
 
 
 def _crawlable_source(request: Request, source_id: str):
-    from helios_core.crawler.sources import is_crawlable
+    from helios_core._pending.crawler.sources import is_crawlable
 
     source = request.app.state.metadata_repository.data_source(source_id)
     if source is None:
@@ -763,7 +763,7 @@ def list_launches(request: Request, limit: int = 10) -> dict[str, Any]:
 def list_targets(request: Request) -> list[dict[str, Any]]:
     """What a crawl can be started on: crawlable data sources the caller's
     organizations have registered, and Helios-DS datasets crawled before."""
-    from helios_core.crawler.sources import is_crawlable
+    from helios_core._pending.crawler.sources import is_crawlable
 
     principal = _principal(request)
     repository = request.app.state.metadata_repository

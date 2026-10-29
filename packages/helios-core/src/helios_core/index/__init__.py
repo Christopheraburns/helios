@@ -5,7 +5,7 @@ Workbench (DuckDB in tests). Memgraph and the on-disk ontology cache are
 projections rebuilt from here. See docs/crawler-burndown.md (CR-0c, CR-1).
 """
 
-from . import crawler_settings, ids, runs
+from . import ids, runs
 from .records import (
     AssetRecord,
     ClaimEvidenceRecord,
@@ -40,7 +40,6 @@ __all__ = [
     "OntologyVersionRecord",
     "RelationshipRecord",
     "SegmentRecord",
-    "crawler_settings",
     "ddl_statements",
     "ids",
     "impala_index_store",

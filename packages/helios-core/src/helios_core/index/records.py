@@ -212,7 +212,7 @@ class ClaimEvidenceRecord(BaseModel):
 
 
 class CrawlerSettingsRecord(BaseModel):
-    """An immutable version of the crawler settings (helios_core.crawler.settings)."""
+    """An immutable version of the crawler settings (helios_core._pending.crawler.settings)."""
 
     version: int = Field(description="1, 2, 3, ... in order of saving")
     content_hash: str

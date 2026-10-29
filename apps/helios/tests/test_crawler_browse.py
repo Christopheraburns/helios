@@ -1,7 +1,8 @@
 """Browsing from an ontology class to entities, documents and passages (CR-9)."""
 
 import pytest
-from helios_core.index import browse, evidence, runs
+from helios_core.index import runs
+from helios_core._pending import browse, evidence
 from helios_core.index.records import (
     AssetRecord,
     EntityLinkRecord,

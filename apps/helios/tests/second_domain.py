@@ -20,7 +20,7 @@ from typing import Any
 
 import duckdb
 from crawler_samples import pdf_bytes
-from helios_core.crawler.settings import CrawlerSettings
+from helios_core._pending.crawler.settings import CrawlerSettings
 from helios_core.ontology.mapping import SourceMapping, resolution_config
 
 DATABASE = "clinic"

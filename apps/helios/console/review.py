@@ -16,8 +16,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from helios_core import __version__
-from helios_core import publication
-from helios_core import review as rv
+from helios_core._pending import publication
+from helios_core._pending import review as rv
 from helios_core import runs as runstore
 from helios_core.artifacts import ArtifactStore, model_id_for_run
 from helios_core.ossie import preflight

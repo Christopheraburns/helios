@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.helios.console.main import app
-from helios_core.graph import ArtifactGraphRepository
+from helios_core._pending.graph import ArtifactGraphRepository
 
 
 @pytest.fixture

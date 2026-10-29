@@ -15,7 +15,7 @@ from apps.helios.crawler.connectors import (
 )
 from apps.helios.crawler.crawl import crawl
 from crawler_samples import RETAIL_SETTINGS, email_bytes, pdf_bytes
-from helios_core.crawler.sources import catalog, validate_scope
+from helios_core._pending.crawler.sources import catalog, validate_scope
 from helios_core.index.store import duckdb_index_store
 
 
@@ -221,7 +221,7 @@ def test_table_rows_crawl_end_to_end(warehouse):
 def test_text_files_are_one_segment_and_respect_the_size_setting():
     doc = RETAIL_SETTINGS.model_dump(mode="json")
     doc["analyzers"]["text"]["max_chars"] = 10
-    from helios_core.crawler.settings import CrawlerSettings
+    from helios_core._pending.crawler.settings import CrawlerSettings
 
     result = analyze_asset(
         "text/plain", b"Hello Midway store\r\nsecond line", CrawlerSettings.model_validate(doc)

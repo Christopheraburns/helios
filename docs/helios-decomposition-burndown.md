@@ -83,7 +83,7 @@ app runnable and the test suite green.
 
 ## Phase 1 — helios-core becomes a kernel
 
-- [ ] **1.1** Create `helios_core/_pending/`; move out the feature code core reaches into: `publication.py`, `review.py`, `graph.py` (→ model, Phase 5), `health.py` (→ serve, Phase 6), and the unstructured pieces `crawler/`, `index/crawler_settings.py`, `index/evidence.py` (→ crawl, Phase 10). — 0.5d
+- [x] **1.1** Create `helios_core/_pending/`; move out the feature code core reaches into: `publication.py`, `review.py`, `graph.py` (→ model, Phase 5), `health.py` (→ serve, Phase 6), and the unstructured pieces `crawler/`, `index/crawler_settings.py`, `index/evidence.py` (→ crawl, Phase 10). — 0.5d *(also moved `index/browse.py`, which only the crawler uses; imports inside moved modules are now absolute; `index` no longer re-exports `crawler_settings`; result: no core module outside `_pending` imports it)*
 - [ ] **1.2** import-linter config: core imports no sibling package; nothing imports `apps.*`; no new edges into `_pending`. — 0.25d
 - [ ] **1.3** `helios_core/settings.py` (pydantic-settings), resolved in a fixed order: arguments in code → `HELIOS_*` environment variables → config file (`helios.toml` or `[tool.helios]` in `pyproject.toml`) → defaults. Local defaults use `platformdirs` user directories; no `CDSW_*` reads and no `/home/cdsw` (the Workbench mapping is 3.4). — 0.75d
 - [ ] **1.4** Inject `Settings` (or its slice) into constructors, replacing ambient env reads in `runs.py` (incl. import-time read), `artifacts.py`, `metadata/sqlite.py`, `llm/client.py`, `audit.py`. Same behaviour, no store redesign (that is Phase 4). — 1.5d

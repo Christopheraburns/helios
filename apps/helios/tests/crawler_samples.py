@@ -99,7 +99,7 @@ def chat_bytes(schema: str = "helios-ds/chat-thread/1.0") -> bytes:
 
 # The rules the sample documents were written for: the shipped "retail returns"
 # preset (until settings schema 2, the crawler's built-in defaults).
-from helios_core.crawler.settings import load_preset  # noqa: E402
+from helios_core._pending.crawler.settings import load_preset  # noqa: E402
 
 RETAIL_SETTINGS = load_preset("retail-returns")
 

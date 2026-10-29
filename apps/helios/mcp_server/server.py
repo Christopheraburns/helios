@@ -1044,7 +1044,7 @@ _mcp_app = server.streamable_http_app(transport_security=_security, stateless_ht
 
 # Set by the Application launcher (app.py), so importing this module elsewhere loads nothing.
 if os.environ.get("HELIOS_MCP_WARM_EMBEDDINGS") == "1":
-    from helios_core.index import evidence as _evidence
+    from helios_core._pending import evidence as _evidence
 
     _evidence.warm_up()
 
@@ -1108,7 +1108,7 @@ def search_evidence(query: str, limit: int = 8, model: str | None = None) -> dic
     _, _, denied = _authorized_tool(authz.Action.QUERY_EXECUTE, model)
     if denied:
         return denied
-    from helios_core.index import evidence
+    from helios_core._pending import evidence
 
     try:
         found = evidence.search(query, min(max(limit, 1), 20))
@@ -1134,7 +1134,8 @@ def entity_claims(entity: str, predicate: str | None = None, model: str | None =
     _, _, denied = _authorized_tool(authz.Action.QUERY_EXECUTE, model)
     if denied:
         return denied
-    from helios_core.index import evidence, impala_index_store
+    from helios_core.index import impala_index_store
+    from helios_core._pending import evidence
 
     index = impala_index_store()
     if index is None:

@@ -30,7 +30,7 @@ from typing import Any
 
 from functools import lru_cache
 
-from helios_core.crawler.settings import Dictionary
+from helios_core._pending.crawler.settings import Dictionary
 from helios_core.index import ids
 from helios_core.ontology.mapping import ClassIdentifiers, ResolutionConfig, template_columns
 

@@ -11,9 +11,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from ..crawler.settings import EMPTY_SETTINGS, CrawlerSettings
-from .records import CrawlerSettingsActivationRecord, CrawlerSettingsRecord
-from .store import IndexStore
+from helios_core._pending.crawler.settings import EMPTY_SETTINGS, CrawlerSettings
+from helios_core.index.records import CrawlerSettingsActivationRecord, CrawlerSettingsRecord
+from helios_core.index.store import IndexStore
 
 VERSIONS = "helios_index.crawler_settings"
 ACTIVATIONS = "helios_index.crawler_settings_activations"

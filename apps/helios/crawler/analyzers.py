@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
 
-from helios_core.crawler.settings import ChatLayout, CrawlerSettings, PdfAnalyzer
+from helios_core._pending.crawler.settings import ChatLayout, CrawlerSettings, PdfAnalyzer
 
 # Declared MIME type -> analyzer.
 ANALYZER_FOR_MIME = {

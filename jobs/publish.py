@@ -17,7 +17,7 @@ ROOT = os.environ.get("HELIOS_ROOT") or os.path.join(os.environ.get("CDSW_PROJEC
 sys.path.insert(0, os.path.join(ROOT, "jobs"))
 from _common import audit_job, latest_run_id, read_json, run_path  # noqa: E402
 
-from helios_core import review as rv  # noqa: E402
+from helios_core._pending import review as rv  # noqa: E402
 from helios_core.ossie import build, dump_yaml, validate  # noqa: E402
 from helios_core.artifacts import ArtifactStore, model_id_for_run  # noqa: E402
 

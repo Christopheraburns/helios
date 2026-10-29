@@ -1,6 +1,6 @@
 """Relationship candidates the proposer rejected are not work waiting for the reviewer."""
 
-from helios_core import review as rv
+from helios_core._pending import review as rv
 
 PROPOSAL = {
     "datasets": [{"table": "s.a", "fields": [{"column": "id"}]}, {"table": "s.b", "fields": []}],
