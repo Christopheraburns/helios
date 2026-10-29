@@ -9,10 +9,32 @@ from io import BytesIO
 from typing import Any
 
 import requests
+from pydantic import BaseModel, ConfigDict, SecretStr
 
 from ..config import AtlasConfig
+from ..settings import CatalogSettings
 
 COLUMN_TYPES = ("hive_column", "iceberg_column")
+
+
+class AtlasOptions(BaseModel):
+    """Options of a ``catalog = "atlas"`` catalog."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    base_url: str  # e.g. https://<datalake-host>/<datalake-name>/cdp-proxy-api/atlas/api/atlas/v2
+    user: str
+    password: SecretStr
+    verify_ssl: bool = True
+
+
+def atlas_config_for(catalog: CatalogSettings) -> AtlasConfig:
+    if catalog.catalog != "atlas":
+        raise ValueError(f"not an Atlas catalog: catalog is {catalog.catalog!r}")
+    options = AtlasOptions.model_validate(catalog.options)
+    return AtlasConfig(
+        options.base_url.rstrip("/"), options.user, options.password.get_secret_value(), options.verify_ssl
+    )
 
 
 class AtlasError(RuntimeError):

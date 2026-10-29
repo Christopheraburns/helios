@@ -49,7 +49,7 @@ app runnable and the test suite green.
 | Phase | Tasks | Est. (days) | Gate |
 |---|---|---|---|
 | 0 Hygiene + build | 11 | 4.25 | Clean-clone `uv run pytest` green; token purged |
-| 1 Core kernel | 11 | 5.85 | Standalone install; no env read / file I/O on import; CONTRACTS.md |
+| 1 Core kernel | 11 | 6.1 | Standalone install; no env read / file I/O on import; CONTRACTS.md |
 | 2 Identity out of the libraries | 7 | 4.5 | No users/grants in core; engines run as the host's caller |
 | 3 Plugins, engines, helios-cloudera | 7 | 7 | Base install has no Cloudera dependency; Impala works via the plugin |
 | 4 Pluggable storage | 7 | 5.75 | Same tests pass on SQLite + local files and on Postgres + object storage |
@@ -61,7 +61,7 @@ app runnable and the test suite green.
 | 8 Host app re-wired | 8 | 5 | `apps/helios/` deleted; console is a host of the libraries |
 | 9 General-use release | 9 | 5.75 | Quickstart runs verbatim in CI; on PyPI; Workbench CI job green |
 | 10 helios-crawl (deferred) | 10 | 8.5 | Evidence tools appear only when helios-crawl is installed |
-| **Total** | **101** | **~64** | |
+| **Total** | **101** | **~64.5** | |
 
 ---
 
@@ -85,9 +85,9 @@ app runnable and the test suite green.
 
 - [x] **1.1** Create `helios_core/_pending/`; move out the feature code core reaches into: `publication.py`, `review.py`, `graph.py` (→ model, Phase 5), `health.py` (→ serve, Phase 6), and the unstructured pieces `crawler/`, `index/crawler_settings.py`, `index/evidence.py` (→ crawl, Phase 10). — 0.5d *(also moved `index/browse.py`, which only the crawler uses; imports inside moved modules are now absolute; `index` no longer re-exports `crawler_settings`; result: no core module outside `_pending` imports it)*
 - [x] **1.2** import-linter config: core imports no sibling package; nothing imports `apps.*`; no new edges into `_pending`. — 0.25d *(in the root `pyproject.toml`, run by `uv run lint-imports` in CI; stricter than planned: no core module outside `_pending` may import it at all; both contracts verified to fail on planted imports)*
-- [ ] **1.3** `helios_core/settings.py` (pydantic-settings), resolved in a fixed order: arguments in code → `HELIOS_*` environment variables → config file (`helios.toml` or `[tool.helios]` in `pyproject.toml`) → defaults. Local defaults use `platformdirs` user directories; no `CDSW_*` reads and no `/home/cdsw` (the Workbench mapping is 3.4). — 0.75d
+- [x] **1.3** `helios_core/settings.py` (pydantic-settings), resolved in a fixed order: arguments in code → `HELIOS_*` environment variables → config file (`helios.toml` or `[tool.helios]` in `pyproject.toml`) → defaults. Local defaults use `platformdirs` user directories; no `CDSW_*` reads and no `/home/cdsw` (the Workbench mapping is 3.4). — 0.75d *(done with one deviation: a `ConventionalEnvironment` source sits between `HELIOS_*` and the config file and reads the names Helios has always used, including the Workbench data root, so wiring Settings in at 1.4 changes nothing on Workbench; its Cloudera part moves out in 3.4. `HELIOS_CONFIG` or `Settings.from_file()` select a config file explicitly. Warehouses and catalogs are generic named entries, not Impala/Atlas sections: `[connections.<name>]` with `engine = "…"` (keyed by `DataSource.connection_ref`) and `[catalogs.<name>]` with `catalog = "…"`; core validates only the plugin name, each plugin validates its own options (`ImpalaOptions` / `impala_config_for`, `AtlasOptions` / `atlas_config_for`); `IMPALA_*` and `ATLAS_*` become the `default` connection and catalog. Parity tests compare Settings with the code it replaces in five environments)*
 - [ ] **1.4** Inject `Settings` (or its slice) into constructors, replacing ambient env reads in `runs.py` (incl. import-time read), `artifacts.py`, `metadata/sqlite.py`, `llm/client.py`, `audit.py`. Same behaviour, no store redesign (that is Phase 4). — 1.5d
-- [ ] **1.5** Replace `config.atlas_config()` / `impala_config()` at their ~12 callers; resolve `helios-ds-generation/impala.py` usage (Q5). — 0.5d
+- [ ] **1.5** Replace `config.atlas_config()` / `impala_config()` at their ~12 callers with `impala_config_for(settings.connections[…])` / `atlas_config_for(settings.catalogs[…])`; resolve each `DataSource.connection_ref` to a named connection, falling back to `default` for existing records; delete `config.py`; resolve `helios-ds-generation/impala.py` usage (Q5). — 0.75d
 - [ ] **1.6** Replace `Path(__file__).parents[n]` in `crawler/__main__.py`, `console/assistant.py`, `console/ontology.py`, `console/evaluation.py` with `Settings` paths; regression test for the `BUILTIN_SUITE` path. — 0.25d *(off-by-one already fixed in Phase 0)*
 - [ ] **1.7** CI check that `os.environ` / `os.getenv` appear only in `helios_core/settings.py` within packages. — 0.1d
 - [ ] **1.8** Write `CONTRACTS.md` (SemanticModel, OntologyGraph, SourceMapping, `*Record`, IndexStore, ArtifactStore, Engine, registry protocol, Caller, Settings, LLMClient) as the semantic-versioning boundary, with a deprecation policy; ship `py.typed`; underscore or move everything else under `_internal/`. — 0.5d
@@ -113,9 +113,9 @@ app runnable and the test suite green.
 
 - [ ] **3.1** `helios_core.plugins`: load entry points by group, report what is installed, fail clearly when a configured plugin is missing. Groups: `helios.engines`, `helios.catalogs`, `helios.stores`, `helios.tools`, `helios.commands`. — 0.75d
 - [ ] **3.2** Dependency layout: the base install is the compiler, semantic model, DuckDB and SQLite; everything else is an extra (`[cloudera]`, `[postgres]`, `[s3]`, `[azure]`, `[gcs]`, `[llm]`, later `[unstructured]`). CI test that `import helios_core` and the quickstart path work with no optional package installed. — 0.75d
-- [ ] **3.3** Scaffold `packages/helios-cloudera`; move the Impala engine and `impala_diagnose.py`, the Atlas catalog, and Cloudera AI Inference defaults into it, registered as entry points. impyla, thrift and SASL leave core's dependencies. — 1.5d
-- [ ] **3.4** Workbench settings profile in helios-cloudera: maps `CDSW_PROJECT_DIR`, `WORKLOAD_USER` / `WORKLOAD_PASSWORD`, `IMPALA_*` and `ATLAS_*` onto `Settings`, so existing deployments keep their variables. — 0.5d
-- [ ] **3.5** DuckDB engine as a core plugin; new `SqlAlchemyEngine` plugin for any SQLAlchemy dialect (Postgres, Snowflake, BigQuery, Trino, Databricks, MySQL), with catalog introspection through the SQLAlchemy inspector. — 1.5d
+- [ ] **3.3** Scaffold `packages/helios-cloudera`; move the Impala engine (with `ImpalaOptions`) and `impala_diagnose.py`, the Atlas catalog (with `AtlasOptions`), and Cloudera AI Inference defaults into it, registered as entry points under the names used in `engine = …` / `catalog = …`. impyla, thrift and SASL leave core's dependencies. — 1.5d
+- [ ] **3.4** Workbench settings profile in helios-cloudera: move the Cloudera part of `helios_core.settings.ConventionalEnvironment` (`CDSW_*` data root, `WORKLOAD_USER` / `WORKLOAD_PASSWORD`, `IMPALA_*`, `ATLAS_*`, `INFERENCE_*`) into it, so existing deployments keep their variables; core keeps only `HELIOS_*` and the ecosystem names (`ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`). — 0.5d
+- [ ] **3.5** DuckDB engine as a core plugin (`engine = "duckdb"`, `path`); new `SqlAlchemyEngine` plugin (`engine = "sqlalchemy"`, `url`) for any SQLAlchemy dialect (Postgres, Snowflake, BigQuery, Trino, Databricks, MySQL), with catalog introspection through the SQLAlchemy inspector. — 1.5d
 - [ ] **3.6** Compiler dialect hooks: replace `_impala_fixups` (`compiler/compiler.py:404`) with per-dialect hooks owned by engine plugins; remove the `"hive"` default so the engine supplies its dialect; golden tests compiling the sample requests for duckdb, postgres, snowflake, bigquery, trino and impala. — 1d
 - [ ] **3.7** Default catalog plugin: harvest tables and columns through `information_schema` / the SQLAlchemy inspector; glossary and lineage become optional catalog capabilities (Atlas provides both). — 1d
 

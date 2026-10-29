@@ -4,10 +4,44 @@ from __future__ import annotations
 import logging
 from urllib.parse import parse_qsl, urlencode
 
-from ..config import ImpalaConfig
+from pydantic import BaseModel, ConfigDict, SecretStr
+
+from ..config import ImpalaConfig, _parse_impala_host
+from ..settings import ConnectionSettings
 from .base import Engine, QueryResult
 
 LOGGER = logging.getLogger(__name__)
+
+
+class ImpalaOptions(BaseModel):
+    """Options of an ``engine = "impala"`` connection. ``host`` may be a full CDW
+    JDBC URL; its port and httpPath apply unless ``port`` / ``http_path`` are set."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    host: str
+    user: str
+    password: SecretStr
+    port: int | None = None
+    database: str = "default"
+    http_path: str | None = None
+    proxy_delegation: bool = False
+
+
+def impala_config_for(connection: ConnectionSettings) -> ImpalaConfig:
+    if connection.engine != "impala":
+        raise ValueError(f"not an Impala connection: engine is {connection.engine!r}")
+    options = ImpalaOptions.model_validate(connection.options)
+    host, port, http_path = _parse_impala_host(options.host)
+    return ImpalaConfig(
+        host,
+        options.port or port or 443,
+        options.user,
+        options.password.get_secret_value(),
+        options.database,
+        options.http_path or http_path or "cliservice",
+        options.proxy_delegation,
+    )
 
 
 class ImpalaAuthenticationError(PermissionError):

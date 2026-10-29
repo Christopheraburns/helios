@@ -51,7 +51,7 @@ helios-core = { workspace = true }
 packages = ["apps"]
 
 [tool.pytest.ini_options]
-testpaths = ["apps/helios/tests"]
+testpaths = ["packages/helios-core/tests", "apps/helios/tests"]
 
 [tool.importlinter]
 root_packages = ["helios_core"]
