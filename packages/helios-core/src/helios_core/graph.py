@@ -780,19 +780,19 @@ def _proposal_detail(
                     "primary_key": dataset.get("primary_key"),
                 }
             )
-        for field in dataset.get("fields", []):
-            if element_id == f"attribute:{table}:{field['column']}":
+        for field_spec in dataset.get("fields", []):
+            if element_id == f"attribute:{table}:{field_spec['column']}":
                 return _compact(
                     {
-                        "description": field.get("description"),
-                        "physical_identity": f"{table}.{field['column']}",
+                        "description": field_spec.get("description"),
+                        "physical_identity": f"{table}.{field_spec['column']}",
                         "dataset_physical_identity": table,
-                        "physical_name": field["column"],
-                        "physical_type": field.get("type"),
-                        "semantic_role": field.get("role"),
-                        "business_terms": field.get("glossary_terms"),
-                        "proposed_term": field.get("proposed_term"),
-                        "refers_to": field.get("refers_to"),
+                        "physical_name": field_spec["column"],
+                        "physical_type": field_spec.get("type"),
+                        "semantic_role": field_spec.get("role"),
+                        "business_terms": field_spec.get("glossary_terms"),
+                        "proposed_term": field_spec.get("proposed_term"),
+                        "refers_to": field_spec.get("refers_to"),
                     }
                 )
     for relationship in document.get("relationships", []):
@@ -890,21 +890,21 @@ def _ossie_detail(
                     "primary_key": dataset.get("primary_key"),
                 }
             )
-        for field in dataset.get("fields", []):
-            if element_id != f"attribute:{name}:{field['name']}":
+        for field_spec in dataset.get("fields", []):
+            if element_id != f"attribute:{name}:{field_spec['name']}":
                 continue
-            extension = _helios_extension(field)
+            extension = _helios_extension(field_spec)
             return _compact(
                 {
-                    "description": field.get("description"),
+                    "description": field_spec.get("description"),
                     "physical_identity": (
-                        f"{source}.{field['name']}" if source else field["name"]
+                        f"{source}.{field_spec['name']}" if source else field_spec["name"]
                     ),
                     "dataset_physical_identity": source,
-                    "physical_name": field["name"],
+                    "physical_name": field_spec["name"],
                     "physical_type": (
                         extension.get("engine_type")
-                        or field.get("datatype")
+                        or field_spec.get("datatype")
                     ),
                     "semantic_role": extension.get("role"),
                     "business_terms": extension.get("glossary_terms"),

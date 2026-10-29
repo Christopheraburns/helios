@@ -177,7 +177,7 @@ def test_materialise_creates_a_version_and_marks_it_complete():
     assert "MERGE (v:OntologyVersion {key: $version})" in statements
     assert "SET v.complete = true" in statements
     assert "MERGE (n:Class {version: $version, key: row.key})" in statements
-    assert f"MERGE (a)-[r:IS_A]->(b)" in statements
+    assert "MERGE (a)-[r:IS_A]->(b)" in statements
     assert f"MERGE (n)-[:{ontology.IN_VERSION}]->(v)" in statements
 
 

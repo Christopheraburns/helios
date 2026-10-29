@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import pytest
 
 from helios_core.ontology.parser import parse
 
@@ -153,11 +152,10 @@ class TestAttributeRanges:
         """Attributes with string/float/date ranges don't create RANGE."""
         result = parse(CORE)
         range_edges = [e for e in result.graph.edges if e.type == "RANGE"]
-        # name is a string; should not appear in RANGE.
-        name_edges = [e for e in range_edges if "name" in e.from_key]
-        # name might appear from some class that has a name: Organization relationship,
-        # but "Organization#name" range would be string, so no edge.
-        pass  # This is implicit; no assertion needed.
+        classes = {n.key for n in result.graph.nodes if n.label == "Class"}
+        assert range_edges and all(e.to_key in classes for e in range_edges)
+        # name is a string on every class, so it never has a RANGE edge.
+        assert not [e for e in range_edges if e.from_key.endswith("#name")]
 
 
 class TestContentHash:

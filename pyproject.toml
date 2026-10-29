@@ -64,5 +64,5 @@ target-version = "py311"
 extend-exclude = ["apps/helios-ds-generation", "apps/helios-ds-evaluation"]
 
 [tool.ruff.lint]
-# Errors only (syntax, undefined names) until the existing style findings are cleared.
-select = ["E9", "F63", "F7", "F82"]
+# Ruff's classic defaults: pyflakes plus the pycodestyle error rules.
+select = ["E4", "E7", "E9", "F"]

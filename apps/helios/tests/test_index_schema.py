@@ -162,7 +162,10 @@ def test_inserts_are_batched(index, monkeypatch):
 
 def test_run_lifecycle_and_failed_runs_leave_no_rows(index):
     ticks = itertools.count()
-    clock = lambda: f"2026-10-01T00:00:{next(ticks):02d}+00:00"
+
+    def clock():
+        return f"2026-10-01T00:00:{next(ticks):02d}+00:00"
+
     ok = runs.start(
         index,
         connector="helios_ds_s3",

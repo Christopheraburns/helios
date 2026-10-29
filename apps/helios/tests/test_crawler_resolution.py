@@ -321,7 +321,7 @@ def world(warehouse, gazetteer):
         mentions=mentions,
         result=result,
         entities={e.entity_id: e for e in result.entities},
-        links_by_mention=_group(result.links, lambda l: l.mention_id),
+        links_by_mention=_group(result.links, lambda link: link.mention_id),
     )
 
 
@@ -348,8 +348,8 @@ def _links(world, asset_id: str, surface: str, extractor: str | None = None):
     links = world.links_by_mention.get(_mention(world, asset_id, surface, extractor).mention_id, [])
     return sorted(
         (
-            (l.link_type, l.resolved_by, l.score, world.entities[l.entity_id].external_ids[0])
-            for l in links
+            (link.link_type, link.resolved_by, link.score, world.entities[link.entity_id].external_ids[0])
+            for link in links
         ),
         key=lambda t: t[3],
     )
@@ -469,10 +469,10 @@ def test_a_receipt_tail_constrains_the_ticket(warehouse, gazetteer):
 def test_zero_or_several_rows_promote_nothing(world):
     # Ted's two returns of the same item at two Midway stores: several rows.
     assert not any(
-        l.resolved_by == "joint"
+        link.resolved_by == "joint"
         for m in world.mentions
         if m.asset_id == "c-email"
-        for l in world.links_by_mention.get(m.mention_id, [])
+        for link in world.links_by_mention.get(m.mention_id, [])
     )
     assert _links(world, "c-email", "AAAAAAAAFCOBAAAA") == [("SameAs", "exact_key", 1.0, ITEM[10])]
     assert _links(world, "c-email", "RMA-7000001") == [
@@ -480,10 +480,10 @@ def test_zero_or_several_rows_promote_nothing(world):
     ]
     # Ticket 999999 exists nowhere: zero rows.
     assert not any(
-        l.resolved_by == "joint"
+        link.resolved_by == "joint"
         for m in world.mentions
         if m.asset_id == "d-chat"
-        for l in world.links_by_mention.get(m.mention_id, [])
+        for link in world.links_by_mention.get(m.mention_id, [])
     )
     assert world.links_by_mention.get(_mention(world, "d-chat", "999999").mention_id, []) == []
 
@@ -597,12 +597,12 @@ def test_ids_are_stable_across_runs(warehouse, gazetteer, world):
     again = resolve(
         run, assets, segments, mentions, gazetteer, CONFIG, RETAIL_SETTINGS, warehouse.cursor
     )
-    assert [l.link_id for l in again.links] == [l.link_id for l in world.result.links]
+    assert [link.link_id for link in again.links] == [link.link_id for link in world.result.links]
     assert [e.entity_id for e in again.entities] == [e.entity_id for e in world.result.entities]
     assert [r.relationship_id for r in again.relationships] == [
         r.relationship_id for r in world.result.relationships
     ]
-    assert all(l.crawl_run_id == "run-2" for l in again.links)
+    assert all(link.crawl_run_id == "run-2" for link in again.links)
 
 
 # --- in the crawl -------------------------------------------------------------------------------
@@ -666,10 +666,10 @@ def test_crawl_writes_entities_links_and_relationships(warehouse, gazetteer, tmp
     links = index.read("helios_index.entity_links", {"crawl_run_id": first.crawl_run_id})
     entities = index.read("helios_index.entities", {"crawl_run_id": first.crawl_run_id})
     relationships = index.read("helios_index.relationships", {"crawl_run_id": first.crawl_run_id})
-    assert first.counts["links_sameas"] == sum(1 for l in links if l.link_type == "SameAs") > 20
+    assert first.counts["links_sameas"] == sum(1 for link in links if link.link_type == "SameAs") > 20
     assert (
         first.counts["links_possible"]
-        == sum(1 for l in links if l.link_type == "PossiblySameAs")
+        == sum(1 for link in links if link.link_type == "PossiblySameAs")
         > 0
     )
     assert first.counts["entities"] == len(entities) and first.counts["relationships"] == len(
@@ -688,5 +688,5 @@ def test_crawl_writes_entities_links_and_relationships(warehouse, gazetteer, tmp
     second = run_crawl()  # unchanged assets are carried forward; resolution is recomputed
     assert second.counts["carried_forward"] == 7
     again = index.read("helios_index.entity_links", {"crawl_run_id": second.crawl_run_id})
-    assert sorted(l.link_id for l in again) == sorted(l.link_id for l in links)
-    assert all(l.crawl_run_id == second.crawl_run_id for l in again)
+    assert sorted(link.link_id for link in again) == sorted(link.link_id for link in links)
+    assert all(link.crawl_run_id == second.crawl_run_id for link in again)

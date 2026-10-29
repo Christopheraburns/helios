@@ -105,7 +105,7 @@ def measure(
             spans[mention.segment_id].append((mention.start_offset, mention.end_offset))
     mentioned = {m.segment_id for m in mentions}
     asset_of = {m.mention_id: m.asset_id for m in mentions}
-    linked_assets = {asset_of[l.mention_id] for l in links if l.link_type == "SameAs" and l.mention_id in asset_of}
+    linked_assets = {asset_of[link.mention_id] for link in links if link.link_type == "SameAs" and link.mention_id in asset_of}
     assets = {s.asset_id for s in read}
 
     identifiers, identifier_example = _unmatched_identifiers(read, spans)

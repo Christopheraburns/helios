@@ -168,7 +168,7 @@ def test_settings_saved_with_format_names_still_read_those_formats():
     document = RETAIL_SETTINGS.model_dump(mode="json", by_alias=True)
     document["analyzers"]["chat"] = {"enabled": True, "schemas": ["helios-ds/chat-thread/1.0", "other/1"]}
     older = CrawlerSettings.model_validate(document)
-    assert [l.name for l in older.analyzers.chat.layouts] == ["helios-ds/chat-thread/1.0", "other/1"]
+    assert [layout.name for layout in older.analyzers.chat.layouts] == ["helios-ds/chat-thread/1.0", "other/1"]
     assert older.analyzers.chat.layouts[0] == RETAIL_SETTINGS.analyzers.chat.layouts[0]
     assert analyze_asset("application/json", chat_bytes("other/1"), older).status == "analyzed"
 

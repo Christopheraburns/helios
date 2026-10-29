@@ -5,7 +5,6 @@ Run in a Workbench Session (same project env vars as the MCP Application):
 Locally: uv run python scripts/impala_check.py cburns
 Prints each step's result or Impala's full error message.
 """
-import os
 import sys
 
 from helios_core.config import impala_config

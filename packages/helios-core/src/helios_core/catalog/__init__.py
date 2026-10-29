@@ -1,1 +1,3 @@
-from .harvest import Harvester 
+from .harvest import Harvester
+
+__all__ = ["Harvester"]

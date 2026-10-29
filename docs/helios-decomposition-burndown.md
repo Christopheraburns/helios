@@ -74,10 +74,10 @@ app runnable and the test suite green.
 - [x] **0.5** Move `shared/helios_core` → `packages/helios-core/src/helios_core`; fix its `pyproject.toml` (`packages = ["src/helios_core"]`, version 0.1.0); `__version__` reads `importlib.metadata`. — 0.5d *(dropped unused `pyarrow`/`sqlalchemy`; `lancedb`/`sentence-transformers` moved to an `evidence` extra)*
 - [x] **0.6** Rename `apps/helios/mcp` → `apps/helios/mcp_server` (stops shadowing the MCP SDK); update imports and launchers. — 0.25d
 - [x] **0.7** Remove `sys.path.insert` from `jobs/` and `scripts/`; use `uv sync` + editable installs. — 0.5d *(Workbench launchers and jobs keep a path shim pointing at `packages/helios-core/src` until Phase 8; `scripts/` inserts never reached core and are gone)*
-- [x] **0.8** CI workflow: `uv sync`, ruff, pytest for the whole tree. — 0.4d *(`.github/workflows/helios.yml`; ruff limited to E9/F63/F7/F82 until 0.11)*
+- [x] **0.8** CI workflow: `uv sync`, ruff, pytest for the whole tree. — 0.4d *(`.github/workflows/helios.yml`)*
 - [x] **0.9** CI job that publishes wheels to the internal index on tag. — 0.25d *(needs `HELIOS_INDEX_URL` / `HELIOS_INDEX_TOKEN` secrets)*
 - [x] **0.10** Fix the 11 pre-existing failures listed in `KNOWN_FAILURES` (`apps/helios/tests/conftest.py`): ontology publish tests send no auth, two stale assertions in `test_talk_to_data`, and an MCP model lookup that needs `HELIOS_ROOT` (lands with 1.4). — 1d *(all fixed in the tests, no product changes; the MCP lookup test now points at the repo's models itself, so it no longer waits for 1.4; `KNOWN_FAILURES` removed)*
-- [ ] **0.11** Widen ruff to the classic default set (E4/E7/E9/F) and clear the ~67 findings, mostly E741 and unused imports. — 0.5d
+- [x] **0.11** Widen ruff to the classic default set (E4/E7/E9/F) and clear the ~67 findings, mostly E741 and unused imports. — 0.5d *(re-exports in `atlas`, `catalog`, `profiler`, `propose` declared in `__all__` instead of deleted; `graph.py` loop variable no longer shadows `dataclasses.field`; an assertion-free ontology parser test now asserts what its docstring claims)*
 
 **Gate:** `uv run pytest` passes from a clean clone with no path hacks. *(Met: 582 passed, 2 skipped (LanceDB and Memgraph not installed), no expected failures; ruff clean.)*
 

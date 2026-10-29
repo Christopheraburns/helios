@@ -274,7 +274,7 @@ class Context:
             and str(s.locator.get("header", "")).lower() == "from"
         }
         authors: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
-        for link in sorted(links, key=lambda l: l.link_id):
+        for link in sorted(links, key=lambda link: link.link_id):
             if link.link_type != "SameAs":
                 continue
             mention = mention_by_id.get(link.mention_id)

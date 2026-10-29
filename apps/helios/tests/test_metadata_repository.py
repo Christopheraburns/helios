@@ -322,7 +322,7 @@ def test_operational_metadata_persists_across_repository_instances(
         semantic_model_id="customer-semantic",
         ontology_id="customer-ontology",
     )
-    stored = repository.save_model(
+    repository.save_model(
         model, created_by=principal("alice").id, status="active"
     )
     repository.add_model_grant(

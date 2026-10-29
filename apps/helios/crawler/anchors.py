@@ -132,7 +132,7 @@ class AnchorPlan:
                 )
             colocated.append(Colocated(path, identifiers(item.class_name), f"j{len(colocated)}"))
         selected = {*own.identifiers.primary, *(p.column for p in own.paths)}
-        extra = tuple(dict.fromkeys(l.column for l in anchor.lookups if l.column not in selected))
+        extra = tuple(dict.fromkeys(lookup.column for lookup in anchor.lookups if lookup.column not in selected))
         plan = cls(
             source=config.database,
             anchor=own,
@@ -151,7 +151,7 @@ class AnchorPlan:
         return (self.anchor, *self.related)
 
     def validate(self) -> None:
-        names = [self.source, *self.extra_columns, *(l.column for l in self.lookups)]
+        names = [self.source, *self.extra_columns, *(lookup.column for lookup in self.lookups)]
         for record in self.records:
             names += [record.identifiers.ossie_element, *record.identifiers.primary]
             names += [p.column for p in record.paths]
@@ -207,12 +207,12 @@ class Constraints:
 
     def kinds(self, plan: AnchorPlan) -> int:
         joined = sum(1 for c, i in self.instances.items() if i and plan.path_for(c) is not None)
-        return joined + sum(1 for l in plan.lookups if self.lookups.get((l.column, l.match)))
+        return joined + sum(1 for lookup in plan.lookups if self.lookups.get((lookup.column, lookup.match)))
 
     def queryable(self, plan: AnchorPlan) -> bool:
         """An exact lookup value is enough alone; otherwise several kinds must agree."""
         exact = any(
-            l.match == "equals" and self.lookups.get((l.column, l.match)) for l in plan.lookups
+            lookup.match == "equals" and self.lookups.get((lookup.column, lookup.match)) for lookup in plan.lookups
         )
         return exact or self.kinds(plan) >= plan.min_constraint_kinds
 

@@ -50,7 +50,7 @@ def test_the_preset_is_exactly_the_rules_that_used_to_be_built_in():
             for kind, options in before.items():
                 kept = {k: v for k, v in options.items() if k != "schemas"}
                 assert {k: now["analyzers"][kind][k] for k in kept} == kept, kind
-            assert [l["name"] for l in now["analyzers"]["chat"]["layouts"]] == before["chat"]["schemas"]
+            assert [layout["name"] for layout in now["analyzers"]["chat"]["layouts"]] == before["chat"]["schemas"]
         else:
             assert now[section] == before, section
     moved_from_code = set(now) - set(SCHEMA_1)

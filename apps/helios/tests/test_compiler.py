@@ -1,6 +1,9 @@
 """Compiler tests against a synthetic TPC-DS star in DuckDB. Run: pytest tests/ (needs models/published/tpcds.ossie.yaml)."""
-import json, os, random
-import duckdb, pytest
+import json
+import os
+import random
+import duckdb
+import pytest
 
 from helios_core.ossie import SemanticModel
 from helios_core.compiler import Compiler, SemanticRequest, Filter, Measure, CompileError
@@ -17,7 +20,8 @@ def model():
 @pytest.fixture(scope="module")
 def con():
     h = json.load(open(os.path.join(os.path.dirname(__file__), "fixtures", "tpcds-harvest.json")))
-    con = duckdb.connect(); con.execute("CREATE SCHEMA tpcds")
+    con = duckdb.connect()
+    con.execute("CREATE SCHEMA tpcds")
     keep = {"store_sales", "item", "date_dim", "store", "customer_demographics", "household_demographics", "income_band"}
     for t in h["tables"]:
         if t["table"] in keep:

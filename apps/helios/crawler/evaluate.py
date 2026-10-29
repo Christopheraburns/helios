@@ -519,7 +519,7 @@ def score_resolution(
     truth_key_of = {e["entity_id"]: truth_key(e) for e in truth_entities}
     keys_of = _entity_keys(entities)
     links_by_mention: dict[str, list[EntityLinkRecord]] = defaultdict(list)
-    for link in sorted(links, key=lambda l: l.link_id):
+    for link in sorted(links, key=lambda link: link.link_id):
         links_by_mention[link.mention_id].append(link)
 
     def cell() -> dict[str, int]:
@@ -533,11 +533,11 @@ def score_resolution(
         if not hits:
             continue
         expected = truth_key_of.get(t["entity_id"])
-        same_as = [l for h in hits for l in links_by_mention.get(h, []) if l.link_type == "SameAs"]
+        same_as = [link for h in hits for link in links_by_mention.get(h, []) if link.link_type == "SameAs"]
         possibly = [
-            l for h in hits for l in links_by_mention.get(h, []) if l.link_type == "PossiblySameAs"
+            link for h in hits for link in links_by_mention.get(h, []) if link.link_type == "PossiblySameAs"
         ]
-        correct = [l for l in same_as if expected in keys_of.get(l.entity_id, set())]
+        correct = [link for link in same_as if expected in keys_of.get(link.entity_id, set())]
         for cells in (by_tier[t.get("difficulty") or "?"], by_class[t.get("entity_type") or "?"]):
             cells["found"] += 1
             if correct:
@@ -548,9 +548,9 @@ def score_resolution(
                 cells["possibly_only"] += 1
             else:
                 cells["unresolved"] += 1
-        for l in same_as:
-            by_resolver[l.resolved_by]["links"] += 1
-            by_resolver[l.resolved_by]["correct"] += int(l in correct)
+        for link in same_as:
+            by_resolver[link.resolved_by]["links"] += 1
+            by_resolver[link.resolved_by]["correct"] += int(link in correct)
 
     # SameAs precision over every definite link of a crawler mention.
     truth_by_id = {t["mention_id"]: t for t in truth_mentions}
@@ -583,12 +583,12 @@ def score_resolution(
             name: {**c, "accuracy": _rate(c["correct"], c["links"])}
             for name, c in sorted(by_resolver.items())
         },
-        "sameas_links": sum(1 for l in links if l.link_type == "SameAs"),
+        "sameas_links": sum(1 for link in links if link.link_type == "SameAs"),
         "sameas_correct": sameas_correct,
         "sameas_wrong": sameas_wrong,
         "sameas_unverifiable": sameas_unverifiable,
         "sameas_precision": _rate(sameas_correct, sameas_correct + sameas_wrong),
-        "possibly_sameas_links": sum(1 for l in links if l.link_type == "PossiblySameAs"),
+        "possibly_sameas_links": sum(1 for link in links if link.link_type == "PossiblySameAs"),
     }
 
 
@@ -646,9 +646,9 @@ def score_cases(
         grouping = "SameAs a case entity"
         case_entities = {e.entity_id for e in entities if e.ontology_class in case_classes}
         asset_of = {m.mention_id: m.asset_id for m in mentions}
-        for l in links:
-            if l.link_type == "SameAs" and l.entity_id in case_entities and l.mention_id in asset_of:
-                about[asset_of[l.mention_id]].add(l.entity_id)
+        for link in links:
+            if link.link_type == "SameAs" and link.entity_id in case_entities and link.mention_id in asset_of:
+                about[asset_of[link.mention_id]].add(link.entity_id)
     if not about:
         return {"skipped": True, "reason": "no About relationships or links to a case entity"}
     truth_groups: dict[str, set[str]] = defaultdict(set)
@@ -878,7 +878,7 @@ def score_questions(
     truth_key_of = {e["entity_id"]: truth_key(e) for e in truth_entities}
     keys_of = _entity_keys(rows.entities)
     linked_keys = {
-        k for l in rows.links if l.link_type == "SameAs" for k in keys_of.get(l.entity_id, set())
+        k for link in rows.links if link.link_type == "SameAs" for k in keys_of.get(link.entity_id, set())
     }
     mentioned_keys = {
         k

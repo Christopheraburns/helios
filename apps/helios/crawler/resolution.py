@@ -32,7 +32,6 @@ the mapping and the warehouse.
 from __future__ import annotations
 
 import logging
-import re
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
@@ -318,8 +317,8 @@ class Resolution:
     def counts(self) -> dict[str, int]:
         return {
             "entities": len(self.entities),
-            "links_sameas": sum(1 for l in self.links if l.link_type == "SameAs"),
-            "links_possible": sum(1 for l in self.links if l.link_type == "PossiblySameAs"),
+            "links_sameas": sum(1 for link in self.links if link.link_type == "SameAs"),
+            "links_possible": sum(1 for link in self.links if link.link_type == "PossiblySameAs"),
             "relationships": len(self.relationships),
             "cases": len(self.clusters),
             "cases_queried": self.queried,
@@ -632,7 +631,7 @@ def about_target(
     order = list(about.class_priority)
     if case_entity is not None:
         return case_entity
-    same_as = [l for l in asset_links if l.link_type == "SameAs"]
+    same_as = [link for link in asset_links if link.link_type == "SameAs"]
     if not same_as:
         return None
 
@@ -640,12 +639,12 @@ def about_target(
         return order.index(class_name) if class_name in order else len(order)
 
     titled = [
-        l for l in same_as if segment_types.get(l.mention.segment_id) in about.title_segments
+        link for link in same_as if segment_types.get(link.mention.segment_id) in about.title_segments
     ]
     if titled:
-        return min(titled, key=lambda l: (priority(l.class_name), l.target)).target
-    counts = Counter(l.target for l in same_as)
-    class_of = {l.target: l.class_name for l in same_as}
+        return min(titled, key=lambda link: (priority(link.class_name), link.target)).target
+    counts = Counter(link.target for link in same_as)
+    class_of = {link.target: link.class_name for link in same_as}
     return min(counts, key=lambda t: (-counts[t], priority(class_of[t]), t))
 
 
@@ -833,7 +832,7 @@ def derive_relationships(
             by_asset[link.mention.asset_id].append(link)
     for asset in sorted(assets, key=lambda a: a.asset_id):
         asset_links = by_asset.get(asset.asset_id, [])
-        for link in sorted(asset_links, key=lambda l: (l.target, -l.score, l.mention.mention_id)):
+        for link in sorted(asset_links, key=lambda link: (link.target, -link.score, link.mention.mention_id)):
             if link.link_type == "SameAs":
                 add(
                     "Mentions",
@@ -848,7 +847,7 @@ def derive_relationships(
         cluster_id = cluster_of.get(asset.asset_id, "")
         target = about_target(asset_links, segment_types, case_entity.get(cluster_id), about)
         if target is not None and target in book.classes:
-            evidence = [l.mention.segment_id for l in asset_links if l.target == target]
+            evidence = [link.mention.segment_id for link in asset_links if link.target == target]
             if cluster_id in matches:
                 by = "joint"
             elif target.startswith(DOCUMENT_SOURCE + "."):

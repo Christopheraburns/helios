@@ -388,7 +388,7 @@ def resolve_exact(
         for mention_id, link in sorted(links.items())
     ]
     relationships = derive_relationships(
-        run, assets, segments, {m: [l] for m, l in links.items()}, {}, {}, {}, book, settings.about
+        run, assets, segments, {m: [link] for m, link in links.items()}, {}, {}, {}, book, settings.about
     )
     resolution = Resolution(
         entities=book.records(run),
@@ -398,7 +398,7 @@ def resolve_exact(
         queried=0,
         resolved=0,
     )
-    return resolution, {m: l for m, l in links.items()}
+    return resolution, {m: link for m, link in links.items()}
 
 
 def build_claims(

@@ -126,7 +126,7 @@ def test_one_row_identifies_the_case_and_dates_settle_several(clinic):
 
 
 def test_lookups_are_fed_by_the_columns_a_rule_names():
-    assert [l.match for l in lookups_for(CONFIG, ["visit_code"], "equals")] == ["equals"]
+    assert [lookup.match for lookup in lookups_for(CONFIG, ["visit_code"], "equals")] == ["equals"]
     assert lookups_for(CONFIG, ["visit_code"], "ends_with") == []  # only fed by visit_code_tail
     assert len(lookups_for(CONFIG, ["visit_code_tail"], "ends_with")) == 1
     assert lookups_for(CONFIG, ["patient_id"], "equals") == []

@@ -7,7 +7,7 @@ import duckdb
 import pytest
 from apps.helios.crawler import llm_arm
 from apps.helios.crawler.crawl import crawl, previous_run
-from apps.helios.crawler.llm_arm import LlmExtractor, Vocabulary, claim_shapes, load_vocabulary, run_arm
+from apps.helios.crawler.llm_arm import LlmExtractor, claim_shapes, load_vocabulary, run_arm
 from crawler_samples import RETAIL_SETTINGS
 from helios_core.index import evidence
 from helios_core.index.store import duckdb_index_store
@@ -106,7 +106,7 @@ def test_quotes_are_grounded_and_resolved_by_exact_keys_only(gazetteer, tmp_path
         "Wilma.Graham@t.edu": ("Customer", "tpcds.customer:c_customer_sk=2"),
         "RMA-3056773": ("Return", "documents.return:rma=RMA-3056773"),
     }
-    assert {l.resolved_by for l in result.resolution.links} == {"exact_key"}
+    assert {link.resolved_by for link in result.resolution.links} == {"exact_key"}
     assert {r.relationship_type for r in result.resolution.relationships} == {"Mentions", "About"}
 
     [claim] = result.claims
