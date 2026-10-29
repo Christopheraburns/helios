@@ -1,5 +1,6 @@
 import json
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx2
@@ -37,6 +38,7 @@ from helios_core.compiler import (
     FilterValueTypeError,
     SemanticRequest,
 )
+from helios_core.metadata.migrations import MIGRATIONS
 from helios_core.data_authorization import (
     DataPolicy,
     PlatformDataDecision,
@@ -534,7 +536,7 @@ def test_conversation_repository_persists_owned_model_history(
         "There are 12 customers in the result.",
     )
 
-    assert repository.schema_version() == 7
+    assert repository.schema_version() == MIGRATIONS[-1][0]
     assert created.version == 1
     assert [message.role for message in created.messages] == [
         "user",
@@ -753,7 +755,12 @@ def test_mcp_tools_load_published_ossie_artifact(
     }
 
 
-def test_mcp_compiles_repository_tpcds_ossie():
+def test_mcp_compiles_repository_tpcds_ossie(monkeypatch):
+    # The repository's own published model, wherever HELIOS_ROOT points.
+    repo_root = Path(__file__).resolve().parents[3]
+    monkeypatch.setattr(
+        mcp_server, "artifact_store", mcp_server.ArtifactStore(repo_root)
+    )
     _, model = mcp_server.ModelStore().load("tpcds")
 
     searched = mcp_server.search(model, "store sales revenue", 5)
@@ -1767,18 +1774,32 @@ def test_persistent_conversation_api_restores_history_and_isolates_owner(
     assert stored.turns[-1].provenance["llm"]["provider"] == "mistral"
 
 
+@pytest.mark.parametrize(
+    ("llm_configured", "expected"),
+    [
+        (True, "MCP conversation connectivity is not configured"),
+        (False, "The conversation LLM is not configured"),
+    ],
+)
 def test_conversation_endpoint_reports_missing_server_configuration(
     persistent_auth_stack,
     monkeypatch,
+    llm_configured,
+    expected,
 ):
     for name in (
         "HELIOS_MCP_URL",
         "HELIOS_MCP_TOKEN",
         "HELIOS_MCP_DELEGATION_SECRET",
+        "LLM_PROVIDER",
         "ANTHROPIC_API_KEY",
+        "MISTRAL_API_KEY",
         "INFERENCE_BASE_URL",
     ):
         monkeypatch.delenv(name, raising=False)
+    # The LLM is checked before MCP; a key is enough, nothing is called.
+    if llm_configured:
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     previous = dict(app.state._state)
     app.state._state.pop("resource_store", None)
     app.state._state.pop("authorization_policy", None)
@@ -1796,10 +1817,7 @@ def test_conversation_endpoint_reports_missing_server_configuration(
         app.state._state.update(previous)
 
     assert response.status_code == 503
-    assert (
-        "MCP conversation connectivity is not configured"
-        in response.json()["detail"]
-    )
+    assert expected in response.json()["detail"]
 
 
 def test_openai_session_provider_uses_litellm_gateway(monkeypatch):

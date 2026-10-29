@@ -24,8 +24,20 @@ def temp_store():
 
 
 @pytest.fixture
-def app(temp_store):
-    """Minimal FastAPI app with just the ontology router."""
+def app(temp_store, monkeypatch):
+    """Minimal FastAPI app with just the ontology router, signed in as an editor.
+
+    The ontology.edit check itself is covered by
+    test_index_ontology_versions::test_require_ontology_edit_checks_identity_organization_and_role.
+    """
+    from apps.helios.console import ontology
+
+    monkeypatch.setattr(ontology, "_actor", lambda request: "cloudera-workbench:alice")
+    monkeypatch.setattr(
+        ontology, "require_ontology_edit", lambda request, org: "cloudera-workbench:alice"
+    )
+    # The local cache only; never a configured lakehouse.
+    monkeypatch.setitem(ontology._index, "store", None)
     app = FastAPI()
     app.include_router(ontology_router)
     return app
