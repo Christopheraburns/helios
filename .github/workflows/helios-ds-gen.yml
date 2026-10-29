@@ -4,13 +4,13 @@ on:
   pull_request:
     paths:
       - "apps/helios-ds-generation/**"
-      - "shared/**"
+      - "packages/helios-core/**"
       - ".github/workflows/helios-ds-gen.yml"
   push:
     branches: [main]
     paths:
       - "apps/helios-ds-generation/**"
-      - "shared/**"
+      - "packages/helios-core/**"
       - ".github/workflows/helios-ds-gen.yml"
 
 jobs:

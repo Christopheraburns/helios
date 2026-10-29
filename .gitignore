@@ -13,3 +13,9 @@ apps/ui/dist/
 apps/helios/ui/dist/
 apps/helios/ui/src/content/docs/
 *.tsbuildinfo
+.cursor/
+runs/
+run_archive/
+.DS_Store
+*.pptx
+.venv/

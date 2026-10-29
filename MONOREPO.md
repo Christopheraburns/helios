@@ -1,90 +1,54 @@
 # Helios Monorepo Structure
 
-This repository contains three distinct Cloudera AI projects managed as a single monorepo.
+This repository is a uv workspace. Helios is being split into libraries that a host project
+installs like any other package (`helios-core`, `helios-model`, `helios-serve`, and later
+`helios-crawl`); Daedalus serves the tools over MCP. See
+`docs/helios-decomposition-burndown.md` for progress. Today `helios-core` is a real
+package and the console, crawler, graph gateway and MCP server still live under
+`apps/helios/`, installed by the root project.
 
 ## Directory Layout
 
 ```
 helios/
-├── shared/
-│   └── helios_core/          # Shared core package (used by all 3 projects)
-│       ├── artifacts.py
-│       ├── compiler/
-│       ├── metadata/
-│       ├── ossie/
-│       ├── __init__.py
-│       └── pyproject.toml
+├── pyproject.toml            # workspace root; also installs apps/ (until Phase 8)
+├── uv.lock                   # pins the whole tree
+├── packages/
+│   └── helios-core/          # pyproject.toml, src/helios_core/
 │
 ├── apps/
-│   ├── helios/               # Query runtime (primary Helios project)
-│   │   ├── console/          # FastAPI console
-│   │   ├── mcp/              # MCP server
-│   │   ├── ui/               # React frontend
-│   │   ├── tests/            # Query runtime tests
-│   │   ├── runtimes/         # Docker configs
-│   │   └── pyproject.toml
-│   │
-│   ├── helios-ds-generation/ # Synthetic data generator (new project)
-│   │   ├── src/helios_ds/    # Generator source code (development)
-│   │   ├── templates/        # Artifact generation templates
-│   │   ├── runtimes/         # Docker configs
-│   │   └── pyproject.toml
-│   │
-│   └── helios-ds-evaluation/ # Evaluation harness (new project)
-│       ├── src/helios_ds_eval/  # Evaluator source code (development)
-│       ├── runtimes/         # Docker configs
-│       └── pyproject.toml
+│   ├── helios/               # Query runtime (console, crawler, graph, mcp_server, ui, tests)
+│   ├── helios-ds-generation/ # Synthetic data generator (outside the workspace)
+│   └── helios-ds-evaluation/ # Evaluation harness (outside the workspace)
 │
-├── docs/                      # Documentation
+├── jobs/                      # Workbench Job entry points
 ├── scripts/                   # Utility scripts
-├── .github/workflows/         # CI/CD workflows (per-project)
-│
-├── pyproject.toml            # Monorepo workspace config
-└── README.md
+├── ontology/  models/  eval/  # data, versioned, not Python
+├── runtime/                   # Workbench runtime image
+└── docs/
 ```
 
 ## Development Setup
 
-### For Query Runtime (apps/helios)
+### Query runtime and helios-core
 
 ```bash
-cd /home/cdsw/helios
+uv sync                      # creates .venv, installs helios-core and apps/ editable
+uv sync --extra evidence     # also lancedb + sentence-transformers (pulls PyTorch)
 
-# Install shared core + query runtime
-pip install -e ./shared/helios_core
-pip install -e ./apps/helios[dev]
-
-# Run tests
-pytest apps/helios/tests -v
-
-# Start console
-python -m apps.helios.console.api
+uv run pytest                # apps/helios/tests
+uv run ruff check packages apps/helios jobs scripts
 ```
 
-### For Data Generator (apps/helios-ds-generation) - Future
+No `PYTHONPATH` or `sys.path` changes are needed locally.
+
+### Data generator and evaluator
+
+These apps are not workspace members yet and keep their own setup:
 
 ```bash
-cd /home/cdsw/helios
-
-# Install shared core + generator
-pip install -e ./shared/helios_core
-pip install -e ./apps/helios-ds-generation[dev,media]
-
-# Run tests
-pytest apps/helios-ds-generation/tests -v
-```
-
-### For Evaluator (apps/helios-ds-evaluation) - Future
-
-```bash
-cd /home/cdsw/helios
-
-# Install shared core + evaluator
-pip install -e ./shared/helios_core
-pip install -e ./apps/helios-ds-evaluation[dev]
-
-# Run tests
-pytest apps/helios-ds-evaluation/tests -v
+cd apps/helios-ds-generation
+PYTHONPATH=src:../../packages/helios-core/src pytest -q
 ```
 
 ## Cloudera AI Project Deployment
@@ -101,7 +65,11 @@ Each Cloudera AI project pulls from this single Git repo:
 
 ### Deployment Notes
 
-- **Shared Core** (`shared/helios_core/`): Used by all 3 projects
+- **helios-core** (`packages/helios-core/src/helios_core/`): used by all 3 projects
+- **Workbench**: Applications and Jobs run from the checkout, not an install. Their
+  launchers put `packages/helios-core/src` and the repo root on `PYTHONPATH`, and third-party
+  dependencies come from `.helios-python` (see `docs/ui-deployment.md`). This goes away when
+  the runtime image installs Helios wheels.
 - **Generation Project**: Separate credentials and runtime from query runtime
 - **Evaluation Project**: Separate Cloudera project entirely (ground-truth isolation)
 - **Git**: All projects pull from `main` branch; no project-specific branches needed
@@ -110,12 +78,8 @@ Each Cloudera AI project pulls from this single Git repo:
 
 Located in `.github/workflows/`:
 
-- `helios-query.yml`: Tests only `apps/helios/` and `shared/helios_core/`
-- `helios-ds-gen.yml`: Tests only `apps/helios-ds-generation/` (future)
-- `helios-ds-eval.yml`: Tests only `apps/helios-ds-evaluation/` (future)
-- `integration.yml`: End-to-end tests (runs only on `main`)
-
-Each project's tests run independently. A failure in one project does not block another.
+- `helios.yml`: `uv sync`, ruff and pytest for helios-core and `apps/helios/`
+- `helios-ds-gen.yml`: Tests only `apps/helios-ds-generation/`
 
 ## Python Imports
 
@@ -127,68 +91,35 @@ from helios_core.compiler import compile_query
 from helios_core.metadata import SQLiteMetadataRepository
 ```
 
-The `pyproject.toml` files use path dependencies to ensure all projects use the same `helios_core`:
+Workspace members depend on `helios-core` by name; the root `pyproject.toml` resolves it
+to the workspace copy:
 
 ```toml
-[project]
-dependencies = [
-    "helios-core @ {path=../../shared/helios_core}",
-    # ... other dependencies
-]
+[tool.uv.sources]
+helios-core = { workspace = true }
 ```
 
 ## Dependency Management
 
-- **`shared/helios_core/pyproject.toml`**: Core dependencies (pydantic, pyarrow, sqlalchemy)
-- **`apps/helios/pyproject.toml`**: Query runtime deps (fastapi, uvicorn) + core
+- **`packages/helios-core/pyproject.toml`**: Core dependencies; `evidence` extra for document search
+- **`pyproject.toml`** (root): console, crawler, graph and MCP server dependencies + core
+- **`apps/helios/console/requirements.txt` / `.lock`**: what Workbench installs into `.helios-python`;
+  keep in step with the root `pyproject.toml`
 - **`apps/helios-ds-generation/pyproject.toml`**: Generator deps (reportlab, pillow) + core
 - **`apps/helios-ds-evaluation/pyproject.toml`**: Evaluator deps (minimal) + core
-
-## Git History
-
-All refactoring commits preserve full git history:
-
-```bash
-git log --oneline | head -10
-# Shows:
-# b82c2a2 refactor: add pyproject.toml files for monorepo structure
-# fadfb21 refactor: move securityHelper.py to scripts/ directory
-# f16db51 refactor: create skeleton directories for helios-ds projects
-# dc139e0 refactor: move tests to apps/helios/tests
-# fc8e3ed refactor: move helios query runtime to apps/helios/
-# 32a62b4 refactor: create shared/ and move helios_core
-```
-
-- `git blame` still works correctly
-- `git log -- apps/helios/` filters to query runtime changes only
-- `git log -- shared/helios_core/` shows core package changes
 
 ## State Directories (Not Code)
 
 These are runtime state and artifacts; not part of the codebase:
 
-- `state/` - Current runtime state  
-- `runs/` - Execution history
-- `run_archive/` - Archived runs
+- `state/` - Current runtime state (ignored)
+- `runs/` - Execution history (ignored)
+- `run_archive/` - Archived runs (ignored)
 - `models/` - Model artifacts
 - `jobs/` - Job definitions
-
-These can be excluded from code reviews and CI/CD checks.
-
-## Next Steps
-
-1. **Verify imports work** in each project (Python packaging setup)
-2. **Set up CI/CD workflows** per-project in GitHub Actions
-3. **Create Cloudera AI projects** for each component
-4. **Build custom runtimes** and register in Workbench
-5. **Deploy skeleton applications** and test git pulls
 
 ## Documentation
 
 - `docs/` - Architecture, design docs
-- `README.md` - Project overview (existing)
+- `README.md` - Project overview
 - This file - Monorepo structure and workflow
-
-## Questions?
-
-Refer to the engineering spec: `Helios-DS_Asset_Generator_Engineering_Development_Specification.pdf`

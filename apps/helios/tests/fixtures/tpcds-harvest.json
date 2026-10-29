@@ -1,0 +1,649 @@
+{
+ "source": "runs/20260922T000009Z/harvest.json (tables used by test_compiler)",
+ "tables": [
+  {
+   "database": "tpcds",
+   "table": "customer_demographics",
+   "columns": [
+    {
+     "name": "cd_demo_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "cd_gender",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "cd_marital_status",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "cd_education_status",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "cd_purchase_estimate",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "cd_credit_rating",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "cd_dep_count",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "cd_dep_employed_count",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "cd_dep_college_count",
+     "type": "int",
+     "comment": ""
+    }
+   ],
+   "row_count": 1920800
+  },
+  {
+   "database": "tpcds",
+   "table": "date_dim",
+   "columns": [
+    {
+     "name": "d_date_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_date_id",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "d_date",
+     "type": "date",
+     "comment": ""
+    },
+    {
+     "name": "d_month_seq",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_week_seq",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_quarter_seq",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_year",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_dow",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_moy",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_dom",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_qoy",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_fy_year",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_fy_quarter_seq",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_fy_week_seq",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_day_name",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "d_quarter_name",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "d_holiday",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "d_weekend",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "d_following_holiday",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "d_first_dom",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_last_dom",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_same_day_ly",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_same_day_lq",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "d_current_day",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "d_current_week",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "d_current_month",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "d_current_quarter",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "d_current_year",
+     "type": "string",
+     "comment": ""
+    }
+   ],
+   "row_count": 73049
+  },
+  {
+   "database": "tpcds",
+   "table": "household_demographics",
+   "columns": [
+    {
+     "name": "hd_demo_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "hd_income_band_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "hd_buy_potential",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "hd_dep_count",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "hd_vehicle_count",
+     "type": "int",
+     "comment": ""
+    }
+   ],
+   "row_count": 7200
+  },
+  {
+   "database": "tpcds",
+   "table": "income_band",
+   "columns": [
+    {
+     "name": "ib_income_band_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "ib_lower_bound",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "ib_upper_bound",
+     "type": "int",
+     "comment": ""
+    }
+   ],
+   "row_count": 20
+  },
+  {
+   "database": "tpcds",
+   "table": "item",
+   "columns": [
+    {
+     "name": "i_item_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "i_item_id",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "i_rec_start_date",
+     "type": "date",
+     "comment": ""
+    },
+    {
+     "name": "i_rec_end_date",
+     "type": "date",
+     "comment": ""
+    },
+    {
+     "name": "i_item_desc",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "i_current_price",
+     "type": "decimal(7,2)",
+     "comment": ""
+    },
+    {
+     "name": "i_wholesale_cost",
+     "type": "decimal(7,2)",
+     "comment": ""
+    },
+    {
+     "name": "i_brand_id",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "i_brand",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "i_class_id",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "i_class",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "i_category_id",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "i_category",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "i_manufact_id",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "i_manufact",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "i_size",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "i_formulation",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "i_color",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "i_units",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "i_container",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "i_manager_id",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "i_product_name",
+     "type": "string",
+     "comment": ""
+    }
+   ],
+   "row_count": 18000
+  },
+  {
+   "database": "tpcds",
+   "table": "store",
+   "columns": [
+    {
+     "name": "s_store_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "s_store_id",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_rec_start_date",
+     "type": "date",
+     "comment": ""
+    },
+    {
+     "name": "s_rec_end_date",
+     "type": "date",
+     "comment": ""
+    },
+    {
+     "name": "s_closed_date_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "s_store_name",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_number_employees",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "s_floor_space",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "s_hours",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_manager",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_market_id",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "s_geography_class",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_market_desc",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_market_manager",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_division_id",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "s_division_name",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_company_id",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "s_company_name",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_street_number",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_street_name",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_street_type",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_suite_number",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_city",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_county",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_state",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_zip",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_country",
+     "type": "string",
+     "comment": ""
+    },
+    {
+     "name": "s_gmt_offset",
+     "type": "decimal(5,2)",
+     "comment": ""
+    },
+    {
+     "name": "s_tax_percentage",
+     "type": "decimal(5,2)",
+     "comment": ""
+    }
+   ],
+   "row_count": 12
+  },
+  {
+   "database": "tpcds",
+   "table": "store_sales",
+   "columns": [
+    {
+     "name": "ss_sold_date_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "ss_sold_time_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "ss_item_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "ss_customer_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "ss_cdemo_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "ss_hdemo_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "ss_addr_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "ss_store_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "ss_promo_sk",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "ss_ticket_number",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "ss_quantity",
+     "type": "bigint",
+     "comment": ""
+    },
+    {
+     "name": "ss_wholesale_cost",
+     "type": "decimal(7,2)",
+     "comment": ""
+    },
+    {
+     "name": "ss_list_price",
+     "type": "decimal(7,2)",
+     "comment": ""
+    },
+    {
+     "name": "ss_sales_price",
+     "type": "decimal(7,2)",
+     "comment": ""
+    },
+    {
+     "name": "ss_ext_discount_amt",
+     "type": "decimal(7,2)",
+     "comment": ""
+    },
+    {
+     "name": "ss_ext_sales_price",
+     "type": "decimal(7,2)",
+     "comment": ""
+    },
+    {
+     "name": "ss_ext_wholesale_cost",
+     "type": "decimal(7,2)",
+     "comment": ""
+    },
+    {
+     "name": "ss_ext_list_price",
+     "type": "decimal(7,2)",
+     "comment": ""
+    },
+    {
+     "name": "ss_ext_tax",
+     "type": "decimal(7,2)",
+     "comment": ""
+    },
+    {
+     "name": "ss_coupon_amt",
+     "type": "decimal(7,2)",
+     "comment": ""
+    },
+    {
+     "name": "ss_net_paid",
+     "type": "decimal(7,2)",
+     "comment": ""
+    },
+    {
+     "name": "ss_net_paid_inc_tax",
+     "type": "decimal(7,2)",
+     "comment": ""
+    },
+    {
+     "name": "ss_net_profit",
+     "type": "decimal(7,2)",
+     "comment": ""
+    }
+   ],
+   "row_count": 2880404
+  }
+ ]
+}

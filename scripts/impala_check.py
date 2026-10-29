@@ -1,13 +1,13 @@
 """Isolate Impala connectivity and proxy delegation from the MCP server.
 
 Run in a Workbench Session (same project env vars as the MCP Application):
-  python helios/scripts/impala_check.py cburns
+  PYTHONPATH=helios/packages/helios-core/src python helios/scripts/impala_check.py cburns
+Locally: uv run python scripts/impala_check.py cburns
 Prints each step's result or Impala's full error message.
 """
 import os
 import sys
 
-sys.path.insert(0, os.environ.get("HELIOS_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from helios_core.config import impala_config
 from helios_core.engines import ImpalaEngine
 

@@ -3,12 +3,13 @@
 import itertools
 from pathlib import Path
 
+import helios_core.index
 import pytest
 from helios_core.index import RUN_TABLES, TABLES, ddl_statements, ids, records, runs
 from helios_core.index.__main__ import impala_ddl
 from helios_core.index.store import duckdb_index_store
 
-DDL_FILE = Path(__file__).resolve().parents[3] / "shared/helios_core/index/schema_impala.sql"
+DDL_FILE = Path(helios_core.index.__file__).parent / "schema_impala.sql"
 RUN = "crawl_test"
 
 
@@ -22,7 +23,7 @@ def index():
 def test_ddl_file_is_current():
     assert DDL_FILE.read_text() == impala_ddl(), (
         "schema_impala.sql is stale; regenerate with "
-        "`PYTHONPATH=shared python -m helios_core.index ddl > shared/helios_core/index/schema_impala.sql`"
+        "`uv run python -m helios_core.index ddl > packages/helios-core/src/helios_core/index/schema_impala.sql`"
     )
 
 

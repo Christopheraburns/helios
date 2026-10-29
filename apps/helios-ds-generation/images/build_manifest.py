@@ -2,7 +2,7 @@
 
 Run in Workbench (it reads TPC-DS through Impala, or a DuckDB TPC-DS file):
 
-    PYTHONPATH=src:../../shared:$PYTHONPATH python images/build_manifest.py \\
+    PYTHONPATH=src:../../packages/helios-core/src:$PYTHONPATH python images/build_manifest.py \\
         --pilot-per-category 5 --out images/manifests/pilot-50.jsonl
 
     ... --items AAAAAAAAEAAAAAAA,AAAAAAAACAAAAAAA --out images/manifests/some.jsonl

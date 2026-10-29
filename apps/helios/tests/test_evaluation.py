@@ -115,7 +115,7 @@ def test_imported_versioned_suite_is_listed_and_loadable(tmp_path, monkeypatch):
 
 
 def test_tpcds_suite_grounding_resolves_in_published_model():
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[3]
     model = SemanticModel.load(
         str(root / "models/published/tpcds.ossie.yaml")
     )

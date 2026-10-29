@@ -40,7 +40,7 @@ def client(app):
 @pytest.fixture
 def repo_root():
     """Repo root for schema paths."""
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).resolve().parents[3]
 
 
 class TestPublishOntology:

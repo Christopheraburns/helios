@@ -22,7 +22,7 @@ import sys
 
 PROJECT_DIR = os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw")
 ROOT = os.environ.get("HELIOS_ROOT") or os.path.join(PROJECT_DIR, "helios")
-sys.path.insert(0, os.path.join(ROOT, "shared"))  # helios_core (Impala settings)
+sys.path.insert(0, os.path.join(ROOT, "packages", "helios-core", "src"))  # helios_core (Impala settings)
 sys.path.insert(0, os.path.join(ROOT, "apps", "helios-ds-generation", "src"))
 
 from helios_ds.__main__ import main  # noqa: E402

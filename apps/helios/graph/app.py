@@ -23,7 +23,7 @@ import sys
 
 PROJECT_DIR = os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw")
 ROOT = os.environ.get("HELIOS_ROOT") or os.path.join(PROJECT_DIR, "helios")
-if not os.path.isdir(os.path.join(ROOT, "shared", "helios_core")):
+if not os.path.isdir(os.path.join(ROOT, "packages", "helios-core", "src", "helios_core")):
     raise SystemExit(f"helios checkout not found at {ROOT}; set HELIOS_ROOT to the repo directory")
 
 if not os.environ.get("HELIOS_GRAPH_TOKEN"):
@@ -38,7 +38,7 @@ cmd = [sys.executable, "-m", "uvicorn", "apps.helios.graph.gateway:app",
        "--host", "127.0.0.1", "--port", port, "--log-level", "info"]
 print("starting helios graph gateway:", " ".join(cmd), flush=True)
 python_paths = [
-    os.path.join(ROOT, "shared"),  # shared core package location (first)
+    os.path.join(ROOT, "packages", "helios-core", "src"),  # helios-core until the runtime installs wheels
     ROOT,  # repo root, so apps.helios.graph resolves
 ]
 dependency_dir = os.environ.get("HELIOS_PYTHON_DEPS") or os.path.join(

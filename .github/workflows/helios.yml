@@ -1,0 +1,48 @@
+name: helios
+
+on:
+  pull_request:
+    paths-ignore:
+      - "apps/helios-ds-generation/**"
+      - "apps/helios-ds-evaluation/**"
+      - "apps/helios/ui/**"
+      - "docs/**"
+  push:
+    branches: [main]
+    tags: ["helios-core/v*"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12" # matches the helios Workbench runtime
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check packages apps/helios jobs scripts
+      - run: uv run pytest -q
+
+  # Wheels go to the internal index on a package tag (helios-core/v0.1.0).
+  # Nothing installs them yet; host projects switch over in Phase 8.
+  # Needs repository secrets HELIOS_INDEX_URL and HELIOS_INDEX_TOKEN.
+  publish:
+    if: startsWith(github.ref, 'refs/tags/helios-core/v')
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Check tag matches package version
+        run: |
+          tag="${GITHUB_REF_NAME#helios-core/v}"
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("packages/helios-core/pyproject.toml", "rb"))["project"]["version"])')"
+          test "$tag" = "$version" || { echo "tag $tag != helios-core $version"; exit 1; }
+      - run: uv build --package helios-core --out-dir dist
+      - run: uv publish --publish-url "$HELIOS_INDEX_URL" --token "$HELIOS_INDEX_TOKEN" dist/*
+        env:
+          HELIOS_INDEX_URL: ${{ secrets.HELIOS_INDEX_URL }}
+          HELIOS_INDEX_TOKEN: ${{ secrets.HELIOS_INDEX_TOKEN }}

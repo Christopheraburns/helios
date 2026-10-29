@@ -19,7 +19,7 @@ import os
 import sys
 
 ROOT = os.environ.get("HELIOS_ROOT") or os.path.join(os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios")
-for path in (ROOT, os.path.join(ROOT, "shared")):
+for path in (ROOT, os.path.join(ROOT, "packages", "helios-core", "src")):
     if path not in sys.path:
         sys.path.insert(0, path)
 

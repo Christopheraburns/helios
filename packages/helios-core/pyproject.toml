@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "helios-core"
+version = "0.1.0"
+description = "Helios core: shared semantic query and data governance layer"
+authors = [{name = "Helios Team"}]
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "duckdb>=1.3.0",
+    "httpx>=0.27.0",
+    "impyla>=0.20.0",
+    "jsonschema>=4.23.0",
+    "linkml-runtime>=1.8.0",
+    "pydantic>=2.9.0",
+    "pyyaml>=6.0.0",  # ontology mappings (helios_core.ontology.mapping)
+    "requests>=2.32.0",
+    "sqlglot>=27.0.0",
+]
+
+[project.optional-dependencies]
+# Searching crawled documents. Without these, crawls run and evidence search
+# reports that it is unavailable. sentence-transformers brings PyTorch.
+evidence = [
+    "lancedb>=0.39.0",
+    "sentence-transformers>=6.1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/helios_core"]

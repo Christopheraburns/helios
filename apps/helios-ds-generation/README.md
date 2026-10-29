@@ -30,7 +30,7 @@ Lakehouse tests run against both sink implementations: the PyIceberg SQL-catalog
 The pipeline goes TPC-DS → scenario planner → deterministic plan → generation manifest in the object store, plus `helios_ds` rows. The dataset ends in `IN_REVIEW`; only `approve` makes it `READY`, which is the only state the crawler may see.
 
 ```bash
-export PYTHONPATH=src:../../shared:$PYTHONPATH
+export PYTHONPATH=src:../../packages/helios-core/src:$PYTHONPATH
 
 # Workbench: tpcds and helios_ds/helios_ground_truth through Impala, artifacts in S3
 python -m helios_ds plan --tpcds impala:tpcds --lakehouse impala \

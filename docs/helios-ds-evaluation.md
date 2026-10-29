@@ -39,7 +39,7 @@ The evaluator does **not** run inside the generation project; it reads the same 
 ```bash
 cd /home/cdsw/helios
 
-pip install -e ./shared/helios_core
+pip install -e ./packages/helios-core
 pip install -e ./apps/helios-ds-evaluation[dev]
 
 pytest apps/helios-ds-evaluation/tests -v

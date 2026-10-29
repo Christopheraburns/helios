@@ -35,7 +35,7 @@ process:
 The checkout is resolved from `HELIOS_ROOT`, or from
 `$CDSW_PROJECT_DIR/helios`. `HELIOS_DEV=1` enables uvicorn reload.
 
-The repository also contains a separate MCP Application. `apps/mcp/app.py`
+The repository also contains a separate MCP Application. `apps/helios/mcp_server/app.py`
 starts `apps.mcp.server:app` in the same manner. MCP is an agent-facing
 interface, not the browser UI contract.
 

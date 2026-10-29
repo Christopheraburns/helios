@@ -2,18 +2,55 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# Workspace root. Until Phase 8 moves the console into apps/console, the root
+# project also installs the `apps` namespace (console, crawler, graph, MCP server)
+# so `apps.helios.*` imports resolve without PYTHONPATH.
 [project]
-name = "helios-monorepo"
+name = "helios-apps"
 version = "0.1.0"
-description = "Helios semantic query layer + Helios-DS synthetic data generator"
+description = "Helios console, crawler, graph gateway and MCP server (pre-split)"
 authors = [{name = "Helios Team"}]
+license = "Apache-2.0"
+requires-python = ">=3.11"
+classifiers = ["Private :: Do Not Upload"]
+# Mirrors apps/helios/console/requirements.txt, which Workbench still installs from.
+dependencies = [
+    "helios-core",
+    "fastapi>=0.115.0",
+    "httpx>=0.27.0",
+    "httpx2>=2.13.1",
+    "jinja2>=3.1.0",
+    "mcp>=2.2.0,<3",
+    "pypdf>=6.0.0",  # crawler: PDF text extraction
+    "python-multipart>=0.0.9",
+    "rapidfuzz>=3.14.0",  # crawler: typo-tolerant name matching
+    "uvicorn[standard]>=0.30.0",
+]
+
+[project.optional-dependencies]
+evidence = ["helios-core[evidence]"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "reportlab>=4.0",  # crawler test fixtures render PDFs
+    "ruff>=0.6.0",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+helios-core = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
-packages = ["shared", "apps"]
+packages = ["apps"]
 
 [tool.pytest.ini_options]
 testpaths = ["apps/helios/tests"]
-pythonpath = ["shared", "apps/helios"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -24,3 +61,8 @@ disallow_untyped_defs = false
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = ["apps/helios-ds-generation", "apps/helios-ds-evaluation"]
+
+[tool.ruff.lint]
+# Errors only (syntax, undefined names) until the existing style findings are cleared.
+select = ["E9", "F63", "F7", "F82"]

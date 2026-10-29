@@ -18,7 +18,7 @@ import sys
 # Repo root: HELIOS_ROOT if set, else the conventional checkout location in the project.
 PROJECT_DIR = os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw")
 ROOT = os.environ.get("HELIOS_ROOT") or os.path.join(PROJECT_DIR, "helios")
-if not os.path.isdir(os.path.join(ROOT, "shared", "helios_core")):
+if not os.path.isdir(os.path.join(ROOT, "packages", "helios-core", "src", "helios_core")):
     raise SystemExit(f"helios checkout not found at {ROOT}; set HELIOS_ROOT to the repo directory")
 
 APP_DIR = os.path.join(ROOT, "apps", "helios-ds-generation")
@@ -35,7 +35,7 @@ if os.environ.get("HELIOS_DEV") == "1":
 
 print("starting helios-ds-generation:", " ".join(cmd), flush=True)
 python_paths = [
-    os.path.join(ROOT, "shared"),  # shared core package location (first)
+    os.path.join(ROOT, "packages", "helios-core", "src"),  # helios-core until the runtime installs wheels
     os.path.join(APP_DIR, "src"),  # helios_ds and helios_ds_generation packages
     ROOT,  # repo root for monorepo structure
 ]

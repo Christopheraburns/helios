@@ -7,8 +7,11 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 
 ROOT = os.environ.get("HELIOS_ROOT") or os.path.join(os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios")
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
+# Workbench Jobs run from the checkout, not an install: put the repo (for apps.*)
+# and helios-core's source on the path until the runtime installs wheels.
+for path in (ROOT, os.path.join(ROOT, "packages", "helios-core", "src")):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 RUNS_DIR = os.environ.get("HELIOS_RUNS_DIR") or os.path.join(ROOT, "runs")
 

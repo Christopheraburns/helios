@@ -5,7 +5,7 @@ import duckdb, pytest
 from helios_core.ossie import SemanticModel
 from helios_core.compiler import Compiler, SemanticRequest, Filter, Measure, CompileError
 
-ROOT = os.environ.get("HELIOS_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.environ.get("HELIOS_ROOT") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 TYPES = {"bigint": "BIGINT", "int": "INTEGER", "string": "VARCHAR", "date": "DATE"}
 
 
@@ -16,8 +16,7 @@ def model():
 
 @pytest.fixture(scope="module")
 def con():
-    runs = sorted(d for d in os.listdir(os.path.join(ROOT, "runs")) if d[0].isdigit())
-    h = json.load(open(os.path.join(ROOT, "runs", runs[-1], "harvest.json")))
+    h = json.load(open(os.path.join(os.path.dirname(__file__), "fixtures", "tpcds-harvest.json")))
     con = duckdb.connect(); con.execute("CREATE SCHEMA tpcds")
     keep = {"store_sales", "item", "date_dim", "store", "customer_demographics", "household_demographics", "income_band"}
     for t in h["tables"]:

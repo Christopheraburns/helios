@@ -17,7 +17,7 @@ import sys
 
 PROJECT_DIR = os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw")
 ROOT = os.environ.get("HELIOS_ROOT") or os.path.join(PROJECT_DIR, "helios")
-sys.path.insert(0, os.path.join(ROOT, "shared"))
+sys.path.insert(0, os.path.join(ROOT, "packages", "helios-core", "src"))
 sys.path.insert(0, os.path.join(ROOT, "apps", "helios-ds-generation", "src"))
 
 import cmlapi  # noqa: E402

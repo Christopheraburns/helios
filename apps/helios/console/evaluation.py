@@ -26,7 +26,7 @@ from helios_core.metadata import (
     MetadataRepository,
 )
 
-HERE = Path(__file__).resolve().parents[2]
+HERE = Path(__file__).resolve().parents[3]  # repo root
 BUILTIN_SUITE = HERE / "eval" / "tpcds-v1.json"
 
 

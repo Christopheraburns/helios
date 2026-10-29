@@ -339,7 +339,7 @@ def test_warm_up_loads_the_model_once_in_the_background(monkeypatch):
 
 
 def test_document_tools_need_an_authorized_caller():
-    from apps.helios.mcp import server as mcp_server
+    from apps.helios.mcp_server import server as mcp_server
 
     for result in (
         mcp_server.search_evidence("damage", model="sales"),

@@ -439,7 +439,7 @@ rm $CDSW_PROJECT_DIR/.helios-graph/ontology/versions/0.1.0/*
 Run the verification probe in any Helios session:
 ```bash
 cd /home/cdsw/helios
-PYTHONPATH=shared:. python scripts/verify_linkml.py
+uv run python scripts/verify_linkml.py
 ```
 
 This confirms:

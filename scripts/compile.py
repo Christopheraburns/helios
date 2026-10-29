@@ -1,10 +1,9 @@
 """Compile a semantic request from the command line.
 
-  python scripts/compile.py tpcds '{"metrics":["Store Sales Revenue"],"dimensions":["s_state","d_year"],"filters":[["d_year","=",2001]],"limit":20}'
-  python scripts/compile.py tpcds request.json --dialect duckdb --run   # --run executes against the configured Impala engine
+  uv run python scripts/compile.py tpcds '{"metrics":["Store Sales Revenue"],"dimensions":["s_state","d_year"],"filters":[["d_year","=",2001]],"limit":20}'
+  uv run python scripts/compile.py tpcds request.json --dialect duckdb --run   # --run executes against the configured Impala engine
 """
-import argparse, json, os, sys
-sys.path.insert(0, os.environ.get("HELIOS_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import argparse, json, os
 from helios_core.ossie import SemanticModel
 from helios_core.compiler import Compiler, SemanticRequest
 

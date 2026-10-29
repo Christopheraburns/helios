@@ -9,7 +9,7 @@ description = "Helios-DS: deterministic synthetic enterprise data generator"
 authors = [{name = "Helios Team"}]
 requires-python = ">=3.11"
 dependencies = [
-    "helios-core @ {path=../../shared/helios_core}",
+    "helios-core @ {path=../../packages/helios-core}",
     "fastapi>=0.100",
     "uvicorn>=0.23",
     "pydantic>=2.0",
@@ -34,7 +34,7 @@ packages = ["src/helios_ds"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src", "../../shared"]
+pythonpath = ["src", "../../packages/helios-core/src"]
 
 [tool.ruff]
 line-length = 100
@@ -48,7 +48,7 @@ extend-immutable-calls = ["fastapi.Query", "fastapi.Depends"]
 
 [tool.mypy]
 python_version = "3.11"
-mypy_path = "src:../../shared"
+mypy_path = "src:../../packages/helios-core/src"
 packages = ["helios_ds", "helios_ds_generation"]
 plugins = ["pydantic.mypy"]
 

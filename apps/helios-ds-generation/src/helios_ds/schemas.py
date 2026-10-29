@@ -316,5 +316,5 @@ class ExpectedResultRecord(BaseModel):
 # helios_index.* (crawler-discovered knowledge)
 # ============================================================================
 # Written only by the Helios crawler, never by the generator. The record models
-# live in shared/helios_core/index/records.py; the generator creates the ground
+# live in packages/helios-core/src/helios_core/index/records.py; the generator creates the ground
 # truth, the crawler discovers what it can, and the gap is measured.

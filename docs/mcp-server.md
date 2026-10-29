@@ -11,7 +11,7 @@ the complete identity, LLM, authorization, and query flow.
 
 Create an Application with:
 
-- script `helios/apps/mcp/app.py`;
+- script `helios/apps/helios/mcp_server/app.py`;
 - a stable subdomain such as `helios-mcp`;
 - the same standard PBJ Python 3.12 runtime used by the API;
 - **Enable Unauthenticated Access** selected at the Cloudera gateway.
