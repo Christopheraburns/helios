@@ -19,11 +19,13 @@ import sys
 sys.path.insert(0, os.path.join(os.environ.get("HELIOS_ROOT") or os.path.join(os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios"), "jobs"))
 from _common import audit_job, latest_run_id, read_json, run_path, write_json  # noqa: E402
 
-from helios_core.llm import llm_from_env  # noqa: E402
+from helios_core.llm import llm_from_settings  # noqa: E402
+from helios_core.settings import Settings  # noqa: E402
 from helios_core.propose import Proposer  # noqa: E402
 from helios_core.artifacts import ArtifactStore, model_id_for_run  # noqa: E402
 
-llm = llm_from_env()
+settings = Settings()
+llm = llm_from_settings(settings.llm)
 if llm is None:
     raise SystemExit("no LLM configured: set MISTRAL_API_KEY, ANTHROPIC_API_KEY, "
                      "or INFERENCE_BASE_URL / INFERENCE_MODEL for Cloudera AI Inference")
@@ -51,4 +53,4 @@ with audit_job("propose", run_id, model_id):
     print(f"datasets={len(result['datasets'])} relationships={len(result['relationships'])} "
           f"metrics={len(result['metrics'])} proposed_terms={len(result['glossary_terms'])} llm_calls={result['llm']['calls']}")
     write_json(run_path(run_id, "propose.json"), result)
-    ArtifactStore().write_proposal(model_id, run_id, result)
+    ArtifactStore.from_settings(settings).write_proposal(model_id, run_id, result)

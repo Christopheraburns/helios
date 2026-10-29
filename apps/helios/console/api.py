@@ -24,8 +24,7 @@ from helios_core import audit, authz
 from helios_core._pending import health as system_health
 from helios_core._pending import publication
 from helios_core._pending import review as review_store
-from helios_core import runs as runstore
-from helios_core.artifacts import ArtifactStore
+from apps.helios import runtime
 from helios_core.atlas import AtlasClient, AtlasError
 from helios_core.config import atlas_config
 from helios_core.domain import Model, Organization
@@ -47,7 +46,8 @@ from helios_core.metadata import (
     StoredConversation,
     EvaluationRun,
 )
-from helios_core.llm import llm_from_env
+from helios_core.llm import llm_from_settings
+from helios_core.settings import Settings
 from apps.helios.console.conversation import (
     MCPClientConfig,
     ConversationService,
@@ -487,7 +487,7 @@ def authorization_policy(
 
 def graph_repository(request: Request) -> GraphRepository:
     override = getattr(request.app.state, "graph_repository", None)
-    return override or ArtifactGraphRepository(ArtifactStore(runstore.ROOT))
+    return override or ArtifactGraphRepository(runtime.artifacts)
 
 
 def atlas_client(request: Request) -> AtlasClient:
@@ -710,16 +710,16 @@ def _model_overview(
         and nodes[edge.target].kind == "dataset"
     ]
 
-    known_runs = {run["id"]: run for run in runstore.list_runs()}
+    known_runs = {run["id"]: run for run in runtime.runs.list_runs()}
     latest_run_id = model.discovery_run_ids[-1] if model.discovery_run_ids else None
     latest_run = known_runs.get(latest_run_id) if latest_run_id else None
     unresolved_review_items: int | None = None
     review_status = "not_available"
     if latest_run_id:
-        proposal = runstore.load(latest_run_id, "propose")
+        proposal = runtime.runs.load(latest_run_id, "propose")
         if proposal is not None:
             review = review_store.load(
-                os.path.join(runstore.RUNS_DIR, latest_run_id, "review.json"),
+                os.path.join(runtime.runs.runs_dir, latest_run_id, "review.json"),
                 latest_run_id,
             )
             review_summary = review_store.summary(review, proposal)
@@ -798,7 +798,7 @@ def _latest_successful_run(model: Model, stage: str) -> dict | None:
         "propose": "proposed_at",
     }[stage]
     for run_id in reversed(model.discovery_run_ids):
-        artifact = runstore.load(run_id, stage)
+        artifact = runtime.runs.load(run_id, stage)
         if artifact is not None:
             return {
                 "run_id": run_id,
@@ -877,7 +877,7 @@ def _profile_details(model: Model, details: dict) -> dict:
 
     profile = None
     for run_id in reversed(model.discovery_run_ids):
-        profile = runstore.load(run_id, "profile")
+        profile = runtime.runs.load(run_id, "profile")
         if profile is not None:
             break
     if profile is None:
@@ -1005,11 +1005,11 @@ def _load_model_review(
         or ".." in run_id
     ):
         raise HTTPException(status_code=404, detail="review run not found for model")
-    run_dir = Path(runstore.RUNS_DIR) / run_id
-    proposal = runstore.load(run_id, "propose")
+    run_dir = Path(runtime.runs.runs_dir) / run_id
+    proposal = runtime.runs.load(run_id, "propose")
     if not proposal:
         raise HTTPException(status_code=404, detail="proposal not found")
-    harvest = runstore.load(run_id, "harvest") or {}
+    harvest = runtime.runs.load(run_id, "harvest") or {}
     review_path = run_dir / "review.json"
     return (
         model,
@@ -1123,7 +1123,7 @@ def _review_summary(
         review=review,
     )
     manifest_path = (
-        ArtifactStore(runstore.ROOT).directory(model_id, "published")
+        runtime.artifacts.directory(model_id, "published")
         / "manifest.json"
     )
     manifest = (
@@ -1277,9 +1277,7 @@ def _semantic_trace_evidence(
     verification_error: str | None = None
     if revision:
         try:
-            artifact_path = ArtifactStore(
-                runstore.ROOT
-            ).revision_ossie_path(
+            artifact_path = runtime.artifacts.revision_ossie_path(
                 revision.model_id, revision.id, "json"
             )
             with artifact_path.open() as handle:
@@ -2179,7 +2177,7 @@ async def create_model_evaluation(
             422,
             "configure a session model provider before starting an evaluation",
         )
-    baseline_llm = llm_from_env()
+    baseline_llm = llm_from_settings(Settings().llm)
     if baseline_llm is None:
         raise HTTPException(503, "the project-default LLM is not configured")
     candidate_llm = llm_for_settings(candidate_settings)
@@ -2883,7 +2881,7 @@ def get_model_status(
         checker = getattr(
             request.app.state,
             "system_health_checker",
-            system_health.collect_infrastructure_status,
+            lambda metadata: system_health.collect_infrastructure_status(metadata, Settings()),
         )
         infrastructure = list(checker(metadata))
 
@@ -3274,7 +3272,7 @@ def publish_model_review(
     )
     try:
         result = publication.publish_reviewed_proposal(
-            ArtifactStore(runstore.ROOT),
+            runtime.artifacts,
             model_id=context.model.id,
             model_name=publication.model_name_for_proposal(proposal, harvest),
             run_id=run_id,
@@ -3852,7 +3850,7 @@ def get_model_runs(
         Depends(authorize_model(authz.Action.MODEL_READ)),
     ],
 ) -> dict:
-    known = {run["id"]: run for run in runstore.list_runs()}
+    known = {run["id"]: run for run in runtime.runs.list_runs()}
     return {
         "model_id": context.model.id,
         "runs": [
@@ -3894,7 +3892,7 @@ def get_model_run(
     run_id: str,
 ) -> dict:
     _require_model_run(context.model, run_id)
-    run = runstore.detail(run_id)
+    run = runtime.runs.detail(run_id)
     if not any(run["stages"].values()):
         raise HTTPException(404, "run artifacts not found")
     return {
@@ -3919,7 +3917,7 @@ def get_model_run_profile_summary(
         authz.Action.DATASOURCE_READ,
         _resource_for_action(context.model, authz.Action.DATASOURCE_READ),
     )
-    summary = runstore.profile_summary(run_id)
+    summary = runtime.runs.profile_summary(run_id)
     if summary is None:
         raise HTTPException(404, "run profile summary not found")
     return {
@@ -3949,7 +3947,7 @@ def get_model_run_table_profile(
         authz.Action.DATASOURCE_READ,
         _resource_for_action(context.model, authz.Action.DATASOURCE_READ),
     )
-    table = runstore.table_profile(run_id, table_id)
+    table = runtime.runs.table_profile(run_id, table_id)
     if table is None:
         raise HTTPException(404, "table profile not found")
     return {

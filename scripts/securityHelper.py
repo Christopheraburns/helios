@@ -6,6 +6,7 @@ from helios_core.domain import (
     Organization,
 )
 from helios_core.metadata import PrincipalRecord, SQLiteMetadataRepository
+from helios_core.settings import Settings
 
 username = "cburns"
 principal_id = f"cloudera-workbench:{username}"
@@ -13,7 +14,7 @@ organization_id = "default"
 data_source_id = "tpcds-impala"
 model_id = "tpcds"
 
-repo = SQLiteMetadataRepository()
+repo = SQLiteMetadataRepository.from_settings(Settings())
 repo.migrate()
 
 repo.save_organization(

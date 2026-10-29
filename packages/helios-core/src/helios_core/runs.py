@@ -5,10 +5,11 @@ import json
 import math
 import os
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-ROOT = os.environ.get("HELIOS_ROOT") or os.path.join(os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios")
-RUNS_DIR = os.environ.get("HELIOS_RUNS_DIR") or os.path.join(ROOT, "runs")
+if TYPE_CHECKING:
+    from helios_core.settings import Settings
+
 
 STAGES = ("harvest", "profile", "propose")
 LIFECYCLE_STATUSES = (
@@ -77,36 +78,6 @@ def _artifact_model_id(artifacts: dict[str, dict | None]) -> str | None:
         ),
         None,
     )
-
-
-def list_runs() -> list[dict]:
-    if not os.path.isdir(RUNS_DIR):
-        return []
-    out = []
-    for rid in sorted(os.listdir(RUNS_DIR), reverse=True):
-        d = os.path.join(RUNS_DIR, rid)
-        if not os.path.isdir(d):
-            continue
-        item = detail(rid)
-        item["updated"] = datetime.fromtimestamp(
-            os.path.getmtime(d), tz=timezone.utc
-        ).strftime("%Y-%m-%d %H:%M UTC")
-        out.append(item)
-    return out
-
-
-def load(run_id: str, stage: str) -> dict | None:
-    if stage not in STAGES or not _valid_run_id(run_id):
-        return None
-    p = os.path.join(RUNS_DIR, run_id, f"{stage}.json")
-    if not os.path.exists(p):
-        return None
-    try:
-        with open(p) as f:
-            value = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return None
-    return value if isinstance(value, dict) else None
 
 
 _RELATIONSHIP_FIELDS = (
@@ -204,275 +175,310 @@ def _finite_number(value: Any) -> bool:
     )
 
 
-def profile_summary(run_id: str) -> dict | None:
-    """Return safe physical profile evidence from one exact historical run."""
-    harvest = load(run_id, "harvest")
-    profile = load(run_id, "profile")
-    if harvest is None and profile is None:
-        return None
-    harvest = harvest or {}
-    profile = profile or {}
-    harvested = {
-        identity: table
-        for table in _as_list(harvest.get("tables"))
-        if isinstance(table, dict)
-        if (identity := _table_identity(table)) is not None
-    }
-    profiled = _as_dict(profile.get("tables"))
-    tables = []
-    for identity in sorted(set(harvested) | set(profiled)):
-        harvested_table = harvested.get(identity, {})
-        profiled_table = (
-            profiled.get(identity)
-            if isinstance(profiled.get(identity), dict)
-            else {}
-        )
-        stats = _as_dict(profiled_table.get("stats"))
-        columns = _as_dict(stats.get("columns"))
-        harvested_columns = _as_list(harvested_table.get("columns"))
-        tables.append(
-            {
-                "table_id": identity,
-                "harvested": identity in harvested,
-                "profiled": identity in profiled and bool(profiled_table),
-                "column_count": (
-                    len(columns) if columns else len(harvested_columns)
-                ),
-                "row_count": next(
-                    (
-                        value
-                        for value in (
-                            stats.get("row_count"),
-                            harvested_table.get("row_count"),
-                        )
-                        if _finite_number(value)
-                    ),
-                    None,
-                ),
-                "primary_key_candidates": _primary_keys(profiled_table),
-            }
-        )
-    return {
-        "run_id": run_id,
-        "profiled_at": (
-            profile.get("profiled_at")
-            if isinstance(profile.get("profiled_at"), str)
-            else None
-        ),
-        "engine": next(
-            (
-                value
-                for value in (profile.get("engine"), harvest.get("engine"))
-                if isinstance(value, str)
-            ),
-            None,
-        ),
-        "tables": tables,
-        "relationships": _relationships(profile, "relationships"),
-        "suggested_relationships": _relationships(
-            profile, "suggested_relationships"
-        ),
-        "rejected_candidates": _relationships(profile, "rejected_candidates"),
-    }
+class RunStore:
+    """Discovery runs on disk: <runs_dir>/<run_id>/{harvest,profile,propose,review}.json."""
 
+    def __init__(self, runs_dir: str | os.PathLike[str]):
+        self.runs_dir = str(runs_dir)
 
-def table_profile(run_id: str, table_identity: str) -> dict | None:
-    """Return one historical physical table profile without selecting a newer run."""
-    profile = load(run_id, "profile")
-    if profile is None:
-        return None
-    table = _as_dict(profile.get("tables")).get(table_identity)
-    if not isinstance(table, dict):
-        return None
-    stats = _as_dict(table.get("stats"))
-    columns = _as_dict(stats.get("columns"))
-    harvest = load(run_id, "harvest") or {}
-    glossary = _glossary_matches(harvest)
-    projected_columns = {
-        name: {
-            **_safe_column_profile(column),
-            "glossary_terms": glossary.get(f"{table_identity}.{name}", []),
+    @classmethod
+    def from_settings(cls, settings: Settings) -> RunStore:
+        return cls(settings.runs_dir)
+
+    def list_runs(self) -> list[dict]:
+        if not os.path.isdir(self.runs_dir):
+            return []
+        out = []
+        for rid in sorted(os.listdir(self.runs_dir), reverse=True):
+            d = os.path.join(self.runs_dir, rid)
+            if not os.path.isdir(d):
+                continue
+            item = self.detail(rid)
+            item["updated"] = datetime.fromtimestamp(
+                os.path.getmtime(d), tz=timezone.utc
+            ).strftime("%Y-%m-%d %H:%M UTC")
+            out.append(item)
+        return out
+
+    def load(self, run_id: str, stage: str) -> dict | None:
+        if stage not in STAGES or not _valid_run_id(run_id):
+            return None
+        p = os.path.join(self.runs_dir, run_id, f"{stage}.json")
+        if not os.path.exists(p):
+            return None
+        try:
+            with open(p) as f:
+                value = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+        return value if isinstance(value, dict) else None
+
+    def profile_summary(self, run_id: str) -> dict | None:
+        """Return safe physical profile evidence from one exact historical run."""
+        harvest = self.load(run_id, "harvest")
+        profile = self.load(run_id, "profile")
+        if harvest is None and profile is None:
+            return None
+        harvest = harvest or {}
+        profile = profile or {}
+        harvested = {
+            identity: table
+            for table in _as_list(harvest.get("tables"))
+            if isinstance(table, dict)
+            if (identity := _table_identity(table)) is not None
         }
-        for name, column in columns.items()
-        if isinstance(name, str) and isinstance(column, dict)
-    }
-    relationships = _relationships(profile, "relationships")
-    return {
-        "run_id": run_id,
-        "table_id": table_identity,
-        "profiled_at": (
-            profile.get("profiled_at")
-            if isinstance(profile.get("profiled_at"), str)
-            else None
-        ),
-        "engine": (
-            profile.get("engine")
-            if isinstance(profile.get("engine"), str)
-            else None
-        ),
-        "row_count": (
-            stats.get("row_count")
-            if _finite_number(stats.get("row_count"))
-            else None
-        ),
-        "column_count": len(projected_columns),
-        "columns": projected_columns,
-        "primary_key_candidates": _primary_keys(table),
-        "relationships": [
-            relationship
-            for relationship in relationships
-            if table_identity
-            in {
-                relationship.get("from"),
-                relationship.get("to"),
-                relationship.get("from_table"),
-                relationship.get("to_table"),
+        profiled = _as_dict(profile.get("tables"))
+        tables = []
+        for identity in sorted(set(harvested) | set(profiled)):
+            harvested_table = harvested.get(identity, {})
+            profiled_table = (
+                profiled.get(identity)
+                if isinstance(profiled.get(identity), dict)
+                else {}
+            )
+            stats = _as_dict(profiled_table.get("stats"))
+            columns = _as_dict(stats.get("columns"))
+            harvested_columns = _as_list(harvested_table.get("columns"))
+            tables.append(
+                {
+                    "table_id": identity,
+                    "harvested": identity in harvested,
+                    "profiled": identity in profiled and bool(profiled_table),
+                    "column_count": (
+                        len(columns) if columns else len(harvested_columns)
+                    ),
+                    "row_count": next(
+                        (
+                            value
+                            for value in (
+                                stats.get("row_count"),
+                                harvested_table.get("row_count"),
+                            )
+                            if _finite_number(value)
+                        ),
+                        None,
+                    ),
+                    "primary_key_candidates": _primary_keys(profiled_table),
+                }
+            )
+        return {
+            "run_id": run_id,
+            "profiled_at": (
+                profile.get("profiled_at")
+                if isinstance(profile.get("profiled_at"), str)
+                else None
+            ),
+            "engine": next(
+                (
+                    value
+                    for value in (profile.get("engine"), harvest.get("engine"))
+                    if isinstance(value, str)
+                ),
+                None,
+            ),
+            "tables": tables,
+            "relationships": _relationships(profile, "relationships"),
+            "suggested_relationships": _relationships(
+                profile, "suggested_relationships"
+            ),
+            "rejected_candidates": _relationships(profile, "rejected_candidates"),
+        }
+
+    def table_profile(self, run_id: str, table_identity: str) -> dict | None:
+        """Return one historical physical table profile without selecting a newer run."""
+        profile = self.load(run_id, "profile")
+        if profile is None:
+            return None
+        table = _as_dict(profile.get("tables")).get(table_identity)
+        if not isinstance(table, dict):
+            return None
+        stats = _as_dict(table.get("stats"))
+        columns = _as_dict(stats.get("columns"))
+        harvest = self.load(run_id, "harvest") or {}
+        glossary = _glossary_matches(harvest)
+        projected_columns = {
+            name: {
+                **_safe_column_profile(column),
+                "glossary_terms": glossary.get(f"{table_identity}.{name}", []),
             }
-        ],
-    }
+            for name, column in columns.items()
+            if isinstance(name, str) and isinstance(column, dict)
+        }
+        relationships = _relationships(profile, "relationships")
+        return {
+            "run_id": run_id,
+            "table_id": table_identity,
+            "profiled_at": (
+                profile.get("profiled_at")
+                if isinstance(profile.get("profiled_at"), str)
+                else None
+            ),
+            "engine": (
+                profile.get("engine")
+                if isinstance(profile.get("engine"), str)
+                else None
+            ),
+            "row_count": (
+                stats.get("row_count")
+                if _finite_number(stats.get("row_count"))
+                else None
+            ),
+            "column_count": len(projected_columns),
+            "columns": projected_columns,
+            "primary_key_candidates": _primary_keys(table),
+            "relationships": [
+                relationship
+                for relationship in relationships
+                if table_identity
+                in {
+                    relationship.get("from"),
+                    relationship.get("to"),
+                    relationship.get("from_table"),
+                    relationship.get("to_table"),
+                }
+            ],
+        }
 
-
-def detail(run_id: str) -> dict:
-    """Project persisted artifacts into an evidence-backed run DTO."""
-    artifacts = {stage: load(run_id, stage) for stage in STAGES}
-    timestamps = {
-        stage: (
-            artifact.get(_STAGE_TIMESTAMPS[stage]) or None
-            if artifact is not None
-            else None
+    def detail(self, run_id: str) -> dict:
+        """Project persisted artifacts into an evidence-backed run DTO."""
+        artifacts = {stage: self.load(run_id, stage) for stage in STAGES}
+        timestamps = {
+            stage: (
+                artifact.get(_STAGE_TIMESTAMPS[stage]) or None
+                if artifact is not None
+                else None
+            )
+            for stage, artifact in artifacts.items()
+        }
+        parsed = [
+            timestamp
+            for value in timestamps.values()
+            if (timestamp := _parse_timestamp(value)) is not None
+        ]
+        started_at = min(parsed).isoformat() if parsed else None
+        completed_at = max(parsed).isoformat() if parsed else None
+        duration_seconds = (
+            (max(parsed) - min(parsed)).total_seconds() if len(parsed) > 1 else None
         )
-        for stage, artifact in artifacts.items()
-    }
-    parsed = [
-        timestamp
-        for value in timestamps.values()
-        if (timestamp := _parse_timestamp(value)) is not None
-    ]
-    started_at = min(parsed).isoformat() if parsed else None
-    completed_at = max(parsed).isoformat() if parsed else None
-    duration_seconds = (
-        (max(parsed) - min(parsed)).total_seconds() if len(parsed) > 1 else None
-    )
-    harvest = artifacts["harvest"] or {}
-    profile = artifacts["profile"] or {}
-    proposal = artifacts["propose"] or {}
-    harvest_tables = [
-        table
-        for table in _as_list(harvest.get("tables"))
-        if isinstance(table, dict)
-    ]
-    profile_tables = _as_dict(profile.get("tables"))
-    proposal_counts = _proposal_counts(artifacts["propose"])
-    phases = []
-    for stage in STAGES:
-        artifact = artifacts[stage]
-        counts: dict[str, int] = {}
-        if stage == "harvest" and artifact is not None:
-            tables = [
-                table
-                for table in _as_list(artifact.get("tables"))
-                if isinstance(table, dict)
-            ]
-            counts = {
-                "tables": len(tables),
-                "columns": sum(
-                    len(_as_list(table.get("columns")))
-                    for table in tables
-                ),
-                "glossary_terms": len(_as_list(artifact.get("glossary_terms"))),
-                "queries": len(
-                    _as_list(_as_dict(artifact.get("queries")).get("statements"))
-                ),
-            }
-        elif stage == "profile" and artifact is not None:
-            counts = {
-                "tables": len(_as_dict(artifact.get("tables"))),
-                "relationships": len(_as_list(artifact.get("relationships"))),
-                "suggested_relationships": len(
-                    _as_list(artifact.get("suggested_relationships"))
-                ),
-                "rejected_candidates": len(
-                    _as_list(artifact.get("rejected_candidates"))
-                ),
-            }
-        elif stage == "propose" and artifact is not None:
-            counts = proposal_counts
-        phases.append(
-            {
-                "id": stage,
-                "name": stage.title(),
-                "status": "completed" if artifact is not None else None,
-                "started_at": None,
-                "completed_at": timestamps[stage],
-                "duration_seconds": None,
-                "counts": counts,
-                "available": artifact is not None,
-            }
-        )
+        harvest = artifacts["harvest"] or {}
+        profile = artifacts["profile"] or {}
+        proposal = artifacts["propose"] or {}
+        harvest_tables = [
+            table
+            for table in _as_list(harvest.get("tables"))
+            if isinstance(table, dict)
+        ]
+        profile_tables = _as_dict(profile.get("tables"))
+        proposal_counts = _proposal_counts(artifacts["propose"])
+        phases = []
+        for stage in STAGES:
+            artifact = artifacts[stage]
+            counts: dict[str, int] = {}
+            if stage == "harvest" and artifact is not None:
+                tables = [
+                    table
+                    for table in _as_list(artifact.get("tables"))
+                    if isinstance(table, dict)
+                ]
+                counts = {
+                    "tables": len(tables),
+                    "columns": sum(
+                        len(_as_list(table.get("columns")))
+                        for table in tables
+                    ),
+                    "glossary_terms": len(_as_list(artifact.get("glossary_terms"))),
+                    "queries": len(
+                        _as_list(_as_dict(artifact.get("queries")).get("statements"))
+                    ),
+                }
+            elif stage == "profile" and artifact is not None:
+                counts = {
+                    "tables": len(_as_dict(artifact.get("tables"))),
+                    "relationships": len(_as_list(artifact.get("relationships"))),
+                    "suggested_relationships": len(
+                        _as_list(artifact.get("suggested_relationships"))
+                    ),
+                    "rejected_candidates": len(
+                        _as_list(artifact.get("rejected_candidates"))
+                    ),
+                }
+            elif stage == "propose" and artifact is not None:
+                counts = proposal_counts
+            phases.append(
+                {
+                    "id": stage,
+                    "name": stage.title(),
+                    "status": "completed" if artifact is not None else None,
+                    "started_at": None,
+                    "completed_at": timestamps[stage],
+                    "duration_seconds": None,
+                    "counts": counts,
+                    "available": artifact is not None,
+                }
+            )
 
-    # A complete proposal is evidence that this artifact-backed pipeline finished.
-    status = "completed" if artifacts["propose"] is not None else None
-    return {
-        "id": run_id,
-        "type": "discovery",
-        "model_id": _artifact_model_id(artifacts),
-        "data_source": {
-            "engine": harvest.get("engine") or profile.get("engine") or None,
-            "databases": _as_list(harvest.get("databases")),
-        },
-        "initiator": None,
-        "started_at": started_at,
-        "completed_at": completed_at if status else None,
-        "duration_seconds": duration_seconds if status else None,
-        "status": status,
-        "progress": 100 if status else None,
-        "warnings": [],
-        "errors": [],
-        "stages": {
-            stage: artifacts[stage] is not None for stage in STAGES
-        },
-        "phases": phases,
-        "counts": {
-            "discovered": {
-                "tables": len(harvest_tables),
-                "columns": sum(
-                    len(_as_list(table.get("columns")))
-                    for table in harvest_tables
-                ),
-                "glossary_terms": len(_as_list(harvest.get("glossary_terms"))),
+        # A complete proposal is evidence that this artifact-backed pipeline finished.
+        status = "completed" if artifacts["propose"] is not None else None
+        return {
+            "id": run_id,
+            "type": "discovery",
+            "model_id": _artifact_model_id(artifacts),
+            "data_source": {
+                "engine": harvest.get("engine") or profile.get("engine") or None,
+                "databases": _as_list(harvest.get("databases")),
             },
-            "profiled": {
-                "tables": len(profile_tables),
-                "relationships": len(_as_list(profile.get("relationships"))),
-                "suggested_relationships": len(
-                    _as_list(profile.get("suggested_relationships"))
-                ),
-                "rejected_candidates": len(
-                    _as_list(profile.get("rejected_candidates"))
-                ),
+            "initiator": None,
+            "started_at": started_at,
+            "completed_at": completed_at if status else None,
+            "duration_seconds": duration_seconds if status else None,
+            "status": status,
+            "progress": 100 if status else None,
+            "warnings": [],
+            "errors": [],
+            "stages": {
+                stage: artifacts[stage] is not None for stage in STAGES
             },
-            "proposed": proposal_counts,
-        },
-        "provenance": {
-            "llm": proposal.get("llm") if isinstance(proposal.get("llm"), dict) else None
-        },
-    }
+            "phases": phases,
+            "counts": {
+                "discovered": {
+                    "tables": len(harvest_tables),
+                    "columns": sum(
+                        len(_as_list(table.get("columns")))
+                        for table in harvest_tables
+                    ),
+                    "glossary_terms": len(_as_list(harvest.get("glossary_terms"))),
+                },
+                "profiled": {
+                    "tables": len(profile_tables),
+                    "relationships": len(_as_list(profile.get("relationships"))),
+                    "suggested_relationships": len(
+                        _as_list(profile.get("suggested_relationships"))
+                    ),
+                    "rejected_candidates": len(
+                        _as_list(profile.get("rejected_candidates"))
+                    ),
+                },
+                "proposed": proposal_counts,
+            },
+            "provenance": {
+                "llm": proposal.get("llm") if isinstance(proposal.get("llm"), dict) else None
+            },
+        }
 
-
-def summary(run_id: str) -> dict:
-    h, p = load(run_id, "harvest"), load(run_id, "profile")
-    s = {"id": run_id, "model_id": (h or {}).get("model_id") or (p or {}).get("model_id"),
-         "harvest": None, "profile": None,
-         "propose": os.path.exists(os.path.join(RUNS_DIR, run_id, "propose.json"))}
-    if h:
-        s["harvest"] = {"at": h.get("harvested_at", ""), "engine": h.get("engine", ""), "databases": h.get("databases", []),
-                        "tables": len(h.get("tables", [])), "columns": sum(len(t["columns"]) for t in h.get("tables", [])),
-                        "glossary_terms": len(h.get("glossary_terms", [])),
-                        "queries": len(h.get("queries", {}).get("statements", [])),
-                        "query_sources": h.get("queries", {}).get("sources", [])}
-    if p:
-        s["profile"] = {"at": p.get("profiled_at", ""), "tables": len(p.get("tables", {})),
-                        "relationships": len(p.get("relationships", [])),
-                        "suggested": len(p.get("suggested_relationships", [])),
-                        "rejected": len(p.get("rejected_candidates", []))}
-    return s
+    def summary(self, run_id: str) -> dict:
+        h, p = self.load(run_id, "harvest"), self.load(run_id, "profile")
+        s = {"id": run_id, "model_id": (h or {}).get("model_id") or (p or {}).get("model_id"),
+             "harvest": None, "profile": None,
+             "propose": os.path.exists(os.path.join(self.runs_dir, run_id, "propose.json"))}
+        if h:
+            s["harvest"] = {"at": h.get("harvested_at", ""), "engine": h.get("engine", ""), "databases": h.get("databases", []),
+                            "tables": len(h.get("tables", [])), "columns": sum(len(t["columns"]) for t in h.get("tables", [])),
+                            "glossary_terms": len(h.get("glossary_terms", [])),
+                            "queries": len(h.get("queries", {}).get("statements", [])),
+                            "query_sources": h.get("queries", {}).get("sources", [])}
+        if p:
+            s["profile"] = {"at": p.get("profiled_at", ""), "tables": len(p.get("tables", {})),
+                            "relationships": len(p.get("relationships", [])),
+                            "suggested": len(p.get("suggested_relationships", [])),
+                            "rejected": len(p.get("rejected_candidates", []))}
+        return s

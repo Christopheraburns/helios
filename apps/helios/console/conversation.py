@@ -23,9 +23,10 @@ from helios_core.llm import (
     LLMClient,
     LLMError,
     LLMTimeoutError,
-    llm_from_env,
+    llm_from_settings,
 )
 from helios_core.metadata import MetadataRepository, SemanticRevision
+from helios_core.settings import Settings
 from helios_core.tracing import TraceRecorder, utcnow
 
 LOGGER = logging.getLogger(__name__)
@@ -140,7 +141,7 @@ class ConversationService:
         max_tool_rounds: int = 6,
         trace_repository: MetadataRepository | None = None,
     ) -> "ConversationService":
-        llm = llm_from_env()
+        llm = llm_from_settings(Settings().llm)
         if llm is None:
             raise ConversationUnavailable(
                 "The conversation LLM is not configured"
@@ -165,7 +166,7 @@ class ConversationService:
         trace_run_id: str | None = None,
     ) -> dict[str, Any]:
         context = audit.current_context()
-        semantic_revision = ArtifactStore().ensure_published_revision(
+        semantic_revision = ArtifactStore.from_settings(Settings()).ensure_published_revision(
             model_id
         )
         semantic_revision_id = (

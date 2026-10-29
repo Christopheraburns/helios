@@ -17,7 +17,7 @@ from .repository import (
     TraceRun,
     TraceSpan,
 )
-from .sqlite import SQLiteMetadataRepository, default_database_path
+from .sqlite import SQLiteMetadataRepository
 
 __all__ = [
     "AuditEvent",
@@ -36,5 +36,4 @@ __all__ = [
     "StoredOrganization",
     "TraceRun",
     "TraceSpan",
-    "default_database_path",
 ]

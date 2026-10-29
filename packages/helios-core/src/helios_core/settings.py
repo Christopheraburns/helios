@@ -223,6 +223,18 @@ def _config_file_source(settings_cls: type[BaseSettings]) -> PydanticBaseSetting
     return InitSettingsSource(settings_cls, init_kwargs=values)
 
 
+SECRET_NAME_PARTS = ("credential", "password", "secret", "token", "api_key", "apikey")
+
+
+def environment_secret_values() -> set[str]:
+    """Values of environment variables whose names look secret, for redaction."""
+    return {
+        value
+        for name, value in os.environ.items()
+        if value and len(value) >= 4 and any(part in name.lower() for part in SECRET_NAME_PARTS)
+    }
+
+
 def _env(name: str) -> str | None:
     value = os.environ.get(name)
     return value if value not in (None, "") else None

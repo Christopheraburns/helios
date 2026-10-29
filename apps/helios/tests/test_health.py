@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from helios_core._pending import health
+from helios_core.settings import Settings
 
 
 class Metadata:
@@ -28,11 +29,11 @@ def test_infrastructure_health_is_independent_and_redacts_failures(
     monkeypatch.setattr(health, "impala_config", lambda: None)
     monkeypatch.setattr(
         health,
-        "llm_from_env",
-        lambda: SimpleNamespace(ping=lambda: True),
+        "llm_from_settings",
+        lambda llm: SimpleNamespace(ping=lambda: True),
     )
 
-    components = health.collect_infrastructure_status(Metadata())
+    components = health.collect_infrastructure_status(Metadata(), Settings())
 
     assert [component.status for component in components] == [
         "healthy",

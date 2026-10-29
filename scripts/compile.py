@@ -8,6 +8,7 @@ import json
 import os
 from helios_core.ossie import SemanticModel
 from helios_core.compiler import Compiler, SemanticRequest
+from helios_core.settings import Settings
 
 ap = argparse.ArgumentParser()
 ap.add_argument("model")
@@ -16,7 +17,7 @@ ap.add_argument("--dialect", default="hive")
 ap.add_argument("--run", action="store_true")
 a = ap.parse_args()
 req = SemanticRequest.from_dict(json.load(open(a.request)) if os.path.exists(a.request) else json.loads(a.request))
-model = SemanticModel.load_published(a.model)
+model = SemanticModel.load_published(a.model, Settings().artifacts_dir)
 out = Compiler(model).compile(req, dialect=a.dialect)
 print(f"-- fact: {out.fact}; joins: {', '.join(out.joins) or 'none'}\n{out.sql}")
 if a.run:

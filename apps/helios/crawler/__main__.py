@@ -86,11 +86,12 @@ def embed_hook(development_index: bool, strategy: str = "deterministic") -> Any:
 def llm_extractor(settings: Any, classes: list[str]) -> Any:
     """The LLM crawler's extractor on the project's default model, or None with
     the reason printed."""
-    from helios_core.llm import llm_from_env
+    from helios_core.llm import llm_from_settings
+    from helios_core.settings import Settings as HeliosSettings
 
     from .llm_arm import LlmExtractor, claim_shapes, load_vocabulary
 
-    llm = llm_from_env()
+    llm = llm_from_settings(HeliosSettings().llm)
     if llm is None:
         print("The llm strategy needs the project's LLM (LLM_PROVIDER and its key).")
         return None
@@ -173,8 +174,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.source:
         from helios_core.metadata import SQLiteMetadataRepository
+        from helios_core.settings import Settings as HeliosSettings
 
-        source = SQLiteMetadataRepository().data_source(args.source)
+        source = SQLiteMetadataRepository.from_settings(HeliosSettings()).data_source(args.source)
         if source is None:
             print(f"No data source {args.source!r} in the Helios metadata store.")
             return 2

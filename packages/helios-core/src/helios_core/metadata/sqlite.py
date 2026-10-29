@@ -10,7 +10,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator
+from typing import TYPE_CHECKING, Iterator
 
 from helios_core import authz
 from helios_core.domain import (
@@ -21,6 +21,9 @@ from helios_core.domain import (
 )
 
 from .migrations import MIGRATIONS
+
+if TYPE_CHECKING:
+    from helios_core.settings import Settings
 from .repository import (
     AuditEvent,
     AuditSession,
@@ -42,30 +45,26 @@ LOGGER = logging.getLogger(__name__)
 SUPPORTED_JOURNAL_MODES = frozenset({"DELETE", "TRUNCATE", "PERSIST", "WAL"})
 
 
-def default_database_path() -> str:
-    root = os.environ.get("HELIOS_ROOT") or os.path.join(
-        os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios"
-    )
-    return os.environ.get("HELIOS_METADATA_DB") or os.path.join(root, "state", "helios.db")
-
-
 class SQLiteMetadataRepository:
     """Transactional SQLite repository with one connection per operation."""
 
-    def __init__(self, path: str | os.PathLike[str] | None = None):
-        self.path = str(path or default_database_path())
+    def __init__(self, path: str | os.PathLike[str], *, journal_mode: str = "DELETE"):
+        self.path = str(path)
+        self.journal_mode = journal_mode
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> SQLiteMetadataRepository:
+        return cls(settings.metadata_db, journal_mode=settings.sqlite_journal_mode)
 
     def migrate(self) -> None:
         if self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with self._connection() as connection:
             if self.path != ":memory:":
-                requested_mode = (
-                    os.environ.get("HELIOS_SQLITE_JOURNAL_MODE", "DELETE").strip().upper()
-                )
+                requested_mode = self.journal_mode.strip().upper()
                 if requested_mode not in SUPPORTED_JOURNAL_MODES:
                     raise ValueError(
-                        "HELIOS_SQLITE_JOURNAL_MODE must be one of "
+                        "the SQLite journal mode must be one of "
                         + ", ".join(sorted(SUPPORTED_JOURNAL_MODES))
                     )
                 actual_mode = str(connection.execute("PRAGMA journal_mode").fetchone()[0]).upper()

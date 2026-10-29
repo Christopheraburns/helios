@@ -21,7 +21,8 @@ from pydantic import BaseModel, Field
 from helios_core import audit, authz
 from helios_core.domain import Model, Organization
 from helios_core.index import runs as index_runs
-from helios_core.llm import LLMClient, LLMError, LLMTimeoutError, llm_from_env
+from helios_core.llm import LLMClient, LLMError, LLMTimeoutError, llm_from_settings
+from helios_core.settings import Settings
 from helios_core.metadata import MetadataRepository
 from helios_core.tracing import TraceRecorder, utcnow
 from apps.helios.console import ontology
@@ -914,7 +915,7 @@ def assistant_service(
             if session_id is not None
             else None
         )
-        llm = llm_for_settings(settings) if settings is not None else llm_from_env()
+        llm = llm_for_settings(settings) if settings is not None else llm_from_settings(Settings().llm)
     except ValueError as exc:
         raise HTTPException(503, str(exc)) from exc
     if llm is None:

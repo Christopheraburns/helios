@@ -57,9 +57,13 @@ from helios_core.llm import (
     LLMTimeoutError,
     ToolCall,
     ToolTurn,
-    llm_from_env,
+    llm_from_settings,
 )
 from helios_core.llm import client as llm_module
+from helios_core.artifacts import ArtifactStore
+from helios_core.runs import RunStore
+from helios_core.settings import Settings
+from apps.helios import runtime
 from helios_core.domain import (
     DataSource,
     DataSourceReference,
@@ -240,7 +244,7 @@ def test_signed_delegation_round_trip_and_tamper_rejection():
 def test_mcp_model_store_keeps_the_turns_pinned_revision(
     tmp_path, monkeypatch
 ):
-    artifacts = mcp_server.ArtifactStore(tmp_path)
+    artifacts = ArtifactStore(tmp_path)
     first, problems = build_ossie(
         draft_model(),
         "Customer model",
@@ -364,7 +368,7 @@ def test_mistral_environment_uses_server_side_openai_compatible_client(
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("MISTRAL_API_KEY", "server-side-mistral-secret")
 
-    client = llm_from_env()
+    client = llm_from_settings(Settings().llm)
 
     assert client is not None
     assert client.provider == "mistral"
@@ -759,7 +763,7 @@ def test_mcp_compiles_repository_tpcds_ossie(monkeypatch):
     # The repository's own published model, wherever HELIOS_ROOT points.
     repo_root = Path(__file__).resolve().parents[3]
     monkeypatch.setattr(
-        mcp_server, "artifact_store", mcp_server.ArtifactStore(repo_root)
+        mcp_server, "artifact_store", ArtifactStore(repo_root)
     )
     _, model = mcp_server.ModelStore().load("tpcds")
 
@@ -786,18 +790,19 @@ def test_mcp_model_store_converts_proposal_fallback(
     tmp_path,
     monkeypatch,
 ):
-    artifacts = mcp_server.ArtifactStore(tmp_path / "artifacts")
+    artifacts = ArtifactStore(tmp_path / "artifacts")
     runs = tmp_path / "runs"
     run = runs / "run-1"
     run.mkdir(parents=True)
     (run / "propose.json").write_text(json.dumps(draft_model()))
     monkeypatch.setattr(mcp_server, "artifact_store", artifacts)
-    monkeypatch.setattr(mcp_server.runstore, "RUNS_DIR", str(runs))
+    run_store = RunStore(runs)
     monkeypatch.setattr(
-        mcp_server.runstore,
+        run_store,
         "list_runs",
         lambda: [{"id": "run-1", "stages": {"propose": True}}],
     )
+    monkeypatch.setattr(runtime, "runs", run_store)
 
     source, model = mcp_server.ModelStore().load("customer360")
 

@@ -66,10 +66,9 @@ Each Cloudera AI project pulls from this single Git repo:
 ### Deployment Notes
 
 - **helios-core** (`packages/helios-core/src/helios_core/`): used by all 3 projects
-- **Workbench**: Applications and Jobs run from the checkout, not an install. Their
-  launchers put `packages/helios-core/src` and the repo root on `PYTHONPATH`, and third-party
-  dependencies come from `.helios-python` (see `docs/ui-deployment.md`). This goes away when
-  the runtime image installs Helios wheels.
+- **`apps/helios` is scaffolding, not a deployment target.** Its tests protect the logic while
+  it moves into the packages; it is deleted in burndown Phase 8. Helios reaches Workbench through
+  a separate host application that pip-installs the libraries.
 - **Generation Project**: Separate credentials and runtime from query runtime
 - **Evaluation Project**: Separate Cloudera project entirely (ground-truth isolation)
 - **Git**: All projects pull from `main` branch; no project-specific branches needed

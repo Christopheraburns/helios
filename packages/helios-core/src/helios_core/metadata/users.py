@@ -18,6 +18,7 @@ import argparse
 import sys
 
 from helios_core import authz
+from helios_core.settings import Settings
 
 from .repository import PrincipalRecord
 from .sqlite import SQLiteMetadataRepository
@@ -77,7 +78,7 @@ def add(arguments: argparse.Namespace) -> None:
         if role in _MODEL_ROLES and not arguments.model:
             _fail(f"role {role.value} is granted per model; pass --model")
 
-    repository = SQLiteMetadataRepository()
+    repository = SQLiteMetadataRepository.from_settings(Settings())
     repository.migrate()
 
     if role in _ORG_ROLES and repository.organization(arguments.organization) is None:
@@ -116,7 +117,7 @@ def show(arguments: argparse.Namespace) -> None:
     username = _check_username(arguments.username)
     identifier = principal_id(username, arguments.issuer)
 
-    repository = SQLiteMetadataRepository()
+    repository = SQLiteMetadataRepository.from_settings(Settings())
     record = repository.principal(identifier)
     if record is None:
         _fail(

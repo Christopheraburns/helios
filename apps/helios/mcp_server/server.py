@@ -38,8 +38,7 @@ from starlette.responses import JSONResponse
 
 from helios_core import __version__
 from helios_core import audit, authz
-from helios_core import runs as runstore
-from helios_core.artifacts import ArtifactStore
+from apps.helios import runtime
 from helios_core.config import atlas_config, impala_config
 from helios_core.compiler import (
     CompileError,
@@ -65,8 +64,7 @@ from helios_core.ossie import SemanticModel, build as build_ossie
 from helios_core.tracing import sanitized, utcnow
 
 LOGGER = logging.getLogger(__name__)
-ROOT = runstore.ROOT
-artifact_store = ArtifactStore(ROOT)
+artifact_store = runtime.artifacts
 _initial_impala_config = impala_config()
 data_policy = DataPolicy(
     ImpalaProxyDataAuthorizer(
@@ -76,7 +74,7 @@ data_policy = DataPolicy(
         )
     )
 )
-metadata_repository = SQLiteMetadataRepository()
+metadata_repository = SQLiteMetadataRepository.from_settings(runtime.settings)
 _metadata_findings = metadata_repository.integrity_check()
 if _metadata_findings != ("ok",):
     LOGGER.error(
@@ -120,9 +118,9 @@ class ModelStore:
             for model_id in artifact_store.published_model_ids()
         ]
         if not out:
-            for r in runstore.list_runs():
+            for r in runtime.runs.list_runs():
                 if r["stages"].get("propose"):
-                    proposal_path = os.path.join(runstore.RUNS_DIR, r["id"], "propose.json")
+                    proposal_path = os.path.join(runtime.runs.runs_dir, r["id"], "propose.json")
                     with open(proposal_path) as handle:
                         proposal = json.load(handle)
                     model_id = proposal.get("model_id") or f"run-{r['id']}"

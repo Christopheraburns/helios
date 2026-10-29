@@ -7,8 +7,9 @@ from typing import Callable, Literal
 from helios_core.atlas import AtlasClient
 from helios_core.config import atlas_config, impala_config
 from helios_core.engines import ImpalaEngine
-from helios_core.llm import llm_from_env
+from helios_core.llm import llm_from_settings
 from helios_core.metadata import MetadataRepository
+from helios_core.settings import Settings
 
 HealthState = Literal["healthy", "degraded", "unavailable", "unknown"]
 
@@ -62,6 +63,7 @@ def _probe(
 
 def collect_infrastructure_status(
     metadata: MetadataRepository,
+    settings: Settings,
 ) -> list[HealthComponent]:
     """Run independent checks so one failed dependency does not hide the rest."""
     components: list[HealthComponent] = []
@@ -125,7 +127,7 @@ def collect_infrastructure_status(
         )
     )
 
-    llm = llm_from_env()
+    llm = llm_from_settings(settings.llm)
     components.append(
         _probe(
             "discovery-proposals",

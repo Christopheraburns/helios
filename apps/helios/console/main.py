@@ -19,7 +19,7 @@ from helios_core import audit
 from helios_core.atlas import AtlasClient, AtlasError
 from helios_core.config import atlas_config, impala_config
 from helios_core.engines import ImpalaEngine
-from helios_core import runs as runstore
+from apps.helios import runtime
 from fastapi import HTTPException
 
 from helios_core.metadata import SQLiteMetadataRepository
@@ -81,7 +81,7 @@ def configure_cors(application: FastAPI, value: str | None = None) -> list[str]:
 
 
 configure_cors(app)
-app.state.metadata_repository = SQLiteMetadataRepository()
+app.state.metadata_repository = SQLiteMetadataRepository.from_settings(runtime.settings)
 app.state.model_provider_settings = DEFAULT_SESSION_MODEL_PROVIDER_STORE
 app.state.mcp_settings = DEFAULT_SESSION_MCP_SETTINGS_STORE
 _metadata_findings = app.state.metadata_repository.integrity_check()
@@ -90,7 +90,7 @@ if _metadata_findings == ("ok",) or not Path(
 ).exists():
     app.state.metadata_repository.migrate()
     app.state.metadata_repository.fail_interrupted_evaluations()
-    audit.purge_expired(app.state.metadata_repository)
+    audit.purge_expired(app.state.metadata_repository, runtime.settings.audit_retention_days)
 else:
     LOGGER.error(
         "metadata integrity check failed; API readiness will remain "
@@ -240,8 +240,9 @@ def health(request: Request):
     checks.append(("Atlas", a.base_url if a else "not configured", *(_check(lambda: AtlasClient(a).ping()) if a else ("skipped", "set ATLAS_BASE, ATLAS_USER, ATLAS_PASS"))))
     i = impala_config()
     checks.append(("Impala", f"{i.host}:{i.port}" if i else "not configured", *(_check(lambda: ImpalaEngine(i).ping()) if i else ("skipped", "set IMPALA_HOST, WORKLOAD_USER, and WORKLOAD_PASSWORD"))))
-    from helios_core.llm import llm_from_env
-    llm = llm_from_env()
+    from helios_core.llm import llm_from_settings
+    from helios_core.settings import Settings
+    llm = llm_from_settings(Settings().llm)
     if llm:
         checks.append(("LLM", f"{llm.provider}: {llm.model}", *_check(llm.ping)))
     else:
@@ -368,16 +369,16 @@ def unassign(guid: str, entity_guid: str):
 # ---------------------------------------------------------------- runs
 @app.get("/runs", response_class=HTMLResponse)
 def runs(request: Request):
-    return render(request, "runs.html", runs=runstore.list_runs(), runs_dir=runstore.RUNS_DIR, active="runs")
+    return render(request, "runs.html", runs=runtime.runs.list_runs(), runs_dir=runtime.runs.runs_dir, active="runs")
 
 
 @app.get("/runs/{run_id}", response_class=HTMLResponse)
 def run_detail(request: Request, run_id: str):
-    s = runstore.summary(run_id)
+    s = runtime.runs.summary(run_id)
     if not s["harvest"] and not s["profile"]:
         raise HTTPException(404, f"run {run_id} not found")
-    profile = runstore.load(run_id, "profile") or {}
-    harvest = runstore.load(run_id, "harvest") or {}
+    profile = runtime.runs.load(run_id, "profile") or {}
+    harvest = runtime.runs.load(run_id, "harvest") or {}
     tables = []
     for t in harvest.get("tables", []):
         key = f"{t['database']}.{t['table']}"
@@ -390,8 +391,8 @@ def run_detail(request: Request, run_id: str):
 
 @app.get("/runs/{run_id}/table/{key}", response_class=HTMLResponse)
 def run_table(request: Request, run_id: str, key: str):
-    profile = runstore.load(run_id, "profile") or {}
-    harvest = runstore.load(run_id, "harvest") or {}
+    profile = runtime.runs.load(run_id, "profile") or {}
+    harvest = runtime.runs.load(run_id, "harvest") or {}
     prof = profile.get("tables", {}).get(key)
     if not prof:
         raise HTTPException(404, f"{key} not profiled in run {run_id}")
@@ -407,7 +408,7 @@ def run_table(request: Request, run_id: str, key: str):
 
 @app.get("/runs/{run_id}/propose", response_class=HTMLResponse)
 def run_propose(request: Request, run_id: str):
-    prop = runstore.load(run_id, "propose")
+    prop = runtime.runs.load(run_id, "propose")
     if not prop:
         raise HTTPException(404, f"run {run_id} has no propose output yet")
     return render(request, "propose.html", run_id=run_id, p=prop, active="runs")

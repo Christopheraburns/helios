@@ -4,7 +4,7 @@ from .client import (
     LLMTimeoutError,
     ToolCall,
     ToolTurn,
-    llm_from_env,
+    llm_from_settings,
 )
 
 __all__ = [
@@ -13,5 +13,5 @@ __all__ = [
     "LLMTimeoutError",
     "ToolCall",
     "ToolTurn",
-    "llm_from_env",
+    "llm_from_settings",
 ]

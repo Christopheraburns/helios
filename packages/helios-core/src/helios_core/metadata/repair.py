@@ -14,7 +14,9 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .sqlite import SQLiteMetadataRepository, default_database_path
+from helios_core.settings import Settings
+
+from .sqlite import SQLiteMetadataRepository
 
 
 def backup_database(path: Path, backup_root: Path | None = None) -> Path:
@@ -152,8 +154,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Back up and repair Helios SQLite metadata.")
     parser.add_argument(
         "--database",
-        default=default_database_path(),
-        help="metadata database path (defaults to HELIOS_METADATA_DB)",
+        default=None,
+        help="metadata database path (defaults to the configured metadata_db)",
     )
     operation = parser.add_mutually_exclusive_group(required=True)
     operation.add_argument(
@@ -166,7 +168,7 @@ def main() -> None:
         help="logically copy tables into a clean database and recreate indexes",
     )
     args = parser.parse_args()
-    path = Path(args.database).resolve()
+    path = Path(args.database or Settings().metadata_db).resolve()
     if args.recover:
         backup = recover_database(path)
         print("recovered database into a clean SQLite file")

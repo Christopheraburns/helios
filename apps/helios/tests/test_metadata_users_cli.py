@@ -15,8 +15,8 @@ from helios_core.metadata import PrincipalRecord, SQLiteMetadataRepository, user
 @pytest.fixture
 def repository(tmp_path, monkeypatch):
     """An isolated metadata database seeded with one organization and one model."""
-    monkeypatch.setenv("HELIOS_METADATA_DB", str(tmp_path / "helios.db"))
-    repo = SQLiteMetadataRepository()
+    monkeypatch.setenv("HELIOS_METADATA_DB", str(tmp_path / "helios.db"))  # what the CLI reads
+    repo = SQLiteMetadataRepository(tmp_path / "helios.db")
     repo.migrate()
     repo.save_organization(Organization("default", "Default Organization"), slug="default")
     # save_model's created_by is a foreign key onto principals.

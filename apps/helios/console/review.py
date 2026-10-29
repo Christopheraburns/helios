@@ -18,15 +18,15 @@ from fastapi.templating import Jinja2Templates
 from helios_core import __version__
 from helios_core._pending import publication
 from helios_core._pending import review as rv
-from helios_core import runs as runstore
-from helios_core.artifacts import ArtifactStore, model_id_for_run
+from apps.helios import runtime
+from helios_core.artifacts import model_id_for_run
 from helios_core.ossie import preflight
 
 HERE = Path(__file__).parent
 tpl = Jinja2Templates(directory=HERE / "templates")
 review_router = APIRouter()
 
-artifact_store = ArtifactStore(runstore.ROOT)
+artifact_store = runtime.artifacts
 ROLES = ("identifier", "foreign_key", "time", "measure", "dimension", "attribute")
 KINDS = ("fact", "dimension", "bridge", "lookup", "other")
 
@@ -38,20 +38,20 @@ def _render(request: Request, name: str, **ctx) -> HTMLResponse:
 
 
 def _load(run_id: str) -> tuple[dict, dict, str]:
-    prop = runstore.load(run_id, "propose")
+    prop = runtime.runs.load(run_id, "propose")
     if not prop:
         raise HTTPException(404, f"run {run_id} has no propose output yet")
-    path = os.path.join(runstore.RUNS_DIR, run_id, "review.json")
+    path = os.path.join(runtime.runs.runs_dir, run_id, "review.json")
     return prop, rv.load(path, run_id), path
 
 
 def _published_model_name(prop: dict, run_id: str) -> str:
-    h = runstore.load(run_id, "harvest") or {}
+    h = runtime.runs.load(run_id, "harvest") or {}
     return publication.model_name_for_proposal(prop, h)
 
 
 def _model_id(prop: dict, run_id: str) -> str:
-    harvest = runstore.load(run_id, "harvest") or {}
+    harvest = runtime.runs.load(run_id, "harvest") or {}
     return model_id_for_run(
         prop,
         harvest,
@@ -153,8 +153,8 @@ def publish(request: Request, run_id: str, commit: str = Form("")):
     )
     if commit:
         try:
-            subprocess.run(["git", "add", f"models/{model_id}", f"runs/{run_id}/review.json"], cwd=runstore.ROOT, check=True, capture_output=True)
-            subprocess.run(["git", "commit", "-m", f"publish {model_id} from run {run_id}"], cwd=runstore.ROOT, check=True, capture_output=True)
+            subprocess.run(["git", "add", f"models/{model_id}", f"runs/{run_id}/review.json"], cwd=runtime.settings.data_dir, check=True, capture_output=True)
+            subprocess.run(["git", "commit", "-m", f"publish {model_id} from run {run_id}"], cwd=runtime.settings.data_dir, check=True, capture_output=True)
             msg += "; committed"
         except subprocess.CalledProcessError as e:
             msg += f"; git commit failed: {(e.stderr or b'').decode()[:200]}"

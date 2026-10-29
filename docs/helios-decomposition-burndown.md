@@ -9,8 +9,9 @@ everyday developer installs them from PyPI and runs them on a laptop; a host pro
 them on Cloudera AI Workbench like any other package. Daedalus serves Helios's tools over MCP to
 shared, governed deployments.
 
-Estimates are engineer-days for one engineer who knows the codebase. Every phase must leave the
-app runnable and the test suite green.
+Estimates are engineer-days for one engineer who knows the codebase. Every phase keeps the test
+suite green. The old app in `apps/helios` is scaffolding whose tests protect the logic while it
+moves; it is not kept deployable (decision 9).
 
 ## Decisions
 
@@ -29,14 +30,14 @@ app runnable and the test suite green.
    on each call; engines forward it to the platform, which enforces access (Ranger on Cloudera).
    Modes, named generically: `token` pass-through (preferred), `impersonate` (a service account
    acting as the user; Cloudera's `doAs`) and `service` (the local default). Helios's own users,
-   organizations, roles and grants leave the libraries; the console keeps them for demo gating.
+   organizations, roles and grants leave the libraries and are deleted with the old console.
    Which models a caller may see is a host-supplied hook.
 5. **Plugin architecture.** Capabilities register through Python entry points (`helios.engines`,
    `helios.catalogs`, `helios.stores`, `helios.tools`, `helios.commands`, later `helios.sources` /
    `helios.retrievers`). Structured data (relational, lakehouse) ships now.
 6. **Unstructured is deferred.** helios-crawl becomes the first unstructured plugin package and
-   is built after the general-use release. Until then crawl code stays in `apps/helios`, and the
-   evidence tools are not part of helios-serve.
+   is built after the general-use release. Until then crawl code stays in `apps/helios/crawler`,
+   and the evidence tools are not part of helios-serve.
 7. **General use first; Workbench is a deployment profile.** The base install runs on a laptop
    with DuckDB and any SQLAlchemy database, and installs only light dependencies. Cloudera
    integrations (Impala, Atlas, the Workbench settings profile, Cloudera AI Inference defaults)
@@ -45,6 +46,10 @@ app runnable and the test suite green.
 8. **Local MCP adapter.** `helios-mcp` serves the tool registry over stdio for one developer's
    local agent (Claude Code, Cursor, goose, Mistral Vibe). No HTTP, no authentication, no
    deployment; Daedalus remains the path for anything shared.
+9. **The monolith is not redeployed.** Helios reaches Workbench through a new host application
+   that pip-installs it. `apps/helios` (console, UI, MCP server, graph gateway, Workbench
+   launchers), `jobs/` and `runtime/` are scaffolding: their tests keep passing while the logic
+   moves, nobody keeps them deployable, and Phase 8 deletes them.
 
 | Phase | Tasks | Est. (days) | Gate |
 |---|---|---|---|
@@ -53,15 +58,15 @@ app runnable and the test suite green.
 | 2 Identity out of the libraries | 7 | 4.5 | No users/grants in core; engines run as the host's caller |
 | 3 Plugins, engines, helios-cloudera | 7 | 7 | Base install has no Cloudera dependency; Impala works via the plugin |
 | 4 Pluggable storage | 7 | 5.75 | Same tests pass on SQLite + local files and on Postgres + object storage |
-| 5 helios-model | 8 | 5.35 | Harvest→publish round-trip test, no console import |
-| 6 helios-serve + public API | 8 | 5.5 | Tool registry lists 7 tools; `Helios` facade documented |
+| 5 helios-model | 7 | 4.35 | Harvest→publish round-trip test, no console import |
+| 6 helios-serve + public API | 7 | 5.25 | Tool registry lists 7 tools; `Helios` facade documented |
 | 7 helios-mcp (local stdio) | 5 | 2 | A local agent lists tools and runs a query on the sample model |
 | D Daedalus pack (other repo) | 5 | 3.5 | A Daedalus MCP call runs `run_query` as the real user |
-| S Talk-to-data skill | 5 | 1.2 | Skill validates and runs against helios-mcp and Daedalus |
-| 8 Host app re-wired | 8 | 5 | `apps/helios/` deleted; console is a host of the libraries |
+| S Talk-to-data skill | 6 | 1.7 | Skill validates and runs against helios-mcp and Daedalus |
+| 8 Retire the monolith | 5 | 2.75 | `apps/helios` holds only the crawler; all tests live in packages |
 | 9 General-use release | 9 | 5.75 | Quickstart runs verbatim in CI; on PyPI; Workbench CI job green |
-| 10 helios-crawl (deferred) | 10 | 8.5 | Evidence tools appear only when helios-crawl is installed |
-| **Total** | **101** | **~64.5** | |
+| 10 helios-crawl (deferred) | 9 | 7.5 | Evidence tools appear only when helios-crawl is installed |
+| **Total** | **96** | **~60.5** | |
 
 ---
 
@@ -86,10 +91,10 @@ app runnable and the test suite green.
 - [x] **1.1** Create `helios_core/_pending/`; move out the feature code core reaches into: `publication.py`, `review.py`, `graph.py` (→ model, Phase 5), `health.py` (→ serve, Phase 6), and the unstructured pieces `crawler/`, `index/crawler_settings.py`, `index/evidence.py` (→ crawl, Phase 10). — 0.5d *(also moved `index/browse.py`, which only the crawler uses; imports inside moved modules are now absolute; `index` no longer re-exports `crawler_settings`; result: no core module outside `_pending` imports it)*
 - [x] **1.2** import-linter config: core imports no sibling package; nothing imports `apps.*`; no new edges into `_pending`. — 0.25d *(in the root `pyproject.toml`, run by `uv run lint-imports` in CI; stricter than planned: no core module outside `_pending` may import it at all; both contracts verified to fail on planted imports)*
 - [x] **1.3** `helios_core/settings.py` (pydantic-settings), resolved in a fixed order: arguments in code → `HELIOS_*` environment variables → config file (`helios.toml` or `[tool.helios]` in `pyproject.toml`) → defaults. Local defaults use `platformdirs` user directories; no `CDSW_*` reads and no `/home/cdsw` (the Workbench mapping is 3.4). — 0.75d *(done with one deviation: a `ConventionalEnvironment` source sits between `HELIOS_*` and the config file and reads the names Helios has always used, including the Workbench data root, so wiring Settings in at 1.4 changes nothing on Workbench; its Cloudera part moves out in 3.4. `HELIOS_CONFIG` or `Settings.from_file()` select a config file explicitly. Warehouses and catalogs are generic named entries, not Impala/Atlas sections: `[connections.<name>]` with `engine = "…"` (keyed by `DataSource.connection_ref`) and `[catalogs.<name>]` with `catalog = "…"`; core validates only the plugin name, each plugin validates its own options (`ImpalaOptions` / `impala_config_for`, `AtlasOptions` / `atlas_config_for`); `IMPALA_*` and `ATLAS_*` become the `default` connection and catalog. Parity tests compare Settings with the code it replaces in five environments)*
-- [ ] **1.4** Inject `Settings` (or its slice) into constructors, replacing ambient env reads in `runs.py` (incl. import-time read), `artifacts.py`, `metadata/sqlite.py`, `llm/client.py`, `audit.py`. Same behaviour, no store redesign (that is Phase 4). — 1.5d
+- [x] **1.4** Inject `Settings` (or its slice) into constructors, replacing ambient env reads in `runs.py` (incl. import-time read), `artifacts.py`, `metadata/sqlite.py`, `llm/client.py`, `audit.py`. Same behaviour, no store redesign (that is Phase 4). — 1.5d *(`runs.py` is now `RunStore(runs_dir)`; `ArtifactStore`, `SQLiteMetadataRepository` (path + journal mode) and `RunStore` take explicit values or `.from_settings()`; `llm_from_env()` → `llm_from_settings(settings.llm)`; `audit.purge_expired()` takes the retention; audit's secret redaction reads the environment through `settings.environment_secret_values()`. Apps and CLIs build `Settings()` where they used to read the environment, so behaviour is unchanged; the console and MCP server share `apps/helios/runtime.py`. Parity test now checks the new constructors against values recorded from the old code)*
 - [ ] **1.5** Replace `config.atlas_config()` / `impala_config()` at their ~12 callers with `impala_config_for(settings.connections[…])` / `atlas_config_for(settings.catalogs[…])`; resolve each `DataSource.connection_ref` to a named connection, falling back to `default` for existing records; delete `config.py`; resolve `helios-ds-generation/impala.py` usage (Q5). — 0.75d
 - [ ] **1.6** Replace `Path(__file__).parents[n]` in `crawler/__main__.py`, `console/assistant.py`, `console/ontology.py`, `console/evaluation.py` with `Settings` paths; regression test for the `BUILTIN_SUITE` path. — 0.25d *(off-by-one already fixed in Phase 0)*
-- [ ] **1.7** CI check that `os.environ` / `os.getenv` appear only in `helios_core/settings.py` within packages. — 0.1d
+- [ ] **1.7** CI check that `os.environ` / `os.getenv` appear only in `helios_core/settings.py` within packages. — 0.1d *(after 1.5 the only other readers are `_pending/evidence.py` (moves with helios-crawl), so the check excludes `_pending/`)*
 - [ ] **1.8** Write `CONTRACTS.md` (SemanticModel, OntologyGraph, SourceMapping, `*Record`, IndexStore, ArtifactStore, Engine, registry protocol, Caller, Settings, LLMClient) as the semantic-versioning boundary, with a deprecation policy; ship `py.typed`; underscore or move everything else under `_internal/`. — 0.5d
 - [ ] **1.9** Move the core and index/ontology tests to `packages/helios-core/tests`; DuckDB-backed index fixtures. — 0.75d
 - [ ] **1.10** Test that `import helios_core` performs no env read and no file I/O. — 0.25d
@@ -103,8 +108,8 @@ app runnable and the test suite green.
 - [ ] **2.2** Engine identity modes with generic names: `Engine.identity_modes` and `query(sql, caller)` supporting `service`, `impersonate` and `token`. Impala implements `impersonate` as `doAs` (keeping the `EFFECTIVE_USER()` check) and `token` as impyla JWT auth; DuckDB supports `service` only. The host picks the mode in Settings; `service` is the local default. — 1.5d
 - [ ] **2.3** Keep `DataPolicy`'s shape: platform authorizer (allows only when the engine's mode enforces the caller's identity) plus deny-only restrictions the host supplies. Drop Helios grants from it. — 0.5d
 - [ ] **2.4** `ModelVisibility` hook: the host decides which models a caller may list and use; default is "all models in the registry". — 0.5d
-- [ ] **2.5** `AuditSink` hook: libraries emit structured events (tool, model, outcome, row count, SQL fingerprint); default sink writes to `logging`; the console keeps a SQLite sink. — 0.5d
-- [ ] **2.6** Move `authz/`, `rbac.py`, `identity.py`, `delegation.py`, `metadata/users.py` and the organization / principal / membership / grant tables from core to `apps/helios/console` (demo gating); no `cloudera-workbench:` identifiers remain in library code. — 0.75d
+- [ ] **2.5** `AuditSink` hook: libraries emit structured events (tool, model, outcome, row count, SQL fingerprint); default sink writes to `logging`; the old console keeps its SQLite sink until Phase 8. — 0.5d
+- [ ] **2.6** Move `authz/`, `rbac.py`, `identity.py`, `delegation.py`, `metadata/users.py` and the organization / principal / membership / grant tables from core into `apps/helios/console`, only so its tests keep passing until Phase 8 deletes it; no `cloudera-workbench:` identifiers remain in library code. — 0.75d
 - [ ] **2.7** Tests: engine mode tests (impersonate effective-user check, token parameters, service), visibility and restriction hooks; move `persistent_auth_stack` tests with the console. — 0.25d
 
 **Gate:** no users, organizations, roles or grants in `helios_core`; `run_query` runs as the host's caller in `impersonate` and `token` modes.
@@ -123,7 +128,7 @@ app runnable and the test suite green.
 
 ## Phase 4 — Pluggable storage
 
-- [ ] **4.1** Split `MetadataRepository` into what libraries need: a model registry (models, data sources, semantic revisions) and, outside the libraries, the console's conversation / trace / evaluation tables. — 1d
+- [ ] **4.1** Split `MetadataRepository` into what libraries need: a model registry (models, data sources, semantic revisions) in core; the old console's conversation / trace / evaluation tables move into `apps/helios` and are deleted with it. — 1d
 - [ ] **4.2** SQLAlchemy registry backend selected by URL (`sqlite:///…`, `postgresql+psycopg://…`, any other dialect SQLAlchemy supports); Alembic migrations; the SQLite file in the user data directory stays the local default. — 1.5d
 - [ ] **4.3** `ArtifactStore` backends selected by URL: local directory (`file://`) and object storage via fsspec (`s3://`, `abfss://`, `gs://`, `ofs://`); immutable published versions plus an "active version" pointer written with conditional writes (Q7). — 1.5d
 - [ ] **4.4** Move `runs/` (harvest, profile, propose outputs) onto the same `ArtifactStore`. — 0.25d
@@ -140,9 +145,8 @@ app runnable and the test suite green.
 - [ ] **5.3** Move `catalog`, `profiler`, `propose`, and `_pending/{publication,review,graph}.py` in (Atlas went to helios-cloudera in 3.3). — 0.5d
 - [ ] **5.4** Facades `Catalog.harvest(source, caller)`, `Profiler.profile`, `Proposer.propose -> Proposals`, `Publisher.publish(proposals, caller) -> OntologyVersion`; `Proposals` typed with confidence + rationale. — 1d
 - [ ] **5.5** One `helios` command whose subcommands come from the `helios.commands` entry point; helios-model registers `harvest`, `profile`, `propose`, `publish`; `helios init` writes a starter config file. Dissolve `jobs/_common.py` into Settings; Workbench Jobs call the same command. — 1d
-- [ ] **5.6** `apps/console/routers/model.py` from `console/review.py` + model-management routes in `api.py`, calling the facades. — 1d
-- [ ] **5.7** Remove the emptied `_pending` model modules; confirm the round-trip test passes with no console import. — 0.35d
-- [ ] **5.8** No demo assumptions in library defaults: remove `tpcds` defaults such as `HELIOS_DATABASES`; databases to harvest are always explicit. — 0.25d
+- [ ] **5.6** Remove the emptied `_pending` model modules; confirm the round-trip test passes with no console import. — 0.35d
+- [ ] **5.7** No demo assumptions in library defaults: remove `tpcds` defaults such as `HELIOS_DATABASES`; databases to harvest are always explicit. — 0.25d
 
 ## Phase 6 — helios-serve and the public API
 
@@ -153,7 +157,6 @@ app runnable and the test suite green.
 - [ ] **6.5** `console/evaluation.py` → `helios_serve.evaluation` (library + `helios eval` subcommand) calling the tool functions directly instead of through an MCP client. — 1d
 - [ ] **6.6** Umbrella package (name per Q8) that a developer installs: the `Helios` facade (`Helios.from_settings(...)` with `.models()`, `.compile(...)`, `.query(...)`, `.publish(...)`), the `helios` command entry point, and the extras from 3.2. — 1d
 - [ ] **6.7** Tests: the tool tests from `test_talk_to_data`, `test_data_authorization`, `test_compiler` against the functions; the facade on the DuckDB sample; `test_talk_to_data`'s end-to-end parts → root `tests/integration`. — 0.75d
-- [ ] **6.8** Remove `apps/helios/mcp_server/` once the console points at Daedalus (8.3). — 0.25d
 
 **Gate:** the registry lists 7 tools; helios-serve imports neither `mcp` nor the console; the `Helios` facade is documented.
 
@@ -180,19 +183,19 @@ app runnable and the test suite green.
 - [ ] **S.1** Create `skills/talk-to-data/SKILL.md` from `apps/helios/console/conversation.py:320-345`: drop `{model_id!r}` and "never request another model"; name the MCP server `helios`; `compatibility` says it needs Helios tools from an MCP server named `helios` (helios-mcp locally, or Daedalus). — 0.25d
 - [ ] **S.2** Move the TPC-DS key example and identifier-template rules to `references/entity-keys.md`; leave the evidence tools out until Phase 10. — 0.1d
 - [ ] **S.3** Add `skills-ref validate ./skills/talk-to-data` to CI. — 0.1d
-- [ ] **S.4** Run in Mistral Vibe, first against the existing MCP server, then against helios-mcp (Phase 7) and the Daedalus server (D.1); write the setup steps down. — 0.5d
+- [ ] **S.4** Run in Mistral Vibe, first against the old MCP server, then against helios-mcp (Phase 7) and the Daedalus server (D.1); write the setup steps down. — 0.5d
 - [ ] **S.5** Smoke-test the same directory in Claude Code and goose. — 0.25d
+- [ ] **S.6** Generate `references/semantic-models.md` from published Ossie models. — 0.5d
 
-## Phase 8 — Host app re-wired
+## Phase 8 — Retire the monolith
 
-- [ ] **8.1** Build `apps/console` as an ordinary host of the libraries: `main.py` + routers from Phases 5–6 + `trace_documents`, `journeys`, `mcp_settings`, `model_provider`; route the remainder of `api.py`, then delete it. — 2d
-- [ ] **8.2** The console owns demo gating: users, organizations and grants (from 2.6) plus a `ModelVisibility` and restriction implementation built on them. — 0.5d
-- [ ] **8.3** Point the console's MCP client (`HELIOS_MCP_URL`) at the Daedalus server; remove signed-header minting and `delegation.py`. — 0.5d
-- [ ] **8.4** Move `ConversationService` and `assistant.py` to `apps/console/agent/`, marked legacy; `conversation.py` loads the SKILL.md body. — 0.5d
-- [ ] **8.5** Move the React UI to `apps/ui`. — 0.25d
-- [ ] **8.6** Host deployment installs Helios wheels (with `[cloudera]`) instead of the path shim; remove `HELIOS_PYTHON_DEPS`; pin the Ossie commit in the host's runtime image. — 0.5d
-- [ ] **8.7** CI as a per-package matrix: ruff + mypy + pytest per package, import-linter, integration suite on PR, nightly against Impala; `CODEOWNERS`; tags `helios-<pkg>/vX.Y.Z`. — 0.5d
-- [ ] **8.8** Decide Memgraph (Q2) and delete `apps/helios/`; end-to-end console smoke. — 0.25d
+- [ ] **8.1** Sort `apps/helios/tests`: behaviour of library code that is still tested only there moves to the package tests or root `tests/integration`; tests of the console routes, UI static server, Workbench launchers, MCP transport and legacy agent are deleted with the app. Crawler tests stay for Phase 10. — 1d
+- [ ] **8.2** Delete `apps/helios` except `crawler/` (Phase 10 moves it): console, MCP server, `runtime.py`, launchers, and the UI and graph gateway unless Q2 keeps them as examples. Delete `jobs/` (replaced by the `helios` command) and `runtime/` (host apps own their images); keep `scripts/` only where it still applies to the libraries. — 0.5d
+- [ ] **8.3** Delete core code that only the old apps used: `tracing.py` / `TraceRecorder`, and anything left over from 2.6 and 4.1. — 0.5d
+- [ ] **8.4** The root project stops installing `apps/` (a plain workspace root); `README.md` and `MONOREPO.md` describe the libraries and how a host installs them. — 0.25d
+- [ ] **8.5** CI as a per-package matrix: ruff + mypy + pytest per package, import-linter, integration suite on PR, nightly against Impala; `CODEOWNERS`; tags `helios-<pkg>/vX.Y.Z`. — 0.5d
+
+**Gate:** `apps/helios` holds only the crawler until Phase 10; every remaining test lives in a package or `tests/integration`.
 
 ## Phase 9 — General-use release
 
@@ -217,31 +220,23 @@ app runnable and the test suite green.
 - [ ] **10.5** `search_evidence` and `entity_claims` registered as `helios.tools` from helios-crawl; Daedalus and helios-mcp expose them only when it is installed. — 0.75d
 - [ ] **10.6** `Crawler.run(source, ontology_version, caller) -> CrawlRun`, `Resolver.resolve`, `Claims.extract`, `Evidence.embed`; `helios crawl --ontology-version` subcommand. — 1.5d
 - [ ] **10.7** Connector protocol documented; `helios_ds`, `object_store`, `table_rows` ship as built-in sources. — 0.5d
-- [ ] **10.8** `apps/console/routers/crawl.py` from `console/crawler.py`, `data_sources.py`, `crawl_jobs.py` (Workbench Job scheduling stays in the host). — 1d
-- [ ] **10.9** Move the 177 crawler tests + `test_evidence`; green on DuckDB with no console or graph import. — 1d
-- [ ] **10.10** Add the evidence tools back to the talk-to-data skill. — 0.25d
-
-## Retirement (backlog, not estimated)
-
-- [ ] **R.1** Once a harness runs talk-to-data via Daedalus: delete `apps/console/agent/` and `model_provider.py`.
-- [ ] **R.2** Drop the `conversations`, `conversation_messages`, `conversation_turns` tables.
-- [ ] **R.3** Move traces to OpenTelemetry (per Q4); retire `TraceRecorder`.
-- [ ] **R.4** Generate `skills/talk-to-data/references/semantic-models.md` from published Ossie models.
+- [ ] **10.8** Move the 177 crawler tests + `test_evidence`; green on DuckDB with no console or graph import. — 1d
+- [ ] **10.9** Add the evidence tools back to the talk-to-data skill. — 0.25d
 
 ## Dropped from the original plan
 
 - `mcp_app(settings)` ASGI factory, `server/discover`, the JWT login path in helios-serve and its parity test (old 4.3–4.6): Daedalus serves shared MCP and verifies callers; helios-mcp is local-only.
 - Daedalus `forward_headers` / principal-assertion mode (old D.1): the pack receives the caller directly.
 - helios-serve as a Workbench Application (old 4.9): libraries ship no applications.
+- Rebuilding the console as a host of the libraries (old Phase 8), its model and crawl routers (old 5.6, 10.8), pointing it at Daedalus, loading its prompt from SKILL.md, and retiring its agent and conversation tables (old R.1–R.3): the monolith is deleted instead (decision 9).
 
 ## Open questions that block tasks
 
 | # | Question | Blocks |
 |---|---|---|
 | Q1 | Does the target CDW Virtual Warehouse accept JWTs from the identity provider in front of Daedalus? | `token` mode in 2.2 and D.5 |
-| Q2 | Does Memgraph stay, or can serve answer lineage from the Iceberg index? | 8.8 |
+| Q2 | Does anyone need the React UI or the Memgraph graph gateway as an example host, or are they deleted with `apps/helios`? | 8.2 |
 | Q3 | Apache-2.0 for all packages, or a different grant for helios-serve? | 0.3, 9.5 |
-| Q4 | Traces after TraceRecorder: OpenTelemetry or SQLite? | R.3 |
 | Q5 | helios-ds-generation's `impala.py`: depend on helios-core or copy 40 lines? | 1.5 |
 | Q6 | Is Daedalus's `jwt.sub` the same string as the Workbench / Ranger username? | `impersonate` mode in D.5 |
 | Q7 | Which object stores must the "active version" pointer support (S3, ADLS, GCS and Ozone all have conditional writes, with different APIs)? | 4.3 |

@@ -1,12 +1,12 @@
 """
-LLM client with two interchangeable backends:
+LLM client with interchangeable backends, chosen by ``Settings.llm.provider``:
 
-  LLM_PROVIDER=anthropic   Anthropic Messages API (ANTHROPIC_API_KEY, ANTHROPIC_MODEL)
-  LLM_PROVIDER=openai      any OpenAI-compatible endpoint, e.g. Cloudera AI Inference
-                           (INFERENCE_BASE_URL, INFERENCE_TOKEN or INFERENCE_API_KEY,
-                           INFERENCE_MODEL)
-  LLM_PROVIDER=mistral     Mistral's OpenAI-compatible API
-                           (MISTRAL_API_KEY, optional MISTRAL_MODEL)
+  anthropic   Anthropic Messages API
+  openai      any OpenAI-compatible endpoint, e.g. Cloudera AI Inference
+  mistral     Mistral's OpenAI-compatible API
+
+``llm_from_settings`` builds the client; helios_core.settings lists the environment
+variables that configure it.
 
 Both expose complete_json(): ask for a JSON object, parse it, retry once on malformed output.
 Uses httpx directly so no provider SDK is needed in the runtime.
@@ -15,14 +15,18 @@ from __future__ import annotations
 
 import json
 import math
-import os
 import re
 import time
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 import httpx
+
+if TYPE_CHECKING:
+    from helios_core.settings import LLMSettings
+
+DEFAULT_TIMEOUT_SECONDS = 30.0
 
 
 class LLMError(RuntimeError):
@@ -57,17 +61,9 @@ class LLMClient:
     def __init__(self, provider: str, model: str, api_key: str | None, base_url: str | None = None,
                  max_tokens: int = 4000, temperature: float = 0.0, timeout: float | None = None):
         if timeout is None:
-            raw_timeout = os.environ.get("HELIOS_LLM_TIMEOUT_SECONDS", "30")
-            try:
-                timeout = float(raw_timeout)
-            except ValueError as exc:
-                raise ValueError(
-                    "HELIOS_LLM_TIMEOUT_SECONDS must be a positive number"
-                ) from exc
+            timeout = DEFAULT_TIMEOUT_SECONDS
         if not math.isfinite(timeout) or timeout <= 0:
-            raise ValueError(
-                "HELIOS_LLM_TIMEOUT_SECONDS must be a positive number"
-            )
+            raise ValueError("the LLM timeout must be a positive number of seconds")
         self.provider, self.model, self.api_key, self.base_url = provider, model, api_key, base_url
         self.max_tokens, self.temperature, self.timeout = max_tokens, temperature, timeout
         self.calls = 0
@@ -520,44 +516,15 @@ def _parse_json(text: str) -> Any:
         raise ValueError("no JSON object in response")
 
 
-def inference_token() -> str | None:
-    """The OpenAI-compatible endpoint's bearer token, if the deployment sets one."""
-    for name in ("INFERENCE_TOKEN", "INFERENCE_API_KEY"):
-        value = os.environ.get(name, "").strip()
-        if value:
-            return value
-    return None
-
-
-def llm_from_env() -> LLMClient | None:
-    provider = (
-        os.environ.get("LLM_PROVIDER")
-        or (
-            "anthropic"
-            if os.environ.get("ANTHROPIC_API_KEY")
-            else "mistral"
-            if os.environ.get("MISTRAL_API_KEY")
-            else "openai"
-        )
-    ).lower()
-    if provider == "anthropic":
-        key = os.environ.get("ANTHROPIC_API_KEY")
-        if not key:
-            return None
-        return LLMClient("anthropic", os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5"), key)
-    if provider == "mistral":
-        key = os.environ.get("MISTRAL_API_KEY")
-        if not key:
-            return None
-        return LLMClient(
-            "mistral",
-            os.environ.get("MISTRAL_MODEL", "mistral-small-latest"),
-            key,
-            os.environ.get(
-                "MISTRAL_BASE_URL", "https://api.mistral.ai/v1"
-            ),
-        )
-    base = os.environ.get("INFERENCE_BASE_URL")
-    if not base:
+def llm_from_settings(llm: LLMSettings) -> LLMClient | None:
+    """The configured LLM, or None when it is not configured: no provider, an
+    Anthropic or Mistral provider without a key, or an OpenAI-compatible
+    provider without a base URL."""
+    key = llm.api_key.get_secret_value() if llm.api_key is not None else None
+    if llm.provider is None:
         return None
-    return LLMClient("openai", os.environ.get("INFERENCE_MODEL", ""), inference_token(), base)
+    if llm.provider in ("anthropic", "mistral") and not key:
+        return None
+    if llm.provider == "openai" and not llm.base_url:
+        return None
+    return LLMClient(llm.provider, llm.model or "", key, llm.base_url, timeout=llm.timeout_seconds)

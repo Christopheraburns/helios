@@ -267,11 +267,10 @@ def test_sqlite_defaults_to_rollback_journal_and_reports_integrity(
     assert repository.is_healthy()
 
 
-def test_sqlite_rejects_unknown_journal_mode(tmp_path, monkeypatch):
-    monkeypatch.setenv("HELIOS_SQLITE_JOURNAL_MODE", "unsafe-mode")
-    repository = SQLiteMetadataRepository(tmp_path / "invalid.db")
+def test_sqlite_rejects_unknown_journal_mode(tmp_path):
+    repository = SQLiteMetadataRepository(tmp_path / "invalid.db", journal_mode="unsafe-mode")
 
-    with pytest.raises(ValueError, match="HELIOS_SQLITE_JOURNAL_MODE"):
+    with pytest.raises(ValueError, match="journal mode must be one of"):
         repository.migrate()
 
 

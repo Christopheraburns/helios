@@ -6,8 +6,8 @@ import threading
 import time
 from dataclasses import dataclass
 
-from helios_core.llm import LLMClient, llm_from_env
-from helios_core.llm.client import inference_token
+from helios_core.llm import LLMClient, llm_from_settings
+from helios_core.settings import Settings
 
 SUPPORTED_PROVIDERS = frozenset({
     "anthropic",
@@ -79,14 +79,16 @@ DEFAULT_SESSION_MODEL_PROVIDER_STORE = SessionModelProviderStore()
 
 def llm_for_settings(settings: SessionModelProvider) -> LLMClient:
     provider = settings.provider
+    timeout = Settings().llm.timeout_seconds
     if provider == "anthropic":
-        return LLMClient(provider, settings.model, settings.api_key)
+        return LLMClient(provider, settings.model, settings.api_key, timeout=timeout)
     if provider == "mistral":
         return LLMClient(
             provider,
             settings.model,
             settings.api_key,
             os.environ.get("MISTRAL_BASE_URL", "https://api.mistral.ai/v1"),
+            timeout=timeout,
         )
     if provider == "bedrock":
         region = (
@@ -99,6 +101,7 @@ def llm_for_settings(settings: SessionModelProvider) -> LLMClient:
             settings.model,
             settings.api_key,
             f"https://bedrock-runtime.{region}.amazonaws.com",
+            timeout=timeout,
         )
     if provider == "openai":
         return LLMClient(
@@ -106,12 +109,13 @@ def llm_for_settings(settings: SessionModelProvider) -> LLMClient:
             settings.model,
             settings.api_key,
             openai_compatible_base_url(),
+            timeout=timeout,
         )
     raise ValueError("unsupported model provider")
 
 
 def environment_provider_summary() -> tuple[str | None, str | None]:
-    configured = llm_from_env()
+    configured = llm_from_settings(Settings().llm)
     if configured is None:
         return None, None
     return configured.provider, configured.model
@@ -129,7 +133,16 @@ def deployment_defaults(provider: str) -> tuple[str | None, str | None]:
     OpenAI-compatible endpoint has them (INFERENCE_MODEL, INFERENCE_TOKEN)."""
     if provider != "openai":
         return None, None
-    return os.environ.get("INFERENCE_MODEL", "").strip() or None, inference_token()
+    return os.environ.get("INFERENCE_MODEL", "").strip() or None, _inference_token()
+
+
+def _inference_token() -> str | None:
+    """The OpenAI-compatible endpoint's bearer token, if the deployment sets one."""
+    for name in ("INFERENCE_TOKEN", "INFERENCE_API_KEY"):
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return None
 
 
 def provider_availability() -> dict[str, bool]:

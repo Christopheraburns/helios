@@ -11,22 +11,23 @@ import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from helios_core.settings import Settings
 
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 STAGES = ("proposed", "published")
 
 
 class ArtifactStore:
-    def __init__(self, root: str | os.PathLike[str] | None = None):
-        self.root = Path(
-            root
-            or os.environ.get("HELIOS_ROOT")
-            or os.path.join(
-                os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios"
-            )
-        )
+    def __init__(self, root: str | os.PathLike[str]):
+        self.root = Path(root)
         self.models_dir = self.root / "models"
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> ArtifactStore:
+        return cls(settings.artifacts_dir)
 
     def directory(self, model_id: str, stage: str) -> Path:
         _validate_component(model_id, "model_id")

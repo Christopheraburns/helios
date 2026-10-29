@@ -1,13 +1,14 @@
 import json
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from apps.helios.console.api import ResourceStore
 from apps.helios.console.main import app
-from helios_core import authz, runs as runstore
+from helios_core import authz
 from helios_core.artifacts import ArtifactStore
+from helios_core.runs import RunStore
+from apps.helios import runtime
 from helios_core.domain import DataSourceReference, Model, Organization
 from helios_core._pending.graph import (
     ArtifactGraphRepository,
@@ -304,8 +305,8 @@ def review_client(tmp_path, monkeypatch):
         "glossary_terms": [],
     }
     (run_directory / "propose.json").write_text(json.dumps(proposal))
-    monkeypatch.setattr(runstore, "ROOT", str(tmp_path))
-    monkeypatch.setattr(runstore, "RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setattr(runtime, "artifacts", ArtifactStore(tmp_path))
+    monkeypatch.setattr(runtime, "runs", RunStore(tmp_path / "runs"))
     app.state.resource_store = ResourceStore((ORGANIZATION,), (model,))
     app.state.authorization_policy = authz.Policy(
         [
@@ -604,7 +605,7 @@ def test_publish_review_writes_artifacts_and_reconciles_graph(review_client):
     assert manifest["model_id"] == model.id
     assert manifest["run_id"] == run_id
     assert manifest["datasets"] == 1
-    published_dir = Path(runstore.ROOT) / "models" / model.id / "published"
+    published_dir = runtime.artifacts.root / "models" / model.id / "published"
     assert (published_dir / "semantic.ossie.yaml").exists()
     assert (published_dir / "semantic.ossie.json").exists()
     assert json.loads((published_dir / "manifest.json").read_text())[
@@ -658,7 +659,7 @@ def test_publish_validation_failure_does_not_write_artifacts(review_client):
     assert response.json()["detail"]["code"] == "publication_validation_failed"
     assert response.json()["detail"]["errors"]
     assert not (
-        Path(runstore.ROOT)
+        runtime.artifacts.root
         / "models"
         / model.id
         / "published"

@@ -1,6 +1,5 @@
 """helios_core.settings: resolution order, defaults, and parity with the code it replaces."""
 
-import importlib
 import os
 from pathlib import Path
 
@@ -8,13 +7,12 @@ import platformdirs
 import pytest
 from pydantic import ValidationError
 
-from helios_core import audit, config, runs
-from helios_core._pending import evidence
 from helios_core.artifacts import ArtifactStore
 from helios_core.atlas import atlas_config_for
 from helios_core.engines.impala import impala_config_for
-from helios_core.llm.client import llm_from_env
-from helios_core.metadata.sqlite import default_database_path
+from helios_core.llm import llm_from_settings
+from helios_core.metadata import SQLiteMetadataRepository
+from helios_core.runs import RunStore
 from helios_core.settings import Settings
 
 PREFIXES = ("HELIOS_", "IMPALA_", "WORKLOAD_", "ATLAS_", "INFERENCE_", "ANTHROPIC_", "MISTRAL_", "CDSW_")
@@ -166,7 +164,7 @@ def test_plugins_validate_their_own_options(monkeypatch):
 @pytest.mark.parametrize(("raw", "days"), [("45", 45), ("0", 1), ("99999", 3650), ("soon", 30)])
 def test_audit_retention_is_clamped_like_before(monkeypatch, raw, days):
     monkeypatch.setenv("HELIOS_AUDIT_RETENTION_DAYS", raw)
-    assert Settings().audit_retention_days == days == audit.retention_days()
+    assert Settings().audit_retention_days == days
 
 
 def test_journal_mode_and_timeout_are_validated():
@@ -196,8 +194,9 @@ def test_settings_are_immutable():
         Settings().runs_dir = Path("/x")
 
 
-# Parity: for the environments Helios runs in today, Settings resolves exactly what
-# the code it replaces resolves, so wiring it in (burndown 1.4) changes nothing.
+# Parity: in the environments Helios runs in today, the stores and clients built from
+# Settings resolve exactly what the code before Settings resolved. EXPECTED was
+# recorded by running that code (commit ef2b6f5 plus 1.3) in each environment.
 ENVIRONMENTS = {
     "workbench": {
         "CDSW_PROJECT_DIR": "/home/cdsw",
@@ -240,36 +239,81 @@ ENVIRONMENTS = {
 }
 
 
+EXPECTED = {'workbench': {'metadata_db': '/home/cdsw/helios/state/helios.db',
+               'runs_dir': '/home/cdsw/helios/runs',
+               'artifacts_dir': '/home/cdsw/helios',
+               'evidence_index': '/home/cdsw/helios/state/evidence.lance',
+               'audit_retention_days': 90,
+               'impala': ['vw.example.com',
+                          443,
+                          'svc-helios',
+                          'pw',
+                          'default',
+                          'cliservice/vw',
+                          True],
+               'atlas': ['https://dl.example.com/atlas/api/atlas/v2', 'atlas', 'pw', False],
+               'llm': ['openai', 'llama', 'jwt', 'https://caii.example.com/v1', 30.0]},
+ 'workbench-without-project-dir': {'metadata_db': '/home/cdsw/helios/state/helios.db',
+                                   'runs_dir': '/home/cdsw/helios/runs',
+                                   'artifacts_dir': '/home/cdsw/helios',
+                                   'evidence_index': '/home/cdsw/helios/state/evidence.lance',
+                                   'audit_retention_days': 30,
+                                   'impala': None,
+                                   'atlas': None,
+                                   'llm': None},
+ 'local': {'metadata_db': '/var/lib/helios.db',
+           'runs_dir': '/var/runs',
+           'artifacts_dir': '/srv/helios',
+           'evidence_index': '/var/evidence.lance',
+           'audit_retention_days': 30,
+           'impala': ['vw.example.com', 28000, 'me', 'pw', 'tpcds', 'cliservice', False],
+           'atlas': None,
+           'llm': ['anthropic', 'claude-sonnet-5', 'sk-ant', None, 45.0]},
+ 'mistral': {'metadata_db': '/srv/helios/state/helios.db',
+             'runs_dir': '/srv/helios/runs',
+             'artifacts_dir': '/srv/helios',
+             'evidence_index': '/srv/helios/state/evidence.lance',
+             'audit_retention_days': 30,
+             'impala': None,
+             'atlas': None,
+             'llm': ['mistral', 'mistral-large', 'mk', 'https://api.mistral.ai/v1', 30.0]},
+ 'provider-without-key': {'metadata_db': '/srv/helios/state/helios.db',
+                          'runs_dir': '/srv/helios/runs',
+                          'artifacts_dir': '/srv/helios',
+                          'evidence_index': '/srv/helios/state/evidence.lance',
+                          'audit_retention_days': 30,
+                          'impala': None,
+                          'atlas': None,
+                          'llm': None}}
+
+
 @pytest.mark.parametrize("name", ENVIRONMENTS)
-def test_parity_with_the_code_it_replaces(monkeypatch, name):
+def test_parity_with_the_code_before_settings(monkeypatch, name):
     for key, value in ENVIRONMENTS[name].items():
         monkeypatch.setenv(key, value)
     s = Settings()
+    expected = EXPECTED[name]
 
-    assert str(s.metadata_db) == default_database_path()
-    assert str(s.evidence.index) == evidence.location()
-    assert s.artifacts_dir == ArtifactStore().root
-    monkeypatch.setattr(runs, "ROOT", runs.ROOT)       # restored after the reload below
-    monkeypatch.setattr(runs, "RUNS_DIR", runs.RUNS_DIR)
-    assert str(s.runs_dir) == importlib.reload(runs).RUNS_DIR
-    assert s.audit_retention_days == audit.retention_days()
+    assert SQLiteMetadataRepository.from_settings(s).path == expected["metadata_db"]
+    assert RunStore.from_settings(s).runs_dir == expected["runs_dir"]
+    assert ArtifactStore.from_settings(s).root == Path(expected["artifacts_dir"])
+    assert str(s.evidence.index) == expected["evidence_index"]
+    assert s.audit_retention_days == expected["audit_retention_days"]
 
-    old_impala = config.impala_config()
-    if old_impala is None:
+    if expected["impala"] is None:
         assert "default" not in s.connections
     else:
-        assert impala_config_for(s.connections["default"]) == old_impala
+        c = impala_config_for(s.connections["default"])
+        assert [c.host, c.port, c.user, c.password, c.database, c.http_path, c.proxy_delegation] == expected["impala"]
 
-    old_atlas = config.atlas_config()
-    if old_atlas is None:
+    if expected["atlas"] is None:
         assert "default" not in s.catalogs
     else:
-        assert atlas_config_for(s.catalogs["default"]) == old_atlas
+        a = atlas_config_for(s.catalogs["default"])
+        assert [a.base_url, a.user, a.password, a.verify_ssl] == expected["atlas"]
 
-    old_llm = llm_from_env()
-    if old_llm is None:
-        assert s.llm.provider is None
+    llm = llm_from_settings(s.llm)
+    if expected["llm"] is None:
+        assert llm is None
     else:
-        key = s.llm.api_key.get_secret_value() if s.llm.api_key else None
-        assert (s.llm.provider, s.llm.model, key, s.llm.base_url, s.llm.timeout_seconds) == (
-            old_llm.provider, old_llm.model, old_llm.api_key, old_llm.base_url, old_llm.timeout)
+        assert [llm.provider, llm.model, llm.api_key, llm.base_url, llm.timeout] == expected["llm"]

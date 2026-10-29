@@ -47,8 +47,9 @@ def read_json(path: str):
 def audit_job(stage: str, run_id: str, model_id: str | None = None):
     from helios_core import audit
     from helios_core.metadata import SQLiteMetadataRepository
+    from helios_core.settings import Settings
 
-    repository = SQLiteMetadataRepository()
+    repository = SQLiteMetadataRepository.from_settings(Settings())
     findings = repository.integrity_check()
     if findings != ("ok",):
         raise RuntimeError(

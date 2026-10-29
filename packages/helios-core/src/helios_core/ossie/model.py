@@ -7,6 +7,7 @@ console) works with. helios provenance is read back from `custom_extensions` whe
 from __future__ import annotations
 
 import json
+import os
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 
@@ -151,12 +152,12 @@ class SemanticModel:
         return cls(doc)
 
     @classmethod
-    def load_published(cls, model_id: str, root: str | None = None) -> "SemanticModel":
+    def load_published(cls, model_id: str, root: str | os.PathLike[str]) -> "SemanticModel":
         """Load by stable Helios Model ID, with legacy flat-layout fallback."""
         return cls.load(str(ArtifactStore(root).published_ossie_path(model_id)))
 
     @staticmethod
-    def list_published(root: str | None = None) -> list[str]:
+    def list_published(root: str | os.PathLike[str]) -> list[str]:
         """Return stable Model IDs with published semantic artifacts."""
         return ArtifactStore(root).published_model_ids()
 

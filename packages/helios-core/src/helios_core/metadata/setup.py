@@ -3,11 +3,13 @@
 Run with: ``python -m helios_core.metadata.setup``.
 """
 
+from helios_core.settings import Settings
+
 from .sqlite import SQLiteMetadataRepository
 
 
 def main() -> None:
-    repository = SQLiteMetadataRepository()
+    repository = SQLiteMetadataRepository.from_settings(Settings())
     repository.migrate()
     print(f"helios metadata schema {repository.schema_version()} ready at {repository.path}")
 

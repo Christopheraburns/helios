@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import re
 import threading
 import time
@@ -16,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from helios_core.metadata import AuditEvent, MetadataRepository
+from helios_core.settings import environment_secret_values
 
 LOGGER = logging.getLogger("helios.audit")
 MAX_DETAIL_BYTES = 8_192
@@ -141,23 +141,7 @@ def exception_diagnostics(
     excluded_values: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Build administrator-only diagnostics without persisting known secrets."""
-    secrets = {
-        value
-        for name, value in os.environ.items()
-        if value
-        and len(value) >= 4
-        and any(
-            part in name.lower()
-            for part in (
-                "credential",
-                "password",
-                "secret",
-                "token",
-                "api_key",
-                "apikey",
-            )
-        )
-    }
+    secrets = environment_secret_values()
     secrets.update(value for value in excluded_values if value)
 
     def scrub(value: str) -> str:
@@ -255,19 +239,9 @@ def emit(
         return None
 
 
-def retention_days() -> int:
-    value = os.environ.get("HELIOS_AUDIT_RETENTION_DAYS", "30")
-    try:
-        return min(max(int(value), 1), 3650)
-    except ValueError:
-        LOGGER.warning(
-            "invalid HELIOS_AUDIT_RETENTION_DAYS; using 30 days"
-        )
-        return 30
-
-
-def purge_expired(repository: MetadataRepository) -> int:
-    before = datetime.now(timezone.utc) - timedelta(days=retention_days())
+def purge_expired(repository: MetadataRepository, retention_days: int) -> int:
+    """Delete audit events older than ``retention_days`` (Settings.audit_retention_days)."""
+    before = datetime.now(timezone.utc) - timedelta(days=retention_days)
     try:
         return repository.purge_audit_events(before)
     except Exception:

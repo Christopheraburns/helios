@@ -7,7 +7,8 @@ from fastapi.testclient import TestClient
 
 from apps.helios.console.main import app
 from helios_core._pending import health as system_health
-from helios_core import runs as runstore
+from helios_core.runs import RunStore
+from apps.helios import runtime
 from helios_core._pending.graph import ArtifactGraphRepository
 from helios_core.metadata import SemanticRevision, TraceRun, TraceSpan
 
@@ -75,11 +76,7 @@ def test_trace_api_enforces_owner_and_organization_admin_visibility(
 ):
     now = datetime.now(UTC)
     repository = persistent_auth_stack.repository
-    monkeypatch.setattr(
-        runstore,
-        "ROOT",
-        str(persistent_auth_stack.artifacts.root),
-    )
+    monkeypatch.setattr(runtime, "artifacts", persistent_auth_stack.artifacts)
     revision_data = (
         persistent_auth_stack.artifacts.ensure_published_revision(
             "customer360"
@@ -322,7 +319,7 @@ def test_model_status_reports_partial_failures_and_recent_runs(
             }
         )
     )
-    monkeypatch.setattr(runstore, "RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setattr(runtime, "runs", RunStore(tmp_path / "runs"))
     app.state.system_health_checker = lambda _: [
         system_health.HealthComponent(
             "metadata",
@@ -586,7 +583,7 @@ def test_run_contracts_project_real_artifacts_and_historical_profile(
             }
         )
     )
-    monkeypatch.setattr(runstore, "RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setattr(runtime, "runs", RunStore(tmp_path / "runs"))
 
     collection = persistent_client.get(
         "/api/v1/models/customer360/runs",
@@ -680,7 +677,7 @@ def test_run_routes_enforce_authentication_authorization_and_artifact_errors(
         )
     )
     (run_directory / "profile.json").write_text("{malformed json")
-    monkeypatch.setattr(runstore, "RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setattr(runtime, "runs", RunStore(tmp_path / "runs"))
 
     unauthenticated = persistent_client.get(
         "/api/v1/models/customer360/runs/customer-run"
