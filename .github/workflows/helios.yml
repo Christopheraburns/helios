@@ -22,6 +22,7 @@ jobs:
           enable-cache: true
       - run: uv sync --locked
       - run: uv run ruff check packages apps/helios jobs scripts
+      - run: uv run lint-imports
       - run: uv run pytest -q
 
   # Wheels go to the internal index on a package tag (helios-core/v0.1.0).

@@ -32,8 +32,9 @@ evidence = ["helios-core[evidence]"]
 
 [dependency-groups]
 dev = [
+    "import-linter>=2.15",
     "pytest>=8.0",
-    "reportlab>=4.0",  # crawler test fixtures render PDFs
+    "reportlab>=4.0", # crawler test fixtures render PDFs
     "ruff>=0.6.0",
 ]
 
@@ -51,6 +52,33 @@ packages = ["apps"]
 
 [tool.pytest.ini_options]
 testpaths = ["apps/helios/tests"]
+
+[tool.importlinter]
+root_packages = ["helios_core"]
+include_external_packages = true  # so apps.* and sibling packages can be named
+
+[[tool.importlinter.contracts]]
+name = "helios-core imports no app code and no sibling package"
+type = "forbidden"
+source_modules = ["helios_core"]
+forbidden_modules = [
+    "apps",
+    "helios_model",
+    "helios_serve",
+    "helios_mcp",
+    "helios_cloudera",
+    "helios_crawl",
+]
+
+[[tool.importlinter.contracts]]
+# Feature code waiting for its package (see helios_core/_pending/__init__.py).
+# The source is core's children, not helios_core itself: import-linter skips a
+# forbidden module that sits inside the source package.
+name = "only _pending imports helios_core._pending"
+type = "forbidden"
+source_modules = ["helios_core.*"]
+forbidden_modules = ["helios_core._pending"]
+ignore_imports = ["helios_core._pending.** -> helios_core._pending.**"]
 
 [tool.mypy]
 python_version = "3.11"
