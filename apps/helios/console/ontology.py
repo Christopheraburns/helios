@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from apps.helios import runtime
 from apps.helios.graph import store
 from fastapi import APIRouter, HTTPException, Request
 from helios_core.index import IndexStore, impala_index_store
@@ -102,7 +103,7 @@ class OntologyVersionResponse(BaseModel):
     recorded_in_lakehouse: bool = False
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = runtime.REPO
 ONTOLOGY_DIR = REPO_ROOT / "ontology"
 
 
@@ -171,7 +172,7 @@ def shipped_mappings() -> list[SourceMapping]:
 
 
 def semantic_model(model: str) -> dict[str, Any] | None:
-    """The published semantic model a mapping names (its file under
+    """The published semantic model a mapping names (its file under the shipped
     models/published), or None if it is not there."""
     name = Path(model).name
     candidates = [name] if name.endswith((".yaml", ".yml")) else [f"{name}.ossie.yaml", f"{name}.yaml"]

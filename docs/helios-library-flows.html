@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helios Library Flows</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: one column of reading text; each diagram is a lane-per-library swimlane that scrolls sideways on narrow screens. */
+:root {
+  --bg: #f4f6f9; --panel: #ffffff; --fg: #18202f; --muted: #5a6476; --line: #d5dbe4; --edge: #6b7486;
+  --host: #5f6b7d; --mcp: #7445d6; --serve: #0d8578; --model: #b06f12; --core: #2459d6; --plugin: #bf3b67; --platform: #5b6270;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f131a; --panel: #171c25; --fg: #e5e9f0; --muted: #98a1b1; --line: #2a3140; --edge: #8a93a5;
+  --host: #9aa6b8; --mcp: #a98bfa; --serve: #35cdb9; --model: #eeb04a; --core: #74a2ff; --plugin: #f2799f; --platform: #a3aab6;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0f131a; --panel: #171c25; --fg: #e5e9f0; --muted: #98a1b1; --line: #2a3140; --edge: #8a93a5;
+  --host: #9aa6b8; --mcp: #a98bfa; --serve: #35cdb9; --model: #eeb04a; --core: #74a2ff; --plugin: #f2799f; --platform: #a3aab6;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--body); }
+main { max-width: 1240px; margin: 0 auto; padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 40px; }
+header { display: grid; gap: 10px; max-width: 68ch; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 600 34px/1.15 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 600 22px/1.2 var(--display); margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.lede { color: var(--muted); }
+code { font: 13px var(--mono); }
+section { display: grid; gap: 14px; min-width: 0; }
+.section-head { display: grid; gap: 6px; max-width: 72ch; }
+.section-head p { color: var(--muted); }
+.scroller { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.scroller svg { display: block; width: 100%; min-width: 980px; height: auto; }
+
+/* lane colours */
+.l-host { --hue: var(--host); } .l-mcp { --hue: var(--mcp); } .l-serve { --hue: var(--serve); }
+.l-model { --hue: var(--model); } .l-core { --hue: var(--core); } .l-plugin { --hue: var(--plugin); } .l-platform { --hue: var(--platform); }
+.lane { fill: color-mix(in srgb, var(--hue) 5%, var(--panel)); stroke: var(--line); stroke-width: .5; }
+.lane.dim { fill: var(--panel); }
+.swatch { fill: var(--hue); } .swatch.dim { fill: var(--line); }
+.lane-name { font: 600 14px var(--display); fill: var(--fg); }
+.lane-role { font: 11.5px var(--body); fill: var(--muted); }
+.lane-name.dim, .lane-role.dim { fill: var(--muted); opacity: .55; }
+.lane-role.dim { font-style: italic; }
+.divider { stroke: var(--line); }
+.edge { fill: none; stroke: var(--edge); stroke-width: 1.4; }
+.arrowhead { fill: var(--edge); }
+.box rect { stroke: var(--hue); stroke-width: 1.3; }
+.box.main rect { fill: color-mix(in srgb, var(--hue) 16%, var(--panel)); }
+.box.support rect { fill: var(--panel); stroke-dasharray: 4 3; }
+.bt { font: 600 13px var(--body); fill: var(--fg); }
+.bt.mono { font: 500 12.5px var(--mono); }
+.bs { font: 11px var(--body); fill: var(--muted); }
+.num { fill: var(--hue); }
+.numt { font: 600 11px var(--body); fill: var(--panel); text-anchor: middle; }
+
+.key { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 13px; color: var(--muted); }
+.key span { display: inline-flex; align-items: center; gap: 8px; }
+.chip { width: 26px; height: 14px; border-radius: 4px; border: 1.3px solid var(--core); }
+.chip.main { background: color-mix(in srgb, var(--core) 16%, var(--panel)); }
+.chip.support { background: var(--panel); border-style: dashed; }
+
+.libs { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.lib { background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--hue); border-radius: 8px;
+  padding: 16px 18px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.lib h3 { margin: 0; font: 500 15px var(--mono); color: var(--hue); }
+.lib p { font-size: 14px; }
+.lib dl { margin: 4px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+.lib dt { color: var(--muted); }
+.lib dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.around { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px 28px; font-size: 14px; }
+.around p strong { font-weight: 600; }
+.status { font-size: 13.5px; color: var(--muted); border-left: 3px solid var(--line); padding-left: 12px; max-width: 80ch; }
+</style>
+
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Helios decomposition · target design</div>
+    <h1>How the four Helios libraries work together</h1>
+    <p class="lede">A typical deployment does two things. First it builds a semantic model of a warehouse and publishes it. Then agents use that model to answer questions with SQL that runs as the person asking. Each row in the diagrams below is one library, so you can see which library does which step.</p>
+  </header>
+
+  <section>
+    <div class="section-head">
+      <h2>1 · Build and publish a semantic model</h2>
+      <p>This runs offline from the <code>helios</code> command or a scheduled job. Only helios-model and helios-core take part. Plugins reach the catalog, the warehouse, the LLM and storage.</p>
+    </div>
+    <div class="scroller"><svg viewBox="0 0 1258 590" role="img" aria-labelledby="build-t" class="flow">
+<title id="build-t">Building and publishing a semantic model</title>
+<rect class="lane l-host" x="0" y="8" width="1258" height="82"/>
+<rect class="swatch l-host" x="0" y="8" width="4" height="82"/>
+<text class="lane-name" x="16" y="46.0">Host / agent</text>
+<text class="lane-role" x="16" y="63.0">your app, a person, an LLM agent</text>
+<rect class="lane l-mcp dim" x="0" y="90" width="1258" height="82"/>
+<rect class="swatch l-mcp dim" x="0" y="90" width="4" height="82"/>
+<text class="lane-name dim" x="16" y="128.0">helios-mcp · Daedalus</text>
+<text class="lane-role dim" x="16" y="145.0">not used in this flow</text>
+<rect class="lane l-serve dim" x="0" y="172" width="1258" height="82"/>
+<rect class="swatch l-serve dim" x="0" y="172" width="4" height="82"/>
+<text class="lane-name dim" x="16" y="210.0">helios-serve</text>
+<text class="lane-role dim" x="16" y="227.0">not used in this flow</text>
+<rect class="lane l-model" x="0" y="254" width="1258" height="82"/>
+<rect class="swatch l-model" x="0" y="254" width="4" height="82"/>
+<text class="lane-name" x="16" y="292.0">helios-model</text>
+<text class="lane-role" x="16" y="309.0">builds the semantic model</text>
+<rect class="lane l-core" x="0" y="336" width="1258" height="82"/>
+<rect class="swatch l-core" x="0" y="336" width="4" height="82"/>
+<text class="lane-name" x="16" y="374.0">helios-core</text>
+<text class="lane-role" x="16" y="391.0">settings, registry, compiler</text>
+<rect class="lane l-plugin" x="0" y="418" width="1258" height="82"/>
+<rect class="swatch l-plugin" x="0" y="418" width="4" height="82"/>
+<text class="lane-name" x="16" y="456.0">Plugins</text>
+<text class="lane-role" x="16" y="473.0">helios-cloudera and built-ins</text>
+<rect class="lane l-platform" x="0" y="500" width="1258" height="82"/>
+<rect class="swatch l-platform" x="0" y="500" width="4" height="82"/>
+<text class="lane-name" x="16" y="538.0">Platform &amp; storage</text>
+<text class="lane-role" x="16" y="555.0">outside Helios</text>
+<line class="divider" x1="178" y1="8" x2="178" y2="582"/>
+<path class="edge" d="M279.0,80.0 V344.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M354.0,377.0 H368.0 V295.0 H380.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M457.0,326.0 V426.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M457.0,490.0 V508.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M532.0,295.0 H558.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M635.0,326.0 V426.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M635.0,490.0 V508.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M710.0,295.0 H736.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M813.0,326.0 V344.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M813.0,408.0 V508.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M888.0,295.0 H902.0 V49.0 H914.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M1066.0,49.0 H1080.0 V295.0 H1092.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M1169.0,326.0 V344.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M1169.0,408.0 V426.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M1169.0,490.0 V508.0" marker-end="url(#arrow)"/>
+<g class="box main l-host">
+<rect x="204.0" y="18.0" width="150" height="62" rx="7"/>
+<text class="bt mono" x="216.0" y="39.0">helios harvest</text>
+<text class="bs" x="216.0" y="55.0">CLI, Workbench Job,</text>
+<text class="bs" x="216.0" y="69.0">or the host&#x27;s code</text>
+<circle class="num" cx="204.0" cy="18.0" r="10"/>
+<text class="numt" x="204.0" y="22.0">1</text>
+</g>
+<g class="box main l-core">
+<rect x="204.0" y="346.0" width="150" height="62" rx="7"/>
+<text class="bt" x="216.0" y="367.0">Settings + plugins</text>
+<text class="bs" x="216.0" y="383.0">helios.toml, HELIOS_* env,</text>
+<text class="bs" x="216.0" y="397.0">entry points</text>
+<circle class="num" cx="204.0" cy="346.0" r="10"/>
+<text class="numt" x="204.0" y="350.0">2</text>
+</g>
+<g class="box main l-model">
+<rect x="382.0" y="264.0" width="150" height="62" rx="7"/>
+<text class="bt mono" x="394.0" y="285.0">Catalog.harvest</text>
+<text class="bs" x="394.0" y="301.0">tables, columns, glossary</text>
+<text class="bs" x="394.0" y="315.0">→ a run in the store</text>
+<circle class="num" cx="382.0" cy="264.0" r="10"/>
+<text class="numt" x="382.0" y="268.0">3</text>
+</g>
+<g class="box support l-plugin">
+<rect x="382.0" y="428.0" width="150" height="62" rx="7"/>
+<text class="bt" x="394.0" y="456.0">Catalog plugin</text>
+<text class="bs" x="394.0" y="472.0">Atlas · SQL inspector</text>
+</g>
+<g class="box support l-platform">
+<rect x="382.0" y="510.0" width="150" height="62" rx="7"/>
+<text class="bt" x="394.0" y="538.0">Source metadata</text>
+<text class="bs" x="394.0" y="554.0">Atlas, schemas</text>
+</g>
+<g class="box main l-model">
+<rect x="560.0" y="264.0" width="150" height="62" rx="7"/>
+<text class="bt mono" x="572.0" y="285.0">Profiler.profile</text>
+<text class="bs" x="572.0" y="301.0">row counts, keys,</text>
+<text class="bs" x="572.0" y="315.0">value distributions</text>
+<circle class="num" cx="560.0" cy="264.0" r="10"/>
+<text class="numt" x="560.0" y="268.0">4</text>
+</g>
+<g class="box support l-plugin">
+<rect x="560.0" y="428.0" width="150" height="62" rx="7"/>
+<text class="bt" x="572.0" y="456.0">Engine plugin</text>
+<text class="bs" x="572.0" y="472.0">query(sql, caller)</text>
+</g>
+<g class="box support l-platform">
+<rect x="560.0" y="510.0" width="150" height="62" rx="7"/>
+<text class="bt" x="572.0" y="538.0">Warehouse</text>
+<text class="bs" x="572.0" y="554.0">Impala, DuckDB, Postgres…</text>
+</g>
+<g class="box main l-model">
+<rect x="738.0" y="264.0" width="150" height="62" rx="7"/>
+<text class="bt mono" x="750.0" y="285.0">Proposer.propose</text>
+<text class="bs" x="750.0" y="301.0">Proposals with</text>
+<text class="bs" x="750.0" y="315.0">confidence + rationale</text>
+<circle class="num" cx="738.0" cy="264.0" r="10"/>
+<text class="numt" x="738.0" y="268.0">5</text>
+</g>
+<g class="box support l-core">
+<rect x="738.0" y="346.0" width="150" height="62" rx="7"/>
+<text class="bt" x="750.0" y="374.0">LLM client</text>
+<text class="bs" x="750.0" y="390.0">llm_from_settings</text>
+</g>
+<g class="box support l-platform">
+<rect x="738.0" y="510.0" width="150" height="62" rx="7"/>
+<text class="bt" x="750.0" y="538.0">LLM provider</text>
+<text class="bs" x="750.0" y="554.0">Anthropic, Cloudera AI…</text>
+</g>
+<g class="box main l-host">
+<rect x="916.0" y="18.0" width="150" height="62" rx="7"/>
+<text class="bt" x="928.0" y="39.0">Review proposals</text>
+<text class="bs" x="928.0" y="55.0">a person accepts,</text>
+<text class="bs" x="928.0" y="69.0">edits or rejects</text>
+<circle class="num" cx="916.0" cy="18.0" r="10"/>
+<text class="numt" x="916.0" y="22.0">6</text>
+</g>
+<g class="box main l-model">
+<rect x="1094.0" y="264.0" width="150" height="62" rx="7"/>
+<text class="bt mono" x="1106.0" y="292.0">Publisher.publish</text>
+<text class="bs" x="1106.0" y="308.0">→ OntologyVersion</text>
+<circle class="num" cx="1094.0" cy="264.0" r="10"/>
+<text class="numt" x="1094.0" y="268.0">7</text>
+</g>
+<g class="box support l-core">
+<rect x="1094.0" y="346.0" width="150" height="62" rx="7"/>
+<text class="bt" x="1106.0" y="367.0">Registry + artifacts</text>
+<text class="bs" x="1106.0" y="383.0">model rows, revisions,</text>
+<text class="bs" x="1106.0" y="397.0">semantic YAML</text>
+</g>
+<g class="box support l-plugin">
+<rect x="1094.0" y="428.0" width="150" height="62" rx="7"/>
+<text class="bt" x="1106.0" y="456.0">Store plugins</text>
+<text class="bs" x="1106.0" y="472.0">SQLAlchemy URL · fsspec</text>
+</g>
+<g class="box support l-platform">
+<rect x="1094.0" y="510.0" width="150" height="62" rx="7"/>
+<text class="bt" x="1106.0" y="531.0">Database + files</text>
+<text class="bs" x="1106.0" y="547.0">SQLite/Postgres ·</text>
+<text class="bs" x="1106.0" y="561.0">local, S3, ADLS, GCS</text>
+</g>
+</svg></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>2 · Answer a question</h2>
+      <p>This runs whenever an agent calls a tool. helios-model is not involved. helios-serve reads the published model, and the warehouse checks access using the caller's own identity.</p>
+    </div>
+    <div class="scroller"><svg viewBox="0 0 1258 590" role="img" aria-labelledby="ask-t" class="flow">
+<title id="ask-t">Answering a question</title>
+<rect class="lane l-host" x="0" y="8" width="1258" height="82"/>
+<rect class="swatch l-host" x="0" y="8" width="4" height="82"/>
+<text class="lane-name" x="16" y="46.0">Host / agent</text>
+<text class="lane-role" x="16" y="63.0">your app, a person, an LLM agent</text>
+<rect class="lane l-mcp" x="0" y="90" width="1258" height="82"/>
+<rect class="swatch l-mcp" x="0" y="90" width="4" height="82"/>
+<text class="lane-name" x="16" y="128.0">helios-mcp · Daedalus</text>
+<text class="lane-role" x="16" y="145.0">MCP adapters</text>
+<rect class="lane l-serve" x="0" y="172" width="1258" height="82"/>
+<rect class="swatch l-serve" x="0" y="172" width="4" height="82"/>
+<text class="lane-name" x="16" y="210.0">helios-serve</text>
+<text class="lane-role" x="16" y="227.0">tools and the Helios facade</text>
+<rect class="lane l-model dim" x="0" y="254" width="1258" height="82"/>
+<rect class="swatch l-model dim" x="0" y="254" width="4" height="82"/>
+<text class="lane-name dim" x="16" y="292.0">helios-model</text>
+<text class="lane-role dim" x="16" y="309.0">not used in this flow</text>
+<rect class="lane l-core" x="0" y="336" width="1258" height="82"/>
+<rect class="swatch l-core" x="0" y="336" width="4" height="82"/>
+<text class="lane-name" x="16" y="374.0">helios-core</text>
+<text class="lane-role" x="16" y="391.0">settings, registry, compiler</text>
+<rect class="lane l-plugin" x="0" y="418" width="1258" height="82"/>
+<rect class="swatch l-plugin" x="0" y="418" width="4" height="82"/>
+<text class="lane-name" x="16" y="456.0">Plugins</text>
+<text class="lane-role" x="16" y="473.0">helios-cloudera and built-ins</text>
+<rect class="lane l-platform" x="0" y="500" width="1258" height="82"/>
+<rect class="swatch l-platform" x="0" y="500" width="4" height="82"/>
+<text class="lane-name" x="16" y="538.0">Platform &amp; storage</text>
+<text class="lane-role" x="16" y="555.0">outside Helios</text>
+<line class="divider" x1="178" y1="8" x2="178" y2="582"/>
+<path class="edge" d="M354.0,49.0 H368.0 V131.0 H380.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M532.0,131.0 H546.0 V213.0 H558.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M635.0,244.0 V344.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M710.0,213.0 H736.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M813.0,244.0 V344.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M888.0,213.0 H914.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M991.0,244.0 V344.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M991.0,408.0 V426.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M991.0,490.0 V508.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M1066.0,213.0 H1092.0" marker-end="url(#arrow)"/>
+<path class="edge" d="M1169.0,182.0 V82.0" marker-end="url(#arrow)"/>
+<g class="box main l-host">
+<rect x="204.0" y="18.0" width="150" height="62" rx="7"/>
+<text class="bt" x="216.0" y="39.0">User asks a question</text>
+<text class="bs" x="216.0" y="55.0">agent + talk-to-data skill</text>
+<text class="bs" x="216.0" y="69.0">(Claude Code, Cursor…)</text>
+<circle class="num" cx="204.0" cy="18.0" r="10"/>
+<text class="numt" x="204.0" y="22.0">1</text>
+</g>
+<g class="box main l-mcp">
+<rect x="382.0" y="100.0" width="150" height="62" rx="7"/>
+<text class="bt" x="394.0" y="121.0">MCP tool call</text>
+<text class="bs" x="394.0" y="137.0">stdio locally, Daedalus</text>
+<text class="bs" x="394.0" y="151.0">shared → Caller</text>
+<circle class="num" cx="382.0" cy="100.0" r="10"/>
+<text class="numt" x="382.0" y="104.0">2</text>
+</g>
+<g class="box main l-serve">
+<rect x="560.0" y="182.0" width="150" height="62" rx="7"/>
+<text class="bt" x="572.0" y="196.0">Find the model</text>
+<text class="bs" x="572.0" y="212.0">list_models,</text>
+<text class="bs" x="572.0" y="226.0">describe_model,</text>
+<text class="bs" x="572.0" y="240.0">search_semantics</text>
+<circle class="num" cx="560.0" cy="182.0" r="10"/>
+<text class="numt" x="560.0" y="186.0">3</text>
+</g>
+<g class="box support l-core">
+<rect x="560.0" y="346.0" width="150" height="62" rx="7"/>
+<text class="bt" x="572.0" y="374.0">Model registry</text>
+<text class="bs" x="572.0" y="390.0">ModelVisibility hook</text>
+</g>
+<g class="box main l-serve">
+<rect x="738.0" y="182.0" width="150" height="62" rx="7"/>
+<text class="bt mono" x="750.0" y="210.0">compile_query</text>
+<text class="bs" x="750.0" y="226.0">semantic request → SQL</text>
+<circle class="num" cx="738.0" cy="182.0" r="10"/>
+<text class="numt" x="738.0" y="186.0">4</text>
+</g>
+<g class="box support l-core">
+<rect x="738.0" y="346.0" width="150" height="62" rx="7"/>
+<text class="bt" x="750.0" y="374.0">Compiler</text>
+<text class="bs" x="750.0" y="390.0">engine&#x27;s SQL dialect</text>
+</g>
+<g class="box main l-serve">
+<rect x="916.0" y="182.0" width="150" height="62" rx="7"/>
+<text class="bt mono" x="928.0" y="203.0">run_query</text>
+<text class="bs" x="928.0" y="219.0">the only tool that</text>
+<text class="bs" x="928.0" y="233.0">executes SQL</text>
+<circle class="num" cx="916.0" cy="182.0" r="10"/>
+<text class="numt" x="916.0" y="186.0">5</text>
+</g>
+<g class="box support l-core">
+<rect x="916.0" y="346.0" width="150" height="62" rx="7"/>
+<text class="bt" x="928.0" y="367.0">Connection + policy</text>
+<text class="bs" x="928.0" y="383.0">resolve_connection,</text>
+<text class="bs" x="928.0" y="397.0">DataPolicy</text>
+</g>
+<g class="box support l-plugin">
+<rect x="916.0" y="428.0" width="150" height="62" rx="7"/>
+<text class="bt" x="928.0" y="449.0">Engine plugin</text>
+<text class="bs" x="928.0" y="465.0">token · impersonate ·</text>
+<text class="bs" x="928.0" y="479.0">service</text>
+</g>
+<g class="box support l-platform">
+<rect x="916.0" y="510.0" width="150" height="62" rx="7"/>
+<text class="bt" x="928.0" y="531.0">Warehouse</text>
+<text class="bs" x="928.0" y="547.0">enforces access as the</text>
+<text class="bs" x="928.0" y="561.0">caller (Ranger)</text>
+</g>
+<g class="box main l-serve">
+<rect x="1094.0" y="182.0" width="150" height="62" rx="7"/>
+<text class="bt" x="1106.0" y="210.0">Rows + audit event</text>
+<text class="bs" x="1106.0" y="226.0">AuditSink</text>
+<circle class="num" cx="1094.0" cy="182.0" r="10"/>
+<text class="numt" x="1094.0" y="186.0">6</text>
+</g>
+<g class="box main l-host">
+<rect x="1094.0" y="18.0" width="150" height="62" rx="7"/>
+<text class="bt" x="1106.0" y="39.0">Agent answers</text>
+<text class="bs" x="1106.0" y="55.0">with the rows and</text>
+<text class="bs" x="1106.0" y="69.0">the SQL it ran</text>
+<circle class="num" cx="1094.0" cy="18.0" r="10"/>
+<text class="numt" x="1094.0" y="22.0">7</text>
+</g>
+</svg></div>
+    <div class="key">
+      <span><i class="chip main"></i>Numbered step, in order</span>
+      <span><i class="chip support"></i>Supporting call into a plugin, the kernel or an outside system</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>The four libraries</h2></div>
+    <div class="libs">
+      <div class="lib l-core">
+        <h3>helios-core</h3>
+        <p>The kernel. It holds settings, the plugin loader, the model registry and artifact store, the semantic compiler, and the <code>Caller</code> type.</p>
+        <dl><dt>Depends on</dt><dd>nothing in Helios</dd><dt>Key API</dt><dd><code>Settings</code>, <code>plugins</code>, <code>Caller</code></dd><dt>Phases</dt><dd>1–4</dd></dl>
+      </div>
+      <div class="lib l-model">
+        <h3>helios-model</h3>
+        <p>Builds models. It harvests and profiles a source, has an LLM propose the semantics, and publishes the version a person approves.</p>
+        <dl><dt>Depends on</dt><dd>helios-core</dd><dt>Key API</dt><dd><code>harvest</code>, <code>profile</code>, <code>propose</code>, <code>publish</code></dd><dt>Phase</dt><dd>5</dd></dl>
+      </div>
+      <div class="lib l-serve">
+        <h3>helios-serve</h3>
+        <p>Uses models. It provides seven tools as plain Python functions with a registry, plus the <code>Helios</code> facade for application code. It has no MCP dependency.</p>
+        <dl><dt>Depends on</dt><dd>helios-core</dd><dt>Key API</dt><dd><code>run_query</code>, tool registry, <code>Helios</code></dd><dt>Phase</dt><dd>6</dd></dl>
+      </div>
+      <div class="lib l-mcp">
+        <h3>helios-mcp</h3>
+        <p>A local stdio MCP adapter. It serves the helios-serve registry to one developer's agent, without HTTP or authentication.</p>
+        <dl><dt>Depends on</dt><dd>helios-serve, MCP SDK</dd><dt>Key API</dt><dd><code>helios mcp</code></dd><dt>Phase</dt><dd>7</dd></dl>
+      </div>
+    </div>
+    <div class="around">
+      <p><strong>helios-cloudera</strong> is an optional plugin package. It adds the Impala engine, the Atlas catalog, Cloudera AI Inference defaults and the Workbench settings profile.</p>
+      <p><strong>Daedalus</strong> serves the same tool registry over MCP for shared deployments. It verifies each caller and passes it to helios-serve as a <code>Caller</code>.</p>
+      <p><strong>Your host app</strong> pip-installs the libraries and owns deployment, configuration and identity. It can also call the <code>Helios</code> facade directly instead of going through MCP.</p>
+    </div>
+  </section>
+
+  <p class="status">Status: this is the design after burndown Phase 7. Today only helios-core is a package in <code>packages/</code>. The model-building, tool and MCP code still lives in <code>apps/helios</code> and moves out in Phases 5–7.</p>
+</main>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+</svg>
+</body>
+</html>

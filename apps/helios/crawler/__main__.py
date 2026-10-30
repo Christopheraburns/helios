@@ -31,9 +31,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from apps.helios.runtime import REPO as REPO_ROOT
 from helios_core.settings import Settings as HeliosSettings
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def source_snapshot(source: Any) -> dict[str, Any]:
@@ -92,13 +91,14 @@ def llm_extractor(settings: Any, classes: list[str]) -> Any:
 
     from .llm_arm import LlmExtractor, claim_shapes, load_vocabulary
 
-    llm = llm_from_settings(HeliosSettings().llm)
+    helios_settings = HeliosSettings()
+    llm = llm_from_settings(helios_settings.llm)
     if llm is None:
         print("The llm strategy needs the project's LLM (LLM_PROVIDER and its key).")
         return None
     llm.timeout = max(llm.timeout, float(os.environ.get("HELIOS_CRAWL_LLM_TIMEOUT_SECONDS", "120")))
     vocabulary = load_vocabulary(REPO_ROOT / "ontology", classes, claim_shapes(settings))
-    cache = os.environ.get("HELIOS_LLM_CACHE") or str(REPO_ROOT / "state" / "llm_cache")
+    cache = os.environ.get("HELIOS_LLM_CACHE") or str(helios_settings.data_dir / "state" / "llm_cache")
     extractor = LlmExtractor(llm, settings, vocabulary, cache)
     print(
         f"llm: {llm.provider} {llm.model}, prompt {settings.llm.prompt_version} "

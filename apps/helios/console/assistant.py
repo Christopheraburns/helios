@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-from pathlib import Path
 from typing import Annotated, Any, Callable, Literal
 from urllib.parse import parse_qsl
 
@@ -25,6 +24,7 @@ from helios_core.llm import LLMClient, LLMError, LLMTimeoutError, llm_from_setti
 from helios_core.settings import Settings
 from helios_core.metadata import MetadataRepository
 from helios_core.tracing import TraceRecorder, utcnow
+from apps.helios import runtime
 from apps.helios.console import ontology
 from apps.helios.console.api import (
     AuthorizedModel,
@@ -51,7 +51,7 @@ from apps.helios.console.model_provider import (
 LOGGER = logging.getLogger(__name__)
 assistant_router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = runtime.REPO
 MAX_HISTORY_MESSAGES = 12
 MAX_EXCERPT_CHARS = 600
 MAX_DOC_RESULTS = 5

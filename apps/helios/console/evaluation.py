@@ -11,6 +11,7 @@ from typing import Any
 
 import anyio
 
+from apps.helios import runtime
 from apps.helios.console.conversation import (
     ConversationService,
     ConversationUnavailable,
@@ -27,18 +28,13 @@ from helios_core.metadata import (
     MetadataRepository,
 )
 
-HERE = Path(__file__).resolve().parents[3]  # repo root
-BUILTIN_SUITE = HERE / "eval" / "tpcds-v1.json"
+BUILTIN_SUITE = runtime.REPO / "eval" / "tpcds-v1.json"
 
 
 def _suite_paths() -> list[Path]:
-    root = Path(
-        os.environ.get("HELIOS_ROOT")
-        or os.path.join(os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios")
-    )
     return [
         BUILTIN_SUITE,
-        *sorted((root / "state" / "eval-suites").glob("*.json")),
+        *sorted((Settings().data_dir / "state" / "eval-suites").glob("*.json")),
     ]
 
 
