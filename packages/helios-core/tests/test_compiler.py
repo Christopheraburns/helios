@@ -8,7 +8,7 @@ import pytest
 from helios_core.ossie import SemanticModel
 from helios_core.compiler import Compiler, SemanticRequest, Filter, Measure, CompileError
 
-ROOT = os.environ.get("HELIOS_ROOT") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))  # repo root
 TYPES = {"bigint": "BIGINT", "int": "INTEGER", "string": "VARCHAR", "date": "DATE"}
 
 
