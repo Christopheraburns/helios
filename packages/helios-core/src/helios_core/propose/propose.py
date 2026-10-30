@@ -10,9 +10,12 @@ glossary and ontology layers.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 
 from ..llm import LLMClient
+
+LOGGER = logging.getLogger(__name__)
 
 ROLES = ("identifier", "foreign_key", "time", "measure", "dimension", "attribute")
 
@@ -154,20 +157,20 @@ class Proposer:
         return metrics
 
     # ------------------------------------------------------------ all together
-    def run(self, harvest: dict, profile: dict, log=print) -> dict:
+    def run(self, harvest: dict, profile: dict) -> dict:
         rels = profile.get("relationships", [])
         terms_by_col = self._terms_by_column(harvest)
         datasets = []
         for t in harvest["tables"]:
             key = f"{t['database']}.{t['table']}"
-            log(f"  describing {key}")
+            LOGGER.info("describing %s", key)
             datasets.append(self.propose_table(t, profile.get("tables", {}).get(key, {}), rels, terms_by_col))
 
-        log("  deciding suggested relationships")
+        LOGGER.info("deciding %d suggested relationships", len(profile.get("suggested_relationships", [])))
         decided = self.decide_relationships(profile.get("suggested_relationships", []), datasets)
         relationships = [{**r, "source": "profile", "accepted": True, "confidence": 0.95} for r in rels] + decided
 
-        log("  proposing metrics")
+        LOGGER.info("proposing metrics")
         metrics = self.propose_metrics(datasets, harvest.get("queries", {}).get("statements", []))
 
         # merge proposed glossary terms across tables by name

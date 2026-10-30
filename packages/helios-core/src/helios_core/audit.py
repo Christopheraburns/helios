@@ -17,7 +17,7 @@ from typing import Any
 from helios_core.metadata import AuditEvent, MetadataRepository
 from helios_core.settings import environment_secret_values
 
-LOGGER = logging.getLogger("helios.audit")
+LOGGER = logging.getLogger(__name__)
 MAX_DETAIL_BYTES = 8_192
 MAX_STRING_LENGTH = 500
 MAX_COLLECTION_ITEMS = 50

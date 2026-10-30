@@ -1,5 +1,6 @@
 """Shared bootstrap for Workbench Jobs (which run in a Jupyter kernel: no __file__)."""
 import json
+import logging
 import os
 import sys
 import time
@@ -12,6 +13,11 @@ ROOT = os.environ.get("HELIOS_ROOT") or os.path.join(os.environ.get("CDSW_PROJEC
 for path in (ROOT, os.path.join(ROOT, "packages", "helios-core", "src")):
     if path not in sys.path:
         sys.path.insert(0, path)
+
+# The libraries log through named loggers and configure no handlers; a Job is the
+# host, so it decides where their progress goes (the Job's output, as before).
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 RUNS_DIR = os.environ.get("HELIOS_RUNS_DIR") or os.path.join(ROOT, "runs")
 

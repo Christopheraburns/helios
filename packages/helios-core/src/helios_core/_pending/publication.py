@@ -5,6 +5,7 @@ use the same review application, Ossie validation, and artifact writes.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,8 @@ from typing import Any
 from helios_core._pending import review as review_store
 from helios_core.artifacts import ArtifactStore
 from helios_core.ossie import build, dump_yaml, preflight, validate
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -116,5 +119,9 @@ def publish_reviewed_proposal(
         document,
         dump_yaml(document),
         manifest,
+    )
+    LOGGER.info(
+        "published model %s from run %s: %d datasets, %d relationships, %d metrics",
+        model_id, run_id, manifest["datasets"], manifest["relationships"], manifest["metrics"],
     )
     return PublicationResult(manifest, yaml_path, document)

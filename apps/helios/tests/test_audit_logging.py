@@ -144,7 +144,7 @@ def test_audit_persistence_failures_are_rate_limited(
     monkeypatch.setattr(audit, "_failure_signature", None)
     monkeypatch.setattr(audit, "_failure_last_logged", 0.0)
     monkeypatch.setattr(audit, "_failure_suppressed", 0)
-    caplog.set_level("ERROR", logger="helios.audit")
+    caplog.set_level("ERROR", logger="helios_core.audit")
 
     for _ in range(3):
         audit.emit(

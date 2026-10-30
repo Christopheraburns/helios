@@ -6,10 +6,13 @@ and on a conventionally named warehouse it finds most relationships on its own.
 """
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timezone
 
 from ..engines.base import Engine
+
+LOGGER = logging.getLogger(__name__)
 
 NUMERIC = ("int", "bigint", "smallint", "tinyint", "double", "float", "decimal", "real")
 KEY_SUFFIXES = ("_sk", "_id", "_key", "id")
@@ -173,6 +176,7 @@ class Profiler:
         profiles = {}
         for t in harvest["tables"]:
             key = f"{t['database']}.{t['table']}"
+            LOGGER.info("profiling %s", key)
             stats = self.column_stats(t["database"], t["table"], t["columns"])
             profiles[key] = {"stats": stats, "primary_keys": self.primary_key_candidates(t["database"], t["table"], stats)}
         measured = [self.measure_overlap(c) for c in self.relationship_candidates(profiles)]
@@ -190,6 +194,10 @@ class Profiler:
         relationships = [m for m in ok if m["name_score"] > 0]
         suggested = [m for m in ok if m["name_score"] == 0]
         rejected = [m for m in best.values() if m["match_ratio"] < self.overlap_threshold]
+        LOGGER.info(
+            "profiled %d tables: %d relationships accepted, %d suggested, %d rejected",
+            len(profiles), len(relationships), len(suggested), len(rejected),
+        )
         return {"profiled_at": datetime.now(timezone.utc).isoformat(), "engine": self.engine.name,
                 "tables": profiles, "relationships": relationships,
                 "suggested_relationships": suggested, "rejected_candidates": rejected}

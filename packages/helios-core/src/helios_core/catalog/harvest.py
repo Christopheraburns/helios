@@ -5,12 +5,15 @@ Output is a plain dict (serialised to harvest.json) that profile and propose con
 from __future__ import annotations
 
 import glob
+import logging
 import os
 import re
 from datetime import datetime, timezone
 
 from ..atlas import AtlasClient, AtlasError
 from ..engines.base import Engine
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Harvester:
@@ -140,11 +143,17 @@ class Harvester:
     # ------------------------------------------------------------ all together
     def run(self, databases: list[str], glossaries: list[str] | None = None, query_dir: str | None = None) -> dict:
         tables = self.harvest_tables(databases)
+        glossary_terms = self.harvest_glossary(glossaries)
+        queries = self.harvest_queries(tables, query_dir)
+        LOGGER.info(
+            "harvested %d tables, %d glossary terms and %d queries from %s",
+            len(tables), len(glossary_terms), len(queries.get("statements", [])), ", ".join(databases),
+        )
         return {
             "harvested_at": datetime.now(timezone.utc).isoformat(),
             "engine": self.engine.name,
             "databases": databases,
             "tables": tables,
-            "glossary_terms": self.harvest_glossary(glossaries),
-            "queries": self.harvest_queries(tables, query_dir),
+            "glossary_terms": glossary_terms,
+            "queries": queries,
         }
