@@ -28,7 +28,9 @@ def main(argv: list[str]) -> int:
         sys.stdout.write(impala_ddl())
         return 0
     if command == "init-tables":
-        store = impala_index_store()
+        from helios_core.settings import Settings
+
+        store = impala_index_store(Settings())
         if store is None:
             print("Impala is not configured (IMPALA_HOST, WORKLOAD_USER, WORKLOAD_PASSWORD).")
             return 2

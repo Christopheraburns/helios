@@ -2,15 +2,50 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from urllib.parse import parse_qsl, urlencode
 
 from pydantic import BaseModel, ConfigDict, SecretStr
 
-from ..config import ImpalaConfig, _parse_impala_host
-from ..settings import ConnectionSettings
+from ..settings import ConnectionSettings, Settings
 from .base import Engine, QueryResult
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ImpalaConfig:
+    host: str              # Impala VW hostname from "Copy JDBC URL" in Cloudera Data Warehouse
+    port: int
+    user: str
+    password: str
+    database: str = "default"
+    http_path: str = "cliservice"
+    proxy_delegation: bool = False
+
+
+def parse_impala_host(value: str) -> tuple[str, int | None, str | None]:
+    """Accept a bare hostname or a full CDW JDBC URL
+    (jdbc:impala://host:443/default;AuthMech=12;transportMode=http;httpPath=cliservice;ssl=1)
+    and return (host, port, http_path). Only the host is required."""
+    v = value.strip()
+    http_path = None
+    if v.lower().startswith("jdbc:impala://"):
+        v = v[len("jdbc:impala://"):]
+    if ";" in v:
+        v, _, props = v.partition(";")
+        for kv in props.split(";"):
+            k, _, val = kv.partition("=")
+            if k.strip().lower() == "httppath" and val:
+                http_path = val.strip()
+    v = v.split("/", 1)[0]
+    port = None
+    if ":" in v:
+        v, _, p = v.rpartition(":")
+        if p.isdigit():
+            port = int(p)
+    return v, port, http_path
+
 
 
 class ImpalaOptions(BaseModel):
@@ -32,7 +67,7 @@ def impala_config_for(connection: ConnectionSettings) -> ImpalaConfig:
     if connection.engine != "impala":
         raise ValueError(f"not an Impala connection: engine is {connection.engine!r}")
     options = ImpalaOptions.model_validate(connection.options)
-    host, port, http_path = _parse_impala_host(options.host)
+    host, port, http_path = parse_impala_host(options.host)
     return ImpalaConfig(
         host,
         options.port or port or 443,
@@ -42,6 +77,15 @@ def impala_config_for(connection: ConnectionSettings) -> ImpalaConfig:
         options.http_path or http_path or "cliservice",
         options.proxy_delegation,
     )
+
+
+def impala_config(settings: Settings, ref: str | None = None) -> ImpalaConfig | None:
+    """The Impala connection ``ref`` resolves to (see ``Settings.resolve_connection``),
+    or None when there is no connection or it is not an Impala one."""
+    connection = settings.connection(ref)
+    if connection is None or connection.engine != "impala":
+        return None
+    return impala_config_for(connection)
 
 
 class ImpalaAuthenticationError(PermissionError):

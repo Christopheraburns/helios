@@ -7,13 +7,13 @@ Prints each step's result or Impala's full error message.
 """
 import sys
 
-from helios_core.config import impala_config
-from helios_core.engines import ImpalaEngine
+from helios_core.engines import ImpalaEngine, impala_config
+from helios_core.settings import Settings
 
 delegate = sys.argv[1] if len(sys.argv) > 1 else None
-cfg = impala_config()
+cfg = impala_config(Settings())
 if cfg is None:
-    sys.exit("impala_config() is None: set IMPALA_HOST, WORKLOAD_USER and WORKLOAD_PASSWORD")
+    sys.exit("no Impala connection: set IMPALA_HOST, WORKLOAD_USER and WORKLOAD_PASSWORD, or a [connections.default] with engine = \"impala\"")
 print(f"host={cfg.host}:{cfg.port} http_path={cfg.http_path} connect_as={cfg.user} "
       f"proxy_delegation={cfg.proxy_delegation} delegate_to={delegate}")
 engine = ImpalaEngine(cfg)

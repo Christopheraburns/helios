@@ -22,6 +22,7 @@ from helios_core.ontology.mapping import (
     resolution_config,
 )
 from helios_core.ontology.parser import ParseResult, parse
+from helios_core.settings import Settings
 from pydantic import BaseModel
 
 LOGGER = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ _index: dict[str, IndexStore | None] = {}
 def index_store() -> IndexStore | None:
     with _index_lock:
         if "store" not in _index:
-            store_ = impala_index_store()
+            store_ = impala_index_store(Settings())
             if store_ is not None:
                 store_.ensure_tables()
             _index["store"] = store_

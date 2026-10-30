@@ -31,7 +31,7 @@ from apps.helios.console.model_provider import (
 )
 from apps.helios.mcp_server import server as mcp_server
 from helios_core import audit, authz
-from helios_core.config import ImpalaConfig
+from helios_core.engines.impala import ImpalaConfig
 from helios_core.compiler import (
     Compiler,
     Filter,
@@ -835,7 +835,7 @@ def test_mcp_run_query_uses_delegated_identity(
     monkeypatch.setattr(
         mcp_server,
         "impala_config",
-        lambda: ImpalaConfig(
+        lambda *args, **kwargs: ImpalaConfig(
             "warehouse.example",
             443,
             "helios-service",
@@ -1518,7 +1518,7 @@ async def test_conversation_turn_uses_real_mcp_transport(
     monkeypatch.setattr(
         mcp_server,
         "impala_config",
-        lambda: ImpalaConfig(
+        lambda *args, **kwargs: ImpalaConfig(
             "warehouse.example",
             443,
             "helios-service",
@@ -2202,3 +2202,26 @@ def test_impala_skips_delegation_to_the_connected_user(monkeypatch):
 
     assert result.rows == [(7,)]
     assert "doAs" not in captured["http_path"]
+
+
+def test_run_query_uses_the_connection_its_data_sources_resolve_to(monkeypatch):
+    sources = {
+        "warehouse": SimpleNamespace(connection_ref="impala"),     # recorded before named connections
+        "sales": SimpleNamespace(connection_ref="sales"),
+        "other-warehouse": SimpleNamespace(connection_ref="env:IMPALA_HOST"),
+    }
+    monkeypatch.setattr(mcp_server, "metadata_repository", SimpleNamespace(data_source=sources.get))
+    settings = Settings(connections={
+        "default": {"engine": "impala", "host": "vw", "user": "u", "password": "p"},
+        "sales": {"engine": "impala", "host": "sales-vw", "user": "u", "password": "p"},
+    })
+
+    def model(*ids):
+        return SimpleNamespace(data_sources=[SimpleNamespace(data_source_id=i) for i in ids])
+
+    assert mcp_server._model_connection(settings, model("warehouse", "other-warehouse")) == ("default", None)
+    assert mcp_server._model_connection(settings, model("sales")) == ("sales", None)
+    assert mcp_server._model_connection(settings, model()) == ("default", None)
+    name, conflict = mcp_server._model_connection(settings, model("warehouse", "sales"))
+    assert name is None and "default, sales" in conflict
+    assert mcp_server._model_connection(Settings(), model("warehouse")) == (None, None)

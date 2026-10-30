@@ -26,7 +26,7 @@ from helios_core._pending import publication
 from helios_core._pending import review as review_store
 from apps.helios import runtime
 from helios_core.atlas import AtlasClient, AtlasError
-from helios_core.config import atlas_config
+from helios_core.atlas import atlas_config
 from helios_core.domain import Model, Organization
 from helios_core._pending.graph import (
     ArtifactGraphRepository,
@@ -494,7 +494,7 @@ def atlas_client(request: Request) -> AtlasClient:
     override = getattr(request.app.state, "atlas_client", None)
     if override is not None:
         return override
-    configuration = atlas_config()
+    configuration = atlas_config(Settings())
     if configuration is None:
         raise HTTPException(503, "Atlas glossary service is not configured")
     return AtlasClient(configuration)

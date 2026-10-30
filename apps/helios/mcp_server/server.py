@@ -39,7 +39,7 @@ from starlette.responses import JSONResponse
 from helios_core import __version__
 from helios_core import audit, authz
 from apps.helios import runtime
-from helios_core.config import atlas_config, impala_config
+from helios_core.atlas import atlas_config
 from helios_core.compiler import (
     CompileError,
     Compiler,
@@ -59,13 +59,15 @@ from helios_core.delegation import (
     verify_assertion,
 )
 from helios_core.identity import Principal, PrincipalKind
+from helios_core.engines.impala import impala_config
 from helios_core.metadata import SQLiteMetadataRepository, TraceSpan
 from helios_core.ossie import SemanticModel, build as build_ossie
+from helios_core.settings import Settings
 from helios_core.tracing import sanitized, utcnow
 
 LOGGER = logging.getLogger(__name__)
 artifact_store = runtime.artifacts
-_initial_impala_config = impala_config()
+_initial_impala_config = impala_config(runtime.settings)
 data_policy = DataPolicy(
     ImpalaProxyDataAuthorizer(
         bool(
@@ -394,6 +396,24 @@ def _compile_semantic(
         },
         assets,
     )
+
+
+def _model_connection(settings: Settings, model) -> tuple[str | None, str | None]:
+    """The connection a model's data sources resolve to, or an error message when
+    they resolve to more than one: a query runs on one connection."""
+    refs = [
+        source.connection_ref
+        for reference in model.data_sources
+        if (source := metadata_repository.data_source(reference.data_source_id)) is not None
+    ]
+    names = {settings.resolve_connection(ref) for ref in refs} if refs else {settings.resolve_connection()}
+    names.discard(None)
+    if len(names) > 1:
+        return None, (
+            "the model's data sources use different connections ("
+            + ", ".join(sorted(names)) + "); a query runs on one connection"
+        )
+    return next(iter(names), None), None
 
 
 def _resource(model, action: authz.Action) -> authz.Resource:
@@ -801,7 +821,11 @@ def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: 
     if denied:
         return denied
     _, semantic_model = store.load(authorized_model.id)
-    cfg = impala_config()
+    settings = Settings()
+    connection, conflict = _model_connection(settings, authorized_model)
+    if conflict:
+        return _error("connection_conflict", conflict)
+    cfg = impala_config(settings, connection)
     if cfg is None:
         return _error(
             "impala_unavailable",
@@ -956,7 +980,7 @@ def explain_lineage(column: str, depth: int = 3, model: str | None = None) -> di
     if denied:
         return denied
     from helios_core.atlas import AtlasClient
-    cfg = atlas_config()
+    cfg = atlas_config(Settings())
     if cfg is None:
         return _error(
             "atlas_unavailable",
@@ -1135,7 +1159,7 @@ def entity_claims(entity: str, predicate: str | None = None, model: str | None =
     from helios_core.index import impala_index_store
     from helios_core._pending import evidence
 
-    index = impala_index_store()
+    index = impala_index_store(Settings())
     if index is None:
         return _error(
             "evidence_unavailable",

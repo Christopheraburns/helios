@@ -4,9 +4,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Callable, Literal
 
-from helios_core.atlas import AtlasClient
-from helios_core.config import atlas_config, impala_config
-from helios_core.engines import ImpalaEngine
+from helios_core.atlas import AtlasClient, atlas_config
+from helios_core.engines import ImpalaEngine, impala_config
 from helios_core.llm import llm_from_settings
 from helios_core.metadata import MetadataRepository
 from helios_core.settings import Settings
@@ -91,7 +90,7 @@ def collect_infrastructure_status(
             )
         )
 
-    atlas = atlas_config()
+    atlas = atlas_config(settings)
     components.append(
         _probe(
             "atlas",
@@ -109,7 +108,7 @@ def collect_infrastructure_status(
         )
     )
 
-    impala = impala_config()
+    impala = impala_config(settings)
     components.append(
         _probe(
             "impala",

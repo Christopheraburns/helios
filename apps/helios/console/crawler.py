@@ -43,7 +43,8 @@ from typing import Any, Literal
 
 from apps.helios.crawler import evaluate as harness
 from fastapi import APIRouter, HTTPException, Request
-from helios_core.config import impala_config
+from helios_core.engines.impala import impala_config
+from helios_core.settings import Settings
 from helios_core._pending.crawler import settings as settings_model
 from helios_core._pending.crawler.settings import EMPTY_SETTINGS, CrawlerSettings, ontology_problems
 from helios_core.engines.impala import ImpalaEngine, ImpalaProxyDelegationError, _same_user
@@ -451,7 +452,7 @@ def _truth_connection(principal_id: str) -> tuple[Any, str]:
     """(DB-API connection for helios_ground_truth, evaluator_mode). With proxy
     delegation configured the connection runs as the principal and Impala is
     asked to confirm it (EFFECTIVE_USER); otherwise as the API's workload user."""
-    config = impala_config()
+    config = impala_config(Settings())
     if config is None:
         raise HTTPException(
             status_code=503, detail="helios_index is not configured (no Impala settings)"

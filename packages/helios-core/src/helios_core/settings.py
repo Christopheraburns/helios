@@ -154,6 +154,22 @@ class Settings(BaseSettings):
     llm: LLMSettings = LLMSettings()
     evidence: EvidenceSettings = EvidenceSettings()
 
+    def resolve_connection(self, ref: str | None = None) -> str | None:
+        """The name of the connection ``ref`` (a ``DataSource.connection_ref``) means:
+        the connection of that name, else ``default``, else None. Data sources recorded
+        before named connections (``impala``, ``env:IMPALA_HOST``) resolve to ``default``."""
+        if ref and ref in self.connections:
+            return ref
+        return DEFAULT if DEFAULT in self.connections else None
+
+    def connection(self, ref: str | None = None) -> ConnectionSettings | None:
+        name = self.resolve_connection(ref)
+        return self.connections[name] if name else None
+
+    def catalog(self, name: str | None = None) -> CatalogSettings | None:
+        """The catalog of that name, else ``default``, else None."""
+        return self.catalogs.get(name or DEFAULT) or self.catalogs.get(DEFAULT)
+
     @classmethod
     def from_file(cls, path: str | os.PathLike[str], **overrides: Any) -> Settings:
         """Settings with ``path`` as the config file (layer 4) instead of the usual search."""

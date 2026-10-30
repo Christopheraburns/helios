@@ -17,7 +17,8 @@ from apps.helios.console.conversation import (
     MCPClientConfig,
 )
 from helios_core.authz import Principal
-from helios_core.config import impala_config
+from helios_core.engines.impala import impala_config
+from helios_core.settings import Settings
 from helios_core.engines import ImpalaEngine
 from helios_core.llm import LLMClient
 from helios_core.metadata import (
@@ -129,7 +130,7 @@ async def execute_evaluation(
     )
     try:
         suite = load_suite(run.suite_id, run.suite_version)
-        configuration = impala_config()
+        configuration = impala_config(Settings())
         if configuration is None:
             raise RuntimeError("Impala is not configured for reference queries")
         engine = ImpalaEngine(configuration)

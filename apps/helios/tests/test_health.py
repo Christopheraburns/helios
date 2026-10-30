@@ -15,7 +15,7 @@ def test_infrastructure_health_is_independent_and_redacts_failures(
     monkeypatch.setattr(
         health,
         "atlas_config",
-        lambda: SimpleNamespace(),
+        lambda settings: SimpleNamespace(),
     )
     monkeypatch.setattr(
         health,
@@ -26,7 +26,7 @@ def test_infrastructure_health_is_independent_and_redacts_failures(
             )
         ),
     )
-    monkeypatch.setattr(health, "impala_config", lambda: None)
+    monkeypatch.setattr(health, "impala_config", lambda settings: None)
     monkeypatch.setattr(
         health,
         "llm_from_settings",

@@ -317,3 +317,35 @@ def test_parity_with_the_code_before_settings(monkeypatch, name):
         assert llm is None
     else:
         assert [llm.provider, llm.model, llm.api_key, llm.base_url, llm.timeout] == expected["llm"]
+
+
+def test_connection_refs_resolve_by_name_then_default():
+    s = Settings(connections={
+        "default": {"engine": "impala", "host": "vw", "user": "u", "password": "p"},
+        "sales": {"engine": "sqlalchemy", "url": "postgresql://db/sales"},
+    })
+    assert s.resolve_connection("sales") == "sales"
+    assert s.resolve_connection("impala") == "default"            # recorded before named connections
+    assert s.resolve_connection("env:IMPALA_HOST") == "default"
+    assert s.resolve_connection(None) == "default"
+    assert Settings().resolve_connection("sales") is None          # nothing configured
+    assert Settings(connections={"sales": {"engine": "duckdb"}}).resolve_connection("other") is None
+
+
+def test_impala_and_atlas_lookups():
+    from helios_core.atlas import atlas_config
+    from helios_core.engines.impala import impala_config
+
+    s = Settings(
+        connections={
+            "default": {"engine": "impala", "host": "vw", "user": "u", "password": "p"},
+            "local": {"engine": "duckdb", "path": "/x.duckdb"},
+        },
+        catalogs={"default": {"catalog": "atlas", "base_url": "https://dl/atlas/", "user": "a", "password": "p"}},
+    )
+    assert impala_config(s).host == "vw"
+    assert impala_config(s, "unknown-ref").host == "vw"   # falls back to default
+    assert impala_config(s, "local") is None              # not an Impala connection
+    assert impala_config(Settings()) is None
+    assert atlas_config(s).base_url == "https://dl/atlas"
+    assert atlas_config(Settings()) is None

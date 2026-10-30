@@ -1,7 +1,8 @@
 import pytest
 
 from helios_core import authz
-from helios_core.config import impala_config
+from helios_core.settings import Settings
+from helios_core.engines.impala import impala_config
 from helios_core.data_authorization import (
     DataAction,
     DataAuthorizationDenied,
@@ -32,11 +33,11 @@ def test_impala_config_uses_workload_credentials(monkeypatch):
     monkeypatch.setenv("IMPALA_USER", "legacy-user")
     monkeypatch.setenv("IMPALA_PASS", "legacy-password")
 
-    assert impala_config() is None
+    assert impala_config(Settings()) is None
 
     monkeypatch.setenv("WORKLOAD_USER", "workload-user")
     monkeypatch.setenv("WORKLOAD_PASSWORD", "workload-password")
-    configuration = impala_config()
+    configuration = impala_config(Settings())
 
     assert configuration is not None
     assert configuration.user == "workload-user"

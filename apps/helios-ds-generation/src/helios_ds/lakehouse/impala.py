@@ -1,8 +1,8 @@
 """Impala connections for the Workbench lakehouse path.
 
-Uses the same settings as the rest of Helios (``helios_core.config``):
-IMPALA_HOST (hostname or CDW JDBC URL), WORKLOAD_USER, WORKLOAD_PASSWORD, and
-optionally IMPALA_PORT / IMPALA_HTTP_PATH. Connects to the Cloudera Data
+Uses the same settings as the rest of Helios (the ``default`` connection in
+``helios_core.settings``): IMPALA_HOST (hostname or CDW JDBC URL), WORKLOAD_USER,
+WORKLOAD_PASSWORD, and optionally IMPALA_PORT / IMPALA_HTTP_PATH. Connects to the Cloudera Data
 Warehouse Impala Virtual Warehouse over HTTPS with LDAP, as ImpalaEngine does.
 """
 
@@ -14,9 +14,10 @@ from .tables import IMPALA
 
 def impala_connector(database: str = "default") -> Callable[[], Any]:
     """A zero-argument factory returning a new impyla DB-API connection."""
-    from helios_core.config import impala_config
+    from helios_core.engines.impala import impala_config
+    from helios_core.settings import Settings
 
-    cfg = impala_config()
+    cfg = impala_config(Settings())
     if cfg is None:
         raise ValueError(
             "Impala is not configured: set IMPALA_HOST, WORKLOAD_USER, WORKLOAD_PASSWORD"

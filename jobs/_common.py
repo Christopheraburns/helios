@@ -122,16 +122,16 @@ def audit_job(stage: str, run_id: str, model_id: str | None = None):
 
 
 def engine():
-    from helios_core.config import impala_config
-    from helios_core.engines import ImpalaEngine
-    cfg = impala_config()
+    from helios_core.engines import ImpalaEngine, impala_config
+    from helios_core.settings import Settings
+    cfg = impala_config(Settings())
     if cfg is None:
         raise SystemExit("IMPALA_HOST / credentials are not set in the project environment")
     return ImpalaEngine(cfg)
 
 
 def atlas():
-    from helios_core.atlas import AtlasClient
-    from helios_core.config import atlas_config
-    cfg = atlas_config()
+    from helios_core.atlas import AtlasClient, atlas_config
+    from helios_core.settings import Settings
+    cfg = atlas_config(Settings())
     return AtlasClient(cfg) if cfg else None

@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import argparse
 
-from helios_core.config import impala_config
 from helios_core.engines import (
     ImpalaAuthenticationError,
     ImpalaEngine,
     ImpalaProxyDelegationError,
+    impala_config,
 )
+from helios_core.settings import Settings
 
 
 def main() -> None:
@@ -24,7 +25,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    configuration = impala_config()
+    configuration = impala_config(Settings())
     if configuration is None:
         raise SystemExit(
             "configuration: failed (set IMPALA_HOST, WORKLOAD_USER, and "

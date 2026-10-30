@@ -735,7 +735,6 @@ def test_evaluate_scores_the_run_and_the_views_show_it(client, run_id, truth, mo
 
 
 def test_cli_scores_a_duckdb_run_against_impala_truth(tmp_path, truth, monkeypatch, capsys):
-    import helios_core.config as config_module
     import helios_core.engines.impala as impala_module
     from apps.helios.crawler.__main__ import main
 
@@ -753,7 +752,7 @@ def test_cli_scores_a_duckdb_run_against_impala_truth(tmp_path, truth, monkeypat
             return truth
 
     monkeypatch.setattr(
-        config_module, "impala_config", lambda: config_module.ImpalaConfig("h", 443, "chris", "pw")
+        impala_module, "impala_config", lambda *args, **kwargs: impala_module.ImpalaConfig("h", 443, "chris", "pw")
     )
     monkeypatch.setattr(impala_module, "ImpalaEngine", FakeEngine)
     assert main(["evaluate", "--run", run_id, "--dataset", DATASET, "--index-duckdb", path]) == 0

@@ -5,16 +5,24 @@ glossary CRUD, term CRUD, term <-> entity assignment, entity lookup and lineage.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
 
 import requests
 from pydantic import BaseModel, ConfigDict, SecretStr
 
-from ..config import AtlasConfig
-from ..settings import CatalogSettings
+from ..settings import CatalogSettings, Settings
 
 COLUMN_TYPES = ("hive_column", "iceberg_column")
+
+
+@dataclass(frozen=True)
+class AtlasConfig:
+    base_url: str          # e.g. https://<datalake-host>/<datalake-name>/cdp-proxy-api/atlas/api/atlas/v2
+    user: str
+    password: str
+    verify_ssl: bool = True
 
 
 class AtlasOptions(BaseModel):
@@ -35,6 +43,14 @@ def atlas_config_for(catalog: CatalogSettings) -> AtlasConfig:
     return AtlasConfig(
         options.base_url.rstrip("/"), options.user, options.password.get_secret_value(), options.verify_ssl
     )
+
+
+def atlas_config(settings: Settings, name: str | None = None) -> AtlasConfig | None:
+    """The Atlas catalog ``name`` (else ``default``), or None when there is none."""
+    catalog = settings.catalog(name)
+    if catalog is None or catalog.catalog != "atlas":
+        return None
+    return atlas_config_for(catalog)
 
 
 class AtlasError(RuntimeError):

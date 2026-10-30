@@ -23,6 +23,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from helios_core.settings import Settings as HeliosSettings
+
 CRAWLABLE = "helios_ds.crawlable_artifacts"
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 MUST_DENY_TABLES = (
@@ -147,7 +149,7 @@ def _mapped_table() -> str | None:
     from helios_core.ontology.mapping import resolution_config
 
     try:
-        index = impala_index_store()
+        index = impala_index_store(HeliosSettings())
         for record in stored.active(index).values() if index is not None else ():
             mapping = stored.mapping_of(record)
             if mapping.entities:
@@ -166,10 +168,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    from helios_core.config import impala_config
+    from helios_core.engines.impala import impala_config
     from helios_core.engines.impala import ImpalaEngine
 
-    config = impala_config()
+    config = impala_config(HeliosSettings())
     if config is None:
         print("Impala is not configured (IMPALA_HOST, WORKLOAD_USER, WORKLOAD_PASSWORD).")
         return 2

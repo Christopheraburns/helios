@@ -17,7 +17,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from helios_core import __version__
 from helios_core import audit
 from helios_core.atlas import AtlasClient, AtlasError
-from helios_core.config import atlas_config, impala_config
+from helios_core.atlas import atlas_config
+from helios_core.engines.impala import impala_config
+from helios_core.settings import Settings
 from helios_core.engines import ImpalaEngine
 from apps.helios import runtime
 from fastapi import HTTPException
@@ -207,7 +209,7 @@ start_cache_restore()
 
 
 def atlas() -> AtlasClient:
-    cfg = atlas_config()
+    cfg = atlas_config(Settings())
     if cfg is None:
         raise AtlasError(0, "ATLAS_BASE / ATLAS_USER / ATLAS_PASS are not set in the project environment")
     return AtlasClient(cfg)
@@ -236,12 +238,11 @@ def _check(fn):
 @app.get("/", response_class=HTMLResponse)
 def health(request: Request):
     checks = []
-    a = atlas_config()
+    a = atlas_config(Settings())
     checks.append(("Atlas", a.base_url if a else "not configured", *(_check(lambda: AtlasClient(a).ping()) if a else ("skipped", "set ATLAS_BASE, ATLAS_USER, ATLAS_PASS"))))
-    i = impala_config()
+    i = impala_config(Settings())
     checks.append(("Impala", f"{i.host}:{i.port}" if i else "not configured", *(_check(lambda: ImpalaEngine(i).ping()) if i else ("skipped", "set IMPALA_HOST, WORKLOAD_USER, and WORKLOAD_PASSWORD"))))
     from helios_core.llm import llm_from_settings
-    from helios_core.settings import Settings
     llm = llm_from_settings(Settings().llm)
     if llm:
         checks.append(("LLM", f"{llm.provider}: {llm.model}", *_check(llm.ping)))

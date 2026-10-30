@@ -31,6 +31,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from helios_core.settings import Settings as HeliosSettings
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -87,7 +89,6 @@ def llm_extractor(settings: Any, classes: list[str]) -> Any:
     """The LLM crawler's extractor on the project's default model, or None with
     the reason printed."""
     from helios_core.llm import llm_from_settings
-    from helios_core.settings import Settings as HeliosSettings
 
     from .llm_arm import LlmExtractor, claim_shapes, load_vocabulary
 
@@ -159,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "baseline":
         return baseline_main(args)
 
-    from helios_core.config import impala_config
+    from helios_core.engines.impala import impala_config
     from helios_core._pending.crawler.sources import is_crawlable
     from helios_core.domain import DataSource
     from helios_core.engines.impala import ImpalaEngine
@@ -174,7 +175,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.source:
         from helios_core.metadata import SQLiteMetadataRepository
-        from helios_core.settings import Settings as HeliosSettings
 
         source = SQLiteMetadataRepository.from_settings(HeliosSettings()).data_source(args.source)
         if source is None:
@@ -198,8 +198,8 @@ def main(argv: list[str] | None = None) -> int:
             scope={"dataset_id": args.dataset},
         )
 
-    config = impala_config()
-    catalog = impala_index_store()  # ontology versions and crawler settings
+    config = impala_config(HeliosSettings())
+    catalog = impala_index_store(HeliosSettings())  # ontology versions and crawler settings
     if config is None or catalog is None:
         print("Impala is not configured (IMPALA_HOST, WORKLOAD_USER, WORKLOAD_PASSWORD).")
         return 2
@@ -331,15 +331,15 @@ def source_uri(source: Any, connector: Any) -> str:
 def evaluate_main(args: Any) -> int:
     """``evaluate``: score a crawl run as the session's Impala user (which must be
     allowed to read helios_ground_truth; the crawler identity never is)."""
-    from helios_core.config import impala_config
+    from helios_core.engines.impala import impala_config
     from helios_core.engines.impala import ImpalaEngine
     from helios_core.index import impala_index_store
     from helios_core.index.store import duckdb_index_store
 
     from . import evaluate as harness
 
-    config = impala_config()
-    index = duckdb_index_store(args.index_duckdb) if args.index_duckdb else impala_index_store()
+    config = impala_config(HeliosSettings())
+    index = duckdb_index_store(args.index_duckdb) if args.index_duckdb else impala_index_store(HeliosSettings())
     if config is None or index is None:
         print("Impala is not configured (IMPALA_HOST, WORKLOAD_USER, WORKLOAD_PASSWORD).")
         return 2
@@ -373,13 +373,13 @@ def baseline_main(args: Any) -> int:
     """``baseline``: 0 if recorded or the same, 1 if the crawl differs, 2 if it could not run."""
     import json
 
-    from helios_core.config import impala_config
+    from helios_core.engines.impala import impala_config
     from helios_core.engines.impala import ImpalaEngine
     from helios_core.index import impala_index_store, runs
 
     from . import baseline
 
-    config, index = impala_config(), impala_index_store()
+    config, index = impala_config(HeliosSettings()), impala_index_store(HeliosSettings())
     if config is None or index is None:
         print("Impala is not configured (IMPALA_HOST, WORKLOAD_USER, WORKLOAD_PASSWORD).")
         return 2
