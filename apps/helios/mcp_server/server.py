@@ -51,13 +51,13 @@ from helios_core.data_authorization import (
     DataAction,
     DataPolicy,
     DataResource,
-    ImpalaProxyDataAuthorizer,
 )
 from helios_core.delegation import (
     DelegatedContext,
     DelegationError,
     verify_assertion,
 )
+from helios_core import Caller
 from helios_core.identity import Principal, PrincipalKind
 from helios_core.engines.impala import impala_config
 from helios_core.metadata import SQLiteMetadataRepository, TraceSpan
@@ -67,15 +67,8 @@ from helios_core.tracing import sanitized, utcnow
 
 LOGGER = logging.getLogger(__name__)
 artifact_store = runtime.artifacts
-_initial_impala_config = impala_config(runtime.settings)
-data_policy = DataPolicy(
-    ImpalaProxyDataAuthorizer(
-        bool(
-            _initial_impala_config
-            and _initial_impala_config.proxy_delegation
-        )
-    )
-)
+# Allows run_query only on connections whose identity mode runs it as the caller.
+data_policy = DataPolicy()
 metadata_repository = SQLiteMetadataRepository.from_settings(runtime.settings)
 _metadata_findings = metadata_repository.integrity_check()
 if _metadata_findings != ("ok",):
@@ -857,11 +850,15 @@ def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: 
                     "data_authorization_denied",
                     f"dataset {asset!r} is not uniquely authorized by the model",
                 )
-            resource = DataResource(references[0].data_source_id, asset)
+            resource = DataResource(references[0].data_source_id, asset, cfg.identity)
             resources[(resource.data_source_id, asset)] = resource
+        data_caller = Caller(
+            username=caller.principal.subject,
+            attributes={"principal_id": caller.principal.id},
+        )
         for resource in resources.values():
             access = data_policy.can_access(
-                caller.principal,
+                data_caller,
                 resource,
                 DataAction.QUERY_EXECUTE,
             )
@@ -869,8 +866,8 @@ def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: 
                 return _error("data_authorization_denied", access.reason)
         res = ImpalaEngine(cfg).query(
             compiled["sql"],
-            safe_limit,
-            delegated_user=caller.principal.subject,
+            data_caller,
+            limit=safe_limit,
         )
     except ImpalaAuthenticationError as exc:
         LOGGER.warning(

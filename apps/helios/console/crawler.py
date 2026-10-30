@@ -43,6 +43,7 @@ from typing import Any, Literal
 
 from apps.helios.crawler import evaluate as harness
 from fastapi import APIRouter, HTTPException, Request
+from helios_core import Caller, IdentityMode
 from helios_core.engines.impala import impala_config
 from helios_core.settings import Settings
 from helios_core._pending.crawler import settings as settings_model
@@ -458,10 +459,10 @@ def _truth_connection(principal_id: str) -> tuple[Any, str]:
             status_code=503, detail="helios_index is not configured (no Impala settings)"
         )
     engine = ImpalaEngine(config)
-    if not config.proxy_delegation:
+    if config.identity is not IdentityMode.IMPERSONATE:
         return engine.connect(), "workload_user"
     user = principal_id.split(":", 1)[-1]
-    connection = engine._connect(user)
+    connection = engine.connect(Caller(user))
     try:
         cursor = connection.cursor()
         cursor.execute("SELECT EFFECTIVE_USER()")

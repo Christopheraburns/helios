@@ -250,7 +250,7 @@ EXPECTED = {'workbench': {'metadata_db': '/home/cdsw/helios/state/helios.db',
                           'pw',
                           'default',
                           'cliservice/vw',
-                          True],
+                          'impersonate'],
                'atlas': ['https://dl.example.com/atlas/api/atlas/v2', 'atlas', 'pw', False],
                'llm': ['openai', 'llama', 'jwt', 'https://caii.example.com/v1', 30.0]},
  'workbench-without-project-dir': {'metadata_db': '/home/cdsw/helios/state/helios.db',
@@ -266,7 +266,7 @@ EXPECTED = {'workbench': {'metadata_db': '/home/cdsw/helios/state/helios.db',
            'artifacts_dir': '/srv/helios',
            'evidence_index': '/var/evidence.lance',
            'audit_retention_days': 30,
-           'impala': ['vw.example.com', 28000, 'me', 'pw', 'tpcds', 'cliservice', False],
+           'impala': ['vw.example.com', 28000, 'me', 'pw', 'tpcds', 'cliservice', 'service'],
            'atlas': None,
            'llm': ['anthropic', 'claude-sonnet-5', 'sk-ant', None, 45.0]},
  'mistral': {'metadata_db': '/srv/helios/state/helios.db',
@@ -304,7 +304,7 @@ def test_parity_with_the_code_before_settings(monkeypatch, name):
         assert "default" not in s.connections
     else:
         c = impala_config_for(s.connections["default"])
-        assert [c.host, c.port, c.user, c.password, c.database, c.http_path, c.proxy_delegation] == expected["impala"]
+        assert [c.host, c.port, c.user, c.password, c.database, c.http_path, c.identity.value] == expected["impala"]
 
     if expected["atlas"] is None:
         assert "default" not in s.catalogs

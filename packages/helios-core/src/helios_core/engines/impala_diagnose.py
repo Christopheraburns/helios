@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 
+from helios_core.caller import Caller, IdentityMode
 from helios_core.engines import (
     ImpalaAuthenticationError,
     ImpalaEngine,
@@ -47,10 +49,11 @@ def main() -> None:
     if not args.delegated_user:
         return
     try:
-        engine.query(
+        # Impersonation is what is being diagnosed, whatever mode the connection is set to.
+        ImpalaEngine(replace(configuration, identity=IdentityMode.IMPERSONATE)).query(
             "SELECT 1",
+            Caller(args.delegated_user),
             limit=1,
-            delegated_user=args.delegated_user,
         )
     except ImpalaAuthenticationError as exc:
         raise SystemExit(f"proxy delegation: rejected by CDW ({exc})")

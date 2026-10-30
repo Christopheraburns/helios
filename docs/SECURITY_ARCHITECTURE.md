@@ -59,13 +59,18 @@ represented by that model.
 
 DataPolicy composes two one-way decisions:
 
-1. Helios restrictions may deny an operation.
-2. A platform adapter must confirm both that the platform allows it and that the
-   relevant identity will actually be enforced.
+1. Restrictions the host supplies may deny an operation.
+2. A platform authorizer must confirm both that the platform allows it and that the
+   caller's identity will actually be enforced.
 
-Helios cannot turn a platform denial into an allow. The default platform adapter
-is unavailable and denies every operation. No Ranger rules, table permissions,
-column permissions, or row filters are represented in Helios.
+Helios cannot turn a platform denial into an allow, and grants nothing itself. The
+default platform authorizer, `EngineIdentityAuthorizer`, reads the identity mode of
+the connection that reaches the data (`DataResource.identity_mode`): it allows query
+execution in `impersonate` and `token` modes, where the engine runs the query as the
+caller, and denies it in `service` mode, where the warehouse would see only the
+connection's own account. A host that deliberately runs callers' queries as a
+service account must supply its own platform authorizer. No Ranger rules, table
+permissions, column permissions, or row filters are represented in Helios.
 
 The required request flow is:
 
@@ -86,8 +91,10 @@ approved service-identity execution model is designed.
 **MCP callers.** The current MCP bearer token is a shared application gate, not a
 distinct workload identity. Impala would execute with server-configured
 credentials, which could bypass the caller's Ranger permissions. Therefore the
-MCP `run_query` tool now fails closed at DataPolicy before connecting to Impala.
-It must not be enabled merely because the server service account can query.
+MCP `run_query` tool fails closed at DataPolicy before connecting to Impala unless
+the connection's identity mode is `impersonate` (with a verified delegated
+principal) or `token`. It must not be enabled merely because the server service
+account can query.
 
 **Background jobs and services.** Discovery jobs run as the Workbench/job owner
 and connect using configured workload credentials. Ranger therefore evaluates

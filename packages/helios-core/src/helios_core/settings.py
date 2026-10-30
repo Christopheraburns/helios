@@ -34,6 +34,8 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
+from helios_core.caller import IdentityMode
+
 LOGGER = logging.getLogger(__name__)
 
 JournalMode = Literal["DELETE", "TRUNCATE", "PERSIST", "WAL"]
@@ -87,9 +89,13 @@ class _PluginSection(BaseModel):
 class ConnectionSettings(_PluginSection):
     """A warehouse or database, referenced by ``DataSource.connection_ref``.
 
-    ``engine`` names an engine plugin (impala, duckdb, sqlalchemy, ...)."""
+    ``engine`` names an engine plugin (impala, duckdb, sqlalchemy, ...). ``identity``
+    is whose identity a caller's query runs as: ``service`` (the connection's own
+    credentials, the default), ``impersonate`` (the caller's username) or ``token``
+    (the caller's token). The engine refuses a mode it does not support."""
 
     engine: str
+    identity: IdentityMode = IdentityMode.SERVICE
 
 
 class CatalogSettings(_PluginSection):
@@ -315,7 +321,7 @@ class ConventionalEnvironment(PydanticBaseSettingsSource):
             "port": _env("IMPALA_PORT"),
             "database": _env("IMPALA_DATABASE"),
             "http_path": _env("IMPALA_HTTP_PATH"),
-            "proxy_delegation": (_env("IMPALA_PROXY_DELEGATION") or "false").lower() == "true",
+            "identity": "impersonate" if (_env("IMPALA_PROXY_DELEGATION") or "").lower() == "true" else None,
         })
 
     @staticmethod

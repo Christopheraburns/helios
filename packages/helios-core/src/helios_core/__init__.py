@@ -1,5 +1,9 @@
 """helios core library: shared clients and logic for jobs and applications."""
 
+from helios_core.caller import Caller, IdentityError, IdentityMode
+
+__all__ = ["Caller", "IdentityError", "IdentityMode"]
+
 
 def __getattr__(name: str) -> str:
     # __version__ is read from the installed metadata on first use, so importing

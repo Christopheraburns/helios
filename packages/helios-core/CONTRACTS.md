@@ -36,7 +36,7 @@ helios-core is pre-1.0 (0.y.z).
 
 | Module | Names | Level | Notes |
 |---|---|---|---|
-| `helios_core.settings` | `Settings`, `ConnectionSettings`, `CatalogSettings`, `LLMSettings` | Stable | Resolution order, the config file and named connections and catalogs. The legacy environment names move to helios-cloudera in 3.4; `HELIOS_*` names stay. |
+| `helios_core.settings` | `Settings`, `ConnectionSettings`, `CatalogSettings`, `LLMSettings` | Stable | Resolution order, the config file and named connections and catalogs. A connection's `identity` (`service`, the default, `impersonate` or `token`) picks the engine identity mode. The legacy environment names move to helios-cloudera in 3.4; `HELIOS_*` names stay. |
 
 ### Semantic model and compiler
 
@@ -71,14 +71,16 @@ helios-core is pre-1.0 (0.y.z).
 
 | Module | Names | Level | Notes |
 |---|---|---|---|
-| `helios_core.engines` | `Engine`, `QueryResult` | Provisional | `query(sql, caller)` and `identity_modes` arrive in 2.2; plugins register under `helios.engines` in 3.1. |
+| `helios_core.engines` | `Engine`, `QueryResult` | Provisional | `query(sql, caller=None, *, limit)` runs as the service identity with no caller, and as the caller under the connection's identity mode otherwise; `identity_modes` lists the modes an engine supports. Plugins register under `helios.engines` in 3.1. |
 | `helios_core.llm` | `LLMClient`, `LLMError`, `LLMTimeoutError`, `llm_from_settings` | Stable | |
 
 ### Identity and plugins
 
 | Module | Names | Level | Notes |
 |---|---|---|---|
-| `helios_core` | `Caller` | Planned | 2.1. The host's caller (username, token, attributes), replacing `Principal`. |
+| `helios_core` | `IdentityMode`, `IdentityError` | Stable | `service`, `impersonate`, `token`; `IdentityError` (a `PermissionError`) when a caller lacks the username or token its mode needs. |
+| `helios_core.data_authorization` | `DataPolicy`, `DataResource`, `DataAction`, `EngineIdentityAuthorizer`, `PlatformDataAuthorizer`, `PlatformDataDecision`, `DataRestriction`, `DataRestrictionDecision`, `DataAuthorizationDecision`, `DataAuthorizationDenied` | Stable | Platform enforcement plus deny-only host restrictions. The default platform authorizer allows query execution only when `DataResource.identity_mode` runs it as the caller. |
+| `helios_core` | `Caller` | Stable | The host's caller: `username`, `token` (left out of `repr`, never logged) and free-form `attributes`, all optional. Helios authenticates no one; the engine's identity mode (2.2) decides which field it uses. |
 | `helios_core.plugins` | entry-point groups `helios.engines`, `helios.catalogs`, `helios.stores`, `helios.tools`, `helios.commands` | Planned | 3.1. |
 
 ## Internal
@@ -89,7 +91,6 @@ why it stays where it is instead of moving under `_internal/` and then moving ag
 | Code | Where it goes |
 |---|---|
 | `authz/`, `authorization.py`, `rbac.py`, `identity.py`, `delegation.py`, `metadata/users.py` | The old console, then deleted (2.6, Phase 8) |
-| `data_authorization.py` | Reshaped into `DataPolicy` (2.3) |
 | `audit.py` | The `AuditSink` hook (2.5) |
 | `engines/impala.py`, `engines/impala_diagnose.py`, `atlas/` | helios-cloudera (3.3) |
 | `engines/duckdb_engine.py` | Stays as the built-in DuckDB engine plugin (3.5) |

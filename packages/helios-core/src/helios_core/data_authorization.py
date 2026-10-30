@@ -1,16 +1,24 @@
-"""Boundary between Helios policy and physical platform data enforcement.
+"""Whether a caller may reach physical data through Helios.
 
-Helios may add restrictions, but this policy returns allow only after a platform
-adapter confirms that access is enforced for the relevant identity. The default
-platform adapter is unavailable and denies every operation.
+Helios grants nothing. A DataPolicy allows an operation only when a platform
+authorizer confirms that the warehouse itself will enforce the caller's identity,
+so the warehouse's own permissions decide. The host may add deny-only restrictions
+on top; a restriction can refuse what the platform allows, never the reverse.
+
+The default platform authorizer, EngineIdentityAuthorizer, reads the identity mode
+of the connection that reaches the data: ``impersonate`` and ``token`` run the query
+as the caller, so it allows; ``service`` runs it as the connection's own identity,
+so it denies. A host that deliberately runs callers' queries as a service account
+supplies its own platform authorizer.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Iterable, Protocol
+from typing import Protocol
 
-from helios_core.identity import Principal
+from helios_core.caller import Caller, IdentityMode
 
 
 class DataAction(str, Enum):
@@ -21,21 +29,24 @@ class DataAction(str, Enum):
 
 @dataclass(frozen=True)
 class DataResource:
-    """Physical data addressed through a Helios DataSource."""
+    """Physical data addressed through a Helios DataSource. ``identity_mode`` is the
+    mode of the connection that reaches it (``Engine.identity_mode``)."""
 
     data_source_id: str
     asset: str | None = None
+    identity_mode: IdentityMode = IdentityMode.SERVICE
 
     def __post_init__(self) -> None:
         if not self.data_source_id or not self.data_source_id.strip():
             raise ValueError("data_source_id must not be empty")
         if self.asset is not None and not self.asset.strip():
             raise ValueError("data asset must not be empty")
+        object.__setattr__(self, "identity_mode", IdentityMode(self.identity_mode))
 
 
 @dataclass(frozen=True)
 class PlatformDataDecision:
-    """Result supplied by the underlying platform enforcement adapter."""
+    """A platform authorizer's answer: allowed, and whether the caller's identity is enforced."""
 
     allowed: bool
     identity_enforced: bool
@@ -52,7 +63,7 @@ class PlatformDataDecision:
 
 @dataclass(frozen=True)
 class DataRestrictionDecision:
-    """A Helios restriction can deny, but cannot grant platform access."""
+    """A restriction can deny, but cannot grant platform access."""
 
     allowed: bool
     reason: str = ""
@@ -68,7 +79,7 @@ class DataRestrictionDecision:
 
 @dataclass(frozen=True)
 class DataAuthorizationDecision:
-    """Final composed decision returned to a Helios caller."""
+    """The composed decision. ``denied_by`` is ``"restriction"`` or ``"platform"``."""
 
     allowed: bool
     reason: str = ""
@@ -87,154 +98,125 @@ class DataAuthorizationDecision:
 
 
 class PlatformDataAuthorizer(Protocol):
-    """Adapter implemented only when Cloudera can enforce the relevant identity."""
+    """Confirms that the platform will enforce the caller's identity for this access."""
 
     def can_access(
         self,
-        principal: Principal,
+        caller: Caller,
         resource: DataResource,
         action: str | DataAction,
     ) -> PlatformDataDecision: ...
 
 
-class HeliosDataRestriction(Protocol):
-    """Optional Helios-specific deny-only policy."""
+class DataRestriction(Protocol):
+    """A deny-only rule the host supplies (by model, team, time of day, ...)."""
 
     def can_access(
         self,
-        principal: Principal,
+        caller: Caller,
         resource: DataResource,
         action: str | DataAction,
     ) -> DataRestrictionDecision: ...
 
 
-class DataAuthorizer(Protocol):
-    """Public physical-data authorization boundary."""
+class EngineIdentityAuthorizer:
+    """Allow when the connection's identity mode makes the engine run as the caller.
+
+    Only ``actions`` are allowed: by default query execution, the one operation
+    Helios runs with the caller's identity (harvesting and profiling run as the
+    service)."""
+
+    def __init__(self, actions: Iterable[str | DataAction] = (DataAction.QUERY_EXECUTE,)):
+        self.actions = frozenset(DataAction(action) for action in actions)
 
     def can_access(
         self,
-        principal: Principal,
-        resource: DataResource,
-        action: str | DataAction,
-    ) -> DataAuthorizationDecision: ...
-
-
-class UnavailablePlatformDataAuthorizer:
-    """Safe default until caller identity propagation is implemented."""
-
-    def can_access(
-        self,
-        principal: Principal,
+        caller: Caller,
         resource: DataResource,
         action: str | DataAction,
     ) -> PlatformDataDecision:
-        return PlatformDataDecision.deny(
-            "underlying platform authorization is unavailable for this identity"
-        )
-
-
-class ImpalaProxyDataAuthorizer:
-    """Confirm that execution will use Impala's Ranger-backed proxy identity."""
-
-    def __init__(self, enabled: bool):
-        self.enabled = enabled
-
-    def can_access(
-        self,
-        principal: Principal,
-        resource: DataResource,
-        action: str | DataAction,
-    ) -> PlatformDataDecision:
-        if action != DataAction.QUERY_EXECUTE and action != DataAction.QUERY_EXECUTE.value:
+        name = action.value if isinstance(action, DataAction) else action
+        if name not in {allowed.value for allowed in self.actions}:
+            return PlatformDataDecision.deny(f"{name} does not run as the caller")
+        mode = resource.identity_mode
+        if mode is IdentityMode.IMPERSONATE and caller.username is None:
+            return PlatformDataDecision.deny("the caller has no username to run the query as")
+        if mode is IdentityMode.TOKEN and caller.token is None:
+            return PlatformDataDecision.deny("the caller has no token to run the query with")
+        if mode is IdentityMode.SERVICE:
             return PlatformDataDecision.deny(
-                "Impala delegation only enforces query execution"
-            )
-        if not self.enabled:
-            return PlatformDataDecision.deny(
-                "Impala proxy-user delegation is not enabled"
-            )
-        if not principal.subject.strip():
-            return PlatformDataDecision.deny(
-                "the delegated principal has no workload identity"
+                "the connection runs queries as its own service identity, so the "
+                "warehouse cannot enforce the caller's permissions"
             )
         return PlatformDataDecision.allow(
-            "Impala will verify the delegated effective user before execution"
+            f"the engine runs the query as the caller ({mode.value} mode)"
         )
 
 
 class DataAuthorizationDenied(PermissionError):
     def __init__(
         self,
-        principal: Principal,
+        caller: Caller,
         resource: DataResource,
         action: str | DataAction,
         reason: str,
     ):
-        self.principal = principal
+        self.caller = caller
         self.resource = resource
         self.action = action
         self.reason = reason
         action_name = action.value if isinstance(action, DataAction) else action
         super().__init__(
-            f"{principal.id} may not {action_name} physical data through "
+            f"{caller} may not {action_name} physical data through "
             f"{resource.data_source_id}: {reason}"
         )
 
 
 class DataPolicy:
-    """Compose Helios deny-only restrictions with platform enforcement."""
+    """Host restrictions (deny-only) composed with platform enforcement."""
 
     def __init__(
         self,
         platform: PlatformDataAuthorizer | None = None,
-        restrictions: Iterable[HeliosDataRestriction] = (),
+        restrictions: Iterable[DataRestriction] = (),
     ):
-        self.platform = platform or UnavailablePlatformDataAuthorizer()
+        self.platform = platform or EngineIdentityAuthorizer()
         self.restrictions = tuple(restrictions)
 
     def can_access(
         self,
-        principal: Principal,
+        caller: Caller,
         resource: DataResource,
         action: str | DataAction,
     ) -> DataAuthorizationDecision:
         for restriction in self.restrictions:
-            decision = restriction.can_access(principal, resource, action)
+            decision = restriction.can_access(caller, resource, action)
             if not decision.allowed:
                 return DataAuthorizationDecision.deny(
-                    decision.reason, denied_by="helios"
+                    decision.reason, denied_by="restriction"
                 )
 
-        platform = self.platform.can_access(principal, resource, action)
+        platform = self.platform.can_access(caller, resource, action)
         if not platform.allowed:
             return DataAuthorizationDecision.deny(
                 platform.reason, denied_by="platform"
             )
         if not platform.identity_enforced:
             return DataAuthorizationDecision.deny(
-                "platform adapter did not confirm identity enforcement",
+                "platform authorizer did not confirm identity enforcement",
                 denied_by="platform",
             )
         return DataAuthorizationDecision.allow(platform.reason)
 
     def require(
         self,
-        principal: Principal,
+        caller: Caller,
         resource: DataResource,
         action: str | DataAction,
     ) -> DataAuthorizationDecision:
-        decision = self.can_access(principal, resource, action)
+        decision = self.can_access(caller, resource, action)
         if not decision.allowed:
             raise DataAuthorizationDenied(
-                principal, resource, action, decision.reason
+                caller, resource, action, decision.reason
             )
         return decision
-
-    # Compatibility with the initial boundary.
-    def authorize_data(
-        self,
-        principal: Principal,
-        action: str | DataAction,
-        resource: DataResource,
-    ) -> DataAuthorizationDecision:
-        return self.can_access(principal, resource, action)

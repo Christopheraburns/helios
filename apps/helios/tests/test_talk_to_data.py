@@ -30,7 +30,7 @@ from apps.helios.console.model_provider import (
     provider_availability,
 )
 from apps.helios.mcp_server import server as mcp_server
-from helios_core import audit, authz
+from helios_core import Caller, IdentityMode, audit, authz
 from helios_core.engines.impala import ImpalaConfig
 from helios_core.compiler import (
     Compiler,
@@ -840,15 +840,13 @@ def test_mcp_run_query_uses_delegated_identity(
             443,
             "helios-service",
             "secret",
-            proxy_delegation=True,
+            identity=IdentityMode.IMPERSONATE,
         ),
     )
     captured = {}
 
-    def query(_self, sql, limit, *, delegated_user=None):
-        captured.update(
-            sql=sql, limit=limit, delegated_user=delegated_user
-        )
+    def query(_self, sql, caller=None, *, limit=1000):
+        captured.update(sql=sql, limit=limit, caller=caller)
         return SimpleNamespace(columns=["customer_count"], rows=[(12,)])
 
     monkeypatch.setattr(ImpalaEngine, "query", query)
@@ -878,14 +876,12 @@ def test_mcp_run_query_uses_delegated_identity(
     assert invalid_field["error"] == "invalid_semantic_query"
     assert "unknown field item.item_category" in invalid_field["message"]
     assert result["rows"] == [[12]]
-    assert captured["delegated_user"] == "owner"
+    assert captured["caller"].username == "owner"
     assert captured["limit"] == 1000
 
     hive_server_error = type("HiveServer2Error", (Exception,), {})
 
-    def analysis_mismatch(
-        _self, _sql, _limit=1000, *, delegated_user=None
-    ):
+    def analysis_mismatch(_self, _sql, caller=None, *, limit=1000):
         raise hive_server_error(
             "AnalysisException: operands of type BIGINT and STRING "
             "are not comparable"
@@ -904,8 +900,8 @@ def test_mcp_run_query_uses_delegated_identity(
     assert mismatch["error"] == "invalid_filter_value_type"
     assert mismatch["retryable"] is False
 
-    def ranger_denied(_self, _sql, _limit, *, delegated_user=None):
-        raise PermissionError(f"Ranger denied {delegated_user}")
+    def ranger_denied(_self, _sql, caller=None, *, limit=1000):
+        raise PermissionError(f"Ranger denied {caller.username}")
 
     monkeypatch.setattr(ImpalaEngine, "query", ranger_denied)
     context_token = mcp_server._caller_context.set(
@@ -920,8 +916,8 @@ def test_mcp_run_query_uses_delegated_identity(
     assert denied["error"] == "query_denied"
     assert "Ranger denied owner" in denied["message"]
 
-    def proxy_rejected(_self, _sql, _limit=1000, *, delegated_user=None):
-        if delegated_user:
+    def proxy_rejected(_self, _sql, caller=None, *, limit=1000):
+        if caller is not None:
             raise ImpalaAuthenticationError("delegated HTTP 401")
         return SimpleNamespace(columns=["1"], rows=[(1,)])
 
@@ -939,7 +935,7 @@ def test_mcp_run_query_uses_delegated_identity(
     assert not rejected["retryable"]
     assert "_audit_diagnostics" not in rejected
 
-    def workload_rejected(_self, _sql, _limit=1000, *, delegated_user=None):
+    def workload_rejected(_self, _sql, caller=None, *, limit=1000):
         raise ImpalaAuthenticationError("service HTTP 401")
 
     monkeypatch.setattr(ImpalaEngine, "query", workload_rejected)
@@ -958,9 +954,7 @@ def test_mcp_run_query_uses_delegated_identity(
 
     monkeypatch.setenv("WORKLOAD_PASSWORD", "private-password")
 
-    def warehouse_unavailable(
-        _self, sql, _limit, *, delegated_user=None
-    ):
+    def warehouse_unavailable(_self, sql, caller=None, *, limit=1000):
         raise RuntimeError(
             f"connection failed with private-password while running {sql}"
         )
@@ -1089,10 +1083,10 @@ def test_impala_proxy_delegation_verifies_effective_user(monkeypatch):
             "helios-service",
             "secret",
             http_path="cliservice",
-            proxy_delegation=True,
+            identity=IdentityMode.IMPERSONATE,
         )
     )
-    result = engine.query("SELECT 7", delegated_user="owner")
+    result = engine.query("SELECT 7", Caller("owner"))
 
     assert result.rows == [(7,)]
     assert "doAs=owner" in captured["http_path"]
@@ -1111,12 +1105,12 @@ def test_impala_proxy_delegation_stops_on_identity_mismatch(monkeypatch):
             443,
             "helios-service",
             "secret",
-            proxy_delegation=True,
+            identity=IdentityMode.IMPERSONATE,
         )
     )
 
     with pytest.raises(PermissionError, match="delegated SSO identity"):
-        engine.query("SELECT secret", delegated_user="owner")
+        engine.query("SELECT secret", Caller("owner"))
     assert connection.cursor_value.executed == ["SELECT EFFECTIVE_USER()"]
 
 
@@ -1523,13 +1517,13 @@ async def test_conversation_turn_uses_real_mcp_transport(
             443,
             "helios-service",
             "secret",
-            proxy_delegation=True,
+            identity=IdentityMode.IMPERSONATE,
         ),
     )
     monkeypatch.setattr(
         ImpalaEngine,
         "query",
-        lambda _self, _sql, _limit, *, delegated_user=None: SimpleNamespace(
+        lambda _self, _sql, caller=None, *, limit=1000: SimpleNamespace(
             columns=["customer_count"], rows=[(12,)]
         ),
     )
@@ -2195,10 +2189,10 @@ def test_impala_skips_delegation_to_the_connected_user(monkeypatch):
     engine = ImpalaEngine(
         ImpalaConfig(
             "warehouse.example", 443, "cburns", "secret",
-            http_path="cliservice", proxy_delegation=True,
+            http_path="cliservice", identity=IdentityMode.IMPERSONATE,
         )
     )
-    result = engine.query("SELECT 7", delegated_user="CBurns")
+    result = engine.query("SELECT 7", Caller("CBurns"))
 
     assert result.rows == [(7,)]
     assert "doAs" not in captured["http_path"]

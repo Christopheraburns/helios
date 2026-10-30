@@ -22,7 +22,7 @@ out = Compiler(model).compile(req, dialect=a.dialect)
 print(f"-- fact: {out.fact}; joins: {', '.join(out.joins) or 'none'}\n{out.sql}")
 if a.run:
     from jobs._common import engine
-    res = engine().query(out.sql, 200)
+    res = engine().query(out.sql, limit=200)
     print("\n" + " | ".join(res.columns))
     for r in res.rows:
         print(" | ".join(str(x) for x in r))

@@ -17,6 +17,7 @@ from apps.helios.console.conversation import (
     ConversationUnavailable,
     MCPClientConfig,
 )
+from helios_core import Caller, IdentityMode
 from helios_core.authz import Principal
 from helios_core.engines.impala import impala_config
 from helios_core.settings import Settings
@@ -129,6 +130,8 @@ async def execute_evaluation(
         configuration = impala_config(Settings())
         if configuration is None:
             raise RuntimeError("Impala is not configured for reference queries")
+        if configuration.identity is not IdentityMode.IMPERSONATE:
+            raise PermissionError("Impala proxy-user delegation is disabled")
         engine = ImpalaEngine(configuration)
         mcp = MCPClientConfig.from_env()
         variants = (
@@ -146,7 +149,7 @@ async def execute_evaluation(
             reference = await anyio.to_thread.run_sync(
                 lambda q=question: engine.query(
                     q["reference_sql"],
-                    delegated_user=principal.subject,
+                    Caller(principal.subject),
                 )
             )
             expected = _normalized_result(reference.columns, reference.rows)

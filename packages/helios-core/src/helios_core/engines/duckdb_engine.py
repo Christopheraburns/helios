@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import re
 
+from ..caller import Caller, IdentityMode
 from .base import Engine, QueryResult
 
 
 class DuckDBEngine(Engine):
+    """An embedded database has no users, so every query runs as the process: ``service`` only."""
+
     name = "duckdb"
     sqlglot_dialect = "duckdb"
 
-    def __init__(self, path: str = ":memory:"):
+    def __init__(self, path: str = ":memory:", identity_mode: IdentityMode | str = IdentityMode.SERVICE):
+        super().__init__(identity_mode)
         import duckdb
         self.con = duckdb.connect(path)
 
@@ -29,7 +33,7 @@ class DuckDBEngine(Engine):
             raise RuntimeError("no table stats in duckdb")
         return sql
 
-    def query(self, sql: str, limit: int | None = 1000) -> QueryResult:
+    def query(self, sql: str, caller: Caller | None = None, *, limit: int | None = 1000) -> QueryResult:
         cur = self.con.execute(self._translate(sql))
         cols = [d[0] for d in cur.description] if cur.description else []
         rows = cur.fetchmany(limit) if limit else cur.fetchall()

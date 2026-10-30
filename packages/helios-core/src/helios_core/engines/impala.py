@@ -1,12 +1,17 @@
-"""Impala adapter: connects to a Cloudera Data Warehouse Impala Virtual Warehouse over HTTPS with LDAP auth."""
+"""Impala adapter: connects to a Cloudera Data Warehouse Impala Virtual Warehouse over HTTPS.
+
+Identity modes: ``service`` authenticates the workload user over LDAP; ``impersonate``
+does the same and adds ``doAs=<caller.username>``, then checks ``EFFECTIVE_USER()``;
+``token`` authenticates the caller's JWT and needs no workload user."""
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import parse_qsl, urlencode
 
-from pydantic import BaseModel, ConfigDict, SecretStr
+from pydantic import BaseModel, ConfigDict, SecretStr, ValidationInfo, model_validator
 
+from ..caller import Caller, IdentityError, IdentityMode
 from ..settings import ConnectionSettings, Settings
 from .base import Engine, QueryResult
 
@@ -17,11 +22,11 @@ LOGGER = logging.getLogger(__name__)
 class ImpalaConfig:
     host: str              # Impala VW hostname from "Copy JDBC URL" in Cloudera Data Warehouse
     port: int
-    user: str
-    password: str
+    user: str | None       # the workload (service) user; optional only in token mode
+    password: str | None = field(default=None, repr=False)
     database: str = "default"
     http_path: str = "cliservice"
-    proxy_delegation: bool = False
+    identity: IdentityMode = IdentityMode.SERVICE
 
 
 def parse_impala_host(value: str) -> tuple[str, int | None, str | None]:
@@ -55,27 +60,35 @@ class ImpalaOptions(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     host: str
-    user: str
-    password: SecretStr
+    user: str | None = None
+    password: SecretStr | None = None
     port: int | None = None
     database: str = "default"
     http_path: str | None = None
-    proxy_delegation: bool = False
+
+    @model_validator(mode="after")
+    def _credentials(self, info: ValidationInfo) -> ImpalaOptions:
+        if (self.user is None) != (self.password is None):
+            raise ValueError("set both user and password, or neither")
+        identity = (info.context or {}).get("identity", IdentityMode.SERVICE)
+        if self.user is None and identity is not IdentityMode.TOKEN:
+            raise ValueError(f"an Impala connection in {identity.value} mode needs user and password")
+        return self
 
 
 def impala_config_for(connection: ConnectionSettings) -> ImpalaConfig:
     if connection.engine != "impala":
         raise ValueError(f"not an Impala connection: engine is {connection.engine!r}")
-    options = ImpalaOptions.model_validate(connection.options)
+    options = ImpalaOptions.model_validate(connection.options, context={"identity": connection.identity})
     host, port, http_path = parse_impala_host(options.host)
     return ImpalaConfig(
         host,
         options.port or port or 443,
         options.user,
-        options.password.get_secret_value(),
+        options.password.get_secret_value() if options.password else None,
         options.database,
         options.http_path or http_path or "cliservice",
-        options.proxy_delegation,
+        connection.identity,
     )
 
 
@@ -89,11 +102,12 @@ def impala_config(settings: Settings, ref: str | None = None) -> ImpalaConfig | 
 
 
 class ImpalaAuthenticationError(PermissionError):
-    """The CDW HTTP endpoint rejected the configured workload credential."""
+    """The CDW HTTP endpoint rejected the credential: the workload user's, or in
+    token mode the caller's token."""
 
 
 class ImpalaProxyDelegationError(PermissionError):
-    """Impala did not accept or enforce the delegated effective user."""
+    """Impala did not accept or enforce the impersonated effective user."""
 
 
 def _short_name(user: str) -> str:
@@ -108,43 +122,48 @@ def _same_user(a: str, b: str) -> bool:
 class ImpalaEngine(Engine):
     name = "impala"
     sqlglot_dialect = "hive"   # SQLGlot has no dedicated Impala dialect; Hive is the closest and is post-processed by the compiler
+    identity_modes = frozenset(IdentityMode)
 
     def __init__(self, cfg: ImpalaConfig):
+        super().__init__(cfg.identity)
         self.cfg = cfg
 
-    def _connect(self, delegated_user: str | None = None):
+    def _connect(self, caller: Caller | None = None):
         from impala.dbapi import connect
+        self.check_caller(caller)
+        common = dict(host=self.cfg.host, port=self.cfg.port, database=self.cfg.database,
+                      use_ssl=True, use_http_transport=True)
+        if caller is not None and self.identity_mode is IdentityMode.TOKEN:
+            return connect(**common, auth_mechanism="JWT", jwt=caller.token, http_path=self.cfg.http_path)
+        if self.cfg.user is None:
+            raise IdentityError("this Impala connection has no workload user; pass a caller with a token")
         http_path = self.cfg.http_path
-        if delegated_user and _same_user(delegated_user, self.cfg.user):
-            # Already connected as this user. Impala rejects doAs-to-self unless the Virtual
-            # Warehouse has a proxy config, so skip it; query() still verifies EFFECTIVE_USER().
-            delegated_user = None
-        if delegated_user:
-            if not self.cfg.proxy_delegation:
-                raise PermissionError("Impala proxy-user delegation is disabled")
+        run_as = self._impersonated(caller)
+        if run_as and not _same_user(run_as, self.cfg.user):
+            # Impala rejects doAs-to-self unless the Virtual Warehouse has a proxy config, so
+            # it is only added for someone else; query() verifies EFFECTIVE_USER() either way.
             path, separator, query = http_path.partition("?")
             parameters = dict(parse_qsl(query, keep_blank_values=True))
-            parameters["doAs"] = delegated_user
+            parameters["doAs"] = run_as
             http_path = f"{path}?{urlencode(parameters)}"
-        return connect(host=self.cfg.host, port=self.cfg.port, database=self.cfg.database,
-                       user=self.cfg.user, password=self.cfg.password,
-                       auth_mechanism="LDAP", use_ssl=True,
-                       use_http_transport=True, http_path=http_path)
+        return connect(**common, auth_mechanism="LDAP", user=self.cfg.user, password=self.cfg.password,
+                       http_path=http_path)
 
-    def query(
-        self,
-        sql: str,
-        limit: int | None = 1000,
-        *,
-        delegated_user: str | None = None,
-    ) -> QueryResult:
-        conn = self._connect(delegated_user)
+    def _impersonated(self, caller: Caller | None) -> str | None:
+        """The username Impala must run as, when impersonating."""
+        if caller is not None and self.identity_mode is IdentityMode.IMPERSONATE:
+            return caller.username
+        return None
+
+    def query(self, sql: str, caller: Caller | None = None, *, limit: int | None = 1000) -> QueryResult:
+        conn = self._connect(caller)
+        run_as = self._impersonated(caller)
         try:
             cur = conn.cursor()
-            if delegated_user:
+            if run_as:
                 cur.execute("SELECT EFFECTIVE_USER()")
                 effective = cur.fetchone()
-                if not effective or not _same_user(str(effective[0]), delegated_user):
+                if not effective or not _same_user(str(effective[0]), run_as):
                     raise ImpalaProxyDelegationError(
                         "Impala did not enforce the delegated SSO identity"
                     )
@@ -165,22 +184,21 @@ class ImpalaEngine(Engine):
                     type(close_error).__name__,
                 )
             if getattr(exc, "code", None) == 401:
-                raise ImpalaAuthenticationError(
-                    "CDW rejected the configured workload authentication"
-                ) from exc
+                whose = "the caller's token" if caller is not None and self.identity_mode is IdentityMode.TOKEN else "the configured workload authentication"
+                raise ImpalaAuthenticationError(f"CDW rejected {whose}") from exc
             raise
         else:
             conn.close()
             return result
 
-    def connect(self):
-        """A DB-API connection as the configured workload user (no delegation), for
-        Helios's own tables such as helios_index."""
-        return self._connect(None)
+    def connect(self, caller: Caller | None = None):
+        """A DB-API connection, as the service identity unless a caller is given. Unlike
+        query(), it does not check EFFECTIVE_USER(); a caller impersonating must."""
+        return self._connect(caller)
 
     def ping(self) -> bool:
         return self.query("SELECT 1").rows == [(1,)]
 
     def query_history(self, limit: int = 500) -> QueryResult:
         """Recent statements from Impala's query log, when the VW exposes it via the sys database."""
-        return self.query(f"SELECT * FROM sys.impala_query_log ORDER BY start_time_utc DESC LIMIT {limit}", limit)
+        return self.query(f"SELECT * FROM sys.impala_query_log ORDER BY start_time_utc DESC LIMIT {limit}", limit=limit)

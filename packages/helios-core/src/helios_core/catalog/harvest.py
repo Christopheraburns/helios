@@ -107,7 +107,7 @@ class Harvester:
         try:
             res = self.engine.query(
                 f"SELECT sql FROM sys.impala_query_log WHERE query_type = 'QUERY' "
-                f"ORDER BY start_time_utc DESC LIMIT {log_window}", log_window)
+                f"ORDER BY start_time_utc DESC LIMIT {log_window}", limit=log_window)
             log = [r[0] for r in res.rows if r[0]]
             raw += [("sys.impala_query_log", q) for q in log]
             sources.append("sys.impala_query_log")
