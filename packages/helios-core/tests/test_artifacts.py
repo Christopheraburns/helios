@@ -10,7 +10,6 @@ from helios_core.ossie import SemanticModel
 def model(model_id: str) -> Model:
     return Model(
         id=model_id,
-        organization_id="acme",
         name=model_id,
         data_sources=(DataSourceReference("shared-warehouse"),),
     )

@@ -5,12 +5,12 @@ from fastapi.testclient import TestClient
 
 from apps.helios.console.api import ResourceStore
 from apps.helios.console.main import app
-from helios_core import authz
+from apps.helios.console import authz
 from helios_core.artifacts import ArtifactStore
 from helios_core.runs import RunStore
 from apps.helios import runtime
-from helios_core.domain import DataSourceReference, Model, Organization
-from helios_core._pending.graph import (
+from apps.helios.console.domain import DataSourceReference, Model, Organization
+from apps.helios.console.graph import (
     ArtifactGraphRepository,
     GraphEdge,
     GraphNode,

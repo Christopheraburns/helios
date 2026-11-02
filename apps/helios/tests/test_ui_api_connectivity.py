@@ -5,14 +5,14 @@ from fastapi.testclient import TestClient
 from apps.helios.console.api import api_router
 from apps.helios.console.main import configure_cors, configured_cors_origins
 from apps.helios.ui.app import configured_api_url
-from helios_core import authz
-from helios_core.domain import (
+from apps.helios.console import authz
+from apps.helios.console.domain import (
     DataSource,
     DataSourceReference,
     Model,
     Organization,
 )
-from helios_core.metadata import PrincipalRecord, SQLiteMetadataRepository
+from apps.helios.console.metadata import PrincipalRecord, SQLiteMetadataRepository
 
 
 def test_cors_configuration_requires_exact_origins():

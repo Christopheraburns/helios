@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 
 from helios_core import __version__
-from helios_core import audit
+from apps.helios.console import audit
 from helios_core.atlas import AtlasClient, AtlasError
 from helios_core.atlas import atlas_config
 from helios_core.engines.impala import impala_config
@@ -24,7 +24,7 @@ from helios_core.engines import ImpalaEngine
 from apps.helios import runtime
 from fastapi import HTTPException
 
-from helios_core.metadata import SQLiteMetadataRepository
+from apps.helios.console.metadata import SQLiteMetadataRepository
 from .api import api_router, principal_from_request
 from .assistant import assistant_router
 from .mcp_settings import DEFAULT_SESSION_MCP_SETTINGS_STORE

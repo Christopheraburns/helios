@@ -51,8 +51,8 @@ def read_json(path: str):
 
 @contextmanager
 def audit_job(stage: str, run_id: str, model_id: str | None = None):
-    from helios_core import audit
-    from helios_core.metadata import SQLiteMetadataRepository
+    from apps.helios.console import audit
+    from apps.helios.console.metadata import SQLiteMetadataRepository
     from helios_core.settings import Settings
 
     repository = SQLiteMetadataRepository.from_settings(Settings())

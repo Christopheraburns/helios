@@ -12,15 +12,15 @@ os.environ.setdefault(
 
 import pytest  # noqa: E402
 
-from helios_core import authz  # noqa: E402
+from apps.helios.console import authz  # noqa: E402
 from helios_core.artifacts import ArtifactStore  # noqa: E402
-from helios_core.domain import (  # noqa: E402
+from apps.helios.console.domain import (  # noqa: E402
     DataSource,
     DataSourceReference,
     Model,
     Organization,
 )
-from helios_core.metadata import PrincipalRecord, SQLiteMetadataRepository  # noqa: E402
+from apps.helios.console.metadata import PrincipalRecord, SQLiteMetadataRepository  # noqa: E402
 
 
 @dataclass(frozen=True)

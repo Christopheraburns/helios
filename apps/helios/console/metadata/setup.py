@@ -1,6 +1,6 @@
 """Create or upgrade the operational metadata database.
 
-Run with: ``python -m helios_core.metadata.setup``.
+Run with: ``python -m apps.helios.console.metadata.setup``.
 """
 
 from helios_core.settings import Settings

@@ -37,7 +37,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from helios_core import __version__
-from helios_core import audit, authz
+from apps.helios.console import audit, authz
 from apps.helios import runtime
 from helios_core.atlas import atlas_config
 from helios_core.compiler import (
@@ -52,23 +52,30 @@ from helios_core.data_authorization import (
     DataPolicy,
     DataResource,
 )
-from helios_core.delegation import (
+from apps.helios.console.delegation import (
     DelegatedContext,
     DelegationError,
     verify_assertion,
 )
+from apps.helios.audit_sink import RepositoryAuditSink
 from helios_core import Caller
-from helios_core.identity import Principal, PrincipalKind
+from helios_core.audit_sink import AuditRecord, AuditSink, record_safely, sql_fingerprint
+from helios_core.visibility import AllModels, ModelNotVisible, ModelVisibility, require_visible
+from apps.helios.console.identity import Principal, PrincipalKind
 from helios_core.engines.impala import impala_config
-from helios_core.metadata import SQLiteMetadataRepository, TraceSpan
+from apps.helios.console.metadata import SQLiteMetadataRepository, TraceSpan
 from helios_core.ossie import SemanticModel, build as build_ossie
 from helios_core.settings import Settings
-from helios_core.tracing import sanitized, utcnow
+from apps.helios.console.tracing import sanitized, utcnow
 
 LOGGER = logging.getLogger(__name__)
 artifact_store = runtime.artifacts
 # Allows run_query only on connections whose identity mode runs it as the caller.
 data_policy = DataPolicy()
+# Which models a caller may list and use; Helios grants below are checked as well until 2.6.
+model_visibility: ModelVisibility = AllModels()
+# Where tool audit records go; None is the console's SQLite audit log (see _audit_sink).
+audit_sink: AuditSink | None = None
 metadata_repository = SQLiteMetadataRepository.from_settings(runtime.settings)
 _metadata_findings = metadata_repository.integrity_check()
 if _metadata_findings != ("ok",):
@@ -88,6 +95,11 @@ class MCPCaller:
     session_id: str | None = None
     trace_run_id: str | None = None
     semantic_revision_id: str | None = None
+
+    @property
+    def caller(self) -> Caller:
+        """The library-facing caller: the principal's subject is the username."""
+        return Caller(username=self.principal.subject, attributes={"principal_id": self.principal.id})
 
 
 _caller_context: ContextVar[MCPCaller | None] = ContextVar(
@@ -435,9 +447,10 @@ def _authorize(
         raise PermissionError("an authorized model context is required")
     if caller.model_id and model_id != caller.model_id:
         raise PermissionError("the requested model does not match caller context")
+    require_visible(model_visibility, caller.caller, model_id)
     model = metadata_repository.model(model_id)
     if model is None:
-        raise LookupError("model not found")
+        raise ModelNotVisible(model_id)  # the same error as a model the caller may not see
     if caller.organization_id and model.organization_id != caller.organization_id:
         raise PermissionError("the requested model is outside caller context")
     policy = authz.Policy(
@@ -460,11 +473,32 @@ def _authorized_tool(
         return None, None, _error("authorization_denied", str(exc))
 
 
+_DENIED_ERRORS = frozenset(
+    {
+        "authorization_denied",
+        "authentication_required",
+        "data_authorization_denied",
+        "proxy_delegation_denied",
+        "query_denied",
+    }
+)
+
+
+def _audit_sink() -> AuditSink:
+    return audit_sink or RepositoryAuditSink(lambda: metadata_repository, "mcp")
+
+
 def _audited_tool(name: str):
     def decorate(function):
         @wraps(function)
         def wrapped(*args, **kwargs):
             started = time.perf_counter()
+            mcp_caller = _caller_context.get()
+            base = {
+                "action": name,
+                "model": kwargs.get("model"),
+                "caller": mcp_caller.caller.username if mcp_caller else None,
+            }
             try:
                 result = function(*args, **kwargs)
             except Exception as exc:
@@ -475,72 +509,43 @@ def _audited_tool(name: str):
                     context.request_id if context else None,
                     type(exc).__name__,
                 )
-                audit.emit(
-                    metadata_repository,
-                    component="mcp",
-                    event_type="mcp.tool",
-                    action=name,
+                record_safely(_audit_sink(), AuditRecord(
+                    **base,
                     outcome="error",
-                    severity="error",
-                    resource_type="model",
-                    resource_id=kwargs.get("model"),
+                    exception=type(exc).__name__,
                     duration_ms=(time.perf_counter() - started) * 1000,
-                    summary=f"MCP tool {name} failed",
-                    details={"error_type": type(exc).__name__},
-                )
+                ))
                 raise
             error_code = (
                 result.get("error")
                 if isinstance(result, dict)
                 else None
             )
-            details: dict[str, Any] = {}
             diagnostics = (
                 result.pop("_audit_diagnostics", None)
                 if isinstance(result, dict)
                 else None
             )
-            if error_code:
-                details["error_code"] = error_code
-            if isinstance(diagnostics, dict):
-                details["diagnostics"] = diagnostics
-            if (
-                name == "run_query"
-                and isinstance(result, dict)
-                and isinstance(result.get("rows"), list)
-            ):
-                details["row_count"] = len(result["rows"])
-                if isinstance(result.get("sql"), str):
-                    details["compiled_fingerprint"] = audit.sql_fingerprint(
-                        result["sql"]
-                    )
-            audit.emit(
-                metadata_repository,
-                component="mcp",
-                event_type="mcp.tool",
-                action=name,
+            rows = result.get("rows") if isinstance(result, dict) else None
+            sql = result.get("sql") if isinstance(result, dict) else None
+            ran_query = name == "run_query" and isinstance(rows, list)
+            record_safely(_audit_sink(), AuditRecord(
+                **base,
                 outcome=(
-                    "denied"
-                    if error_code
-                    in {
-                        "authorization_denied",
-                        "authentication_required",
-                        "data_authorization_denied",
-                        "proxy_delegation_denied",
-                        "query_denied",
-                    }
-                    else "error"
-                    if error_code
+                    "denied" if error_code in _DENIED_ERRORS
+                    else "error" if error_code
                     else "success"
                 ),
-                severity="warning" if error_code else "info",
-                resource_type="model",
-                resource_id=kwargs.get("model"),
-                model_id=kwargs.get("model"),
+                error_code=error_code,
+                row_count=len(rows) if ran_query else None,
+                sql_fingerprint=(
+                    sql_fingerprint(sql) if ran_query and isinstance(sql, str) else None
+                ),
                 duration_ms=(time.perf_counter() - started) * 1000,
-                summary=f"MCP tool {name} completed",
-                details=details,
-            )
+                details=(
+                    {"diagnostics": diagnostics} if isinstance(diagnostics, dict) else {}
+                ),
+            ))
             return result
 
         return wrapped
@@ -852,10 +857,7 @@ def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: 
                 )
             resource = DataResource(references[0].data_source_id, asset, cfg.identity)
             resources[(resource.data_source_id, asset)] = resource
-        data_caller = Caller(
-            username=caller.principal.subject,
-            attributes={"principal_id": caller.principal.id},
-        )
+        data_caller = caller.caller
         for resource in resources.values():
             access = data_policy.can_access(
                 data_caller,

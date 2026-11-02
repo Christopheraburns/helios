@@ -1,6 +1,6 @@
-"""Compatibility imports; new code should use :mod:`helios_core.authz`."""
+"""Compatibility imports; new code should use :mod:`apps.helios.console.authz`."""
 
-from helios_core.authz import (
+from apps.helios.console.authz import (
     AuthorizationDecision as ResourceAuthorizationDecision,
     AuthorizationDenied as ResourceAuthorizationError,
     Authorizer as ResourceAuthorizer,

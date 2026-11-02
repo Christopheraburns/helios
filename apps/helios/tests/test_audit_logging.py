@@ -4,8 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.helios.console.main import app
-from helios_core import audit
-from helios_core.metadata import AuditEvent, SQLiteMetadataRepository
+from apps.helios.console import audit
+from apps.helios.console.metadata import AuditEvent, SQLiteMetadataRepository
 
 
 def event(
@@ -144,7 +144,7 @@ def test_audit_persistence_failures_are_rate_limited(
     monkeypatch.setattr(audit, "_failure_signature", None)
     monkeypatch.setattr(audit, "_failure_last_logged", 0.0)
     monkeypatch.setattr(audit, "_failure_suppressed", 0)
-    caplog.set_level("ERROR", logger="helios_core.audit")
+    caplog.set_level("ERROR", logger="apps.helios.console.audit")
 
     for _ in range(3):
         audit.emit(

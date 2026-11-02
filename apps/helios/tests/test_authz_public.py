@@ -1,6 +1,6 @@
 import pytest
 
-from helios_core import authz
+from apps.helios.console import authz
 
 
 def setup_access():

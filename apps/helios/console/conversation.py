@@ -15,19 +15,20 @@ import httpx2
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
-from helios_core import __version__, audit
+from helios_core import __version__
+from apps.helios.console import audit
 from helios_core.artifacts import ArtifactStore
-from helios_core.authz import Principal
-from helios_core.delegation import issue_assertion
+from apps.helios.console.authz import Principal
+from apps.helios.console.delegation import issue_assertion
 from helios_core.llm import (
     LLMClient,
     LLMError,
     LLMTimeoutError,
     llm_from_settings,
 )
-from helios_core.metadata import MetadataRepository, SemanticRevision
+from apps.helios.console.metadata import MetadataRepository, SemanticRevision
 from helios_core.settings import Settings
-from helios_core.tracing import TraceRecorder, utcnow
+from apps.helios.console.tracing import TraceRecorder, utcnow
 
 LOGGER = logging.getLogger(__name__)
 

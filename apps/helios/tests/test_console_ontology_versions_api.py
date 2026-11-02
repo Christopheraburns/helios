@@ -158,7 +158,7 @@ def test_require_ontology_edit_checks_identity_organization_and_role(monkeypatch
 
     from apps.helios.console import ontology as api
     from fastapi import HTTPException
-    from helios_core import authz
+    from apps.helios.console import authz
 
     principal = {"value": None}
     fake_api = types.ModuleType("apps.helios.console.api")

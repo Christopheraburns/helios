@@ -1,8 +1,8 @@
 import pytest
 
-from helios_core.authorization import HeliosResource
-from helios_core.identity import Principal, PrincipalKind
-from helios_core.rbac import (
+from apps.helios.console.authorization import HeliosResource
+from apps.helios.console.identity import Principal, PrincipalKind
+from apps.helios.console.rbac import (
     Action,
     Grant,
     RbacAuthorizer,

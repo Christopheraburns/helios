@@ -1,5 +1,6 @@
 """helios_core.Caller replaces Principal in library signatures (burndown 2.1)."""
 import ast
+import importlib.util
 import logging
 from pathlib import Path
 
@@ -14,8 +15,8 @@ from helios_core.data_authorization import (
 )
 
 SOURCE = Path(__file__).resolve().parents[1] / "src" / "helios_core"
-# Helios's own identity code, which moves to the old console in 2.6.
-LEAVING = ("authz/", "authorization.py", "identity.py", "delegation.py", "rbac.py", "metadata/users.py", "_pending/")
+# Helios's own identity code, moved to apps/helios/console in 2.6.
+IDENTITY_MODULES = ("authz", "authorization", "rbac", "identity", "delegation", "metadata", "tracing", "audit")
 
 
 def test_every_field_is_optional_for_service_mode():
@@ -69,12 +70,23 @@ def test_data_policy_takes_a_caller():
     assert "s3cr3t-jwt" not in str(raised.value)
 
 
+def test_helios_core_has_no_identity_code():
+    """Phase 2 gate: no users, organizations, roles or grants in helios_core."""
+    present = [name for name in IDENTITY_MODULES if importlib.util.find_spec(f"helios_core.{name}") is not None]
+    assert not present, present
+    from helios_core import domain
+
+    assert not hasattr(domain, "Organization")
+    assert "organization_id" not in domain.Model.__dataclass_fields__
+    assert "organization_id" not in domain.DataSource.__dataclass_fields__
+    workbench = [p.name for p in SOURCE.rglob("*.py") if "cloudera-workbench" in p.read_text()]
+    assert not workbench, workbench
+
+
 def test_no_library_signature_names_principal():
     offenders = []
     for path in sorted(SOURCE.rglob("*.py")):
         relative = path.relative_to(SOURCE).as_posix()
-        if relative.startswith(LEAVING):
-            continue
         for node in ast.walk(ast.parse(path.read_text())):
             name = node.id if isinstance(node, ast.Name) else getattr(node, "attr", None)
             if name == "Principal" or (isinstance(node, ast.alias) and node.name == "Principal"):

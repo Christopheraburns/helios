@@ -1,7 +1,7 @@
 """Authorized, model-scoped HTTP API for the Helios console application.
 
 Authentication and HTTP error translation live here at the application boundary.
-Resource policy remains in ``helios_core.authz`` and can be reused by MCP or jobs.
+Resource policy remains in ``apps.helios.console.authz`` and can be reused by MCP or jobs.
 """
 from __future__ import annotations
 
@@ -20,15 +20,15 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-from helios_core import audit, authz
-from helios_core._pending import health as system_health
+from apps.helios.console import audit, authz
+from apps.helios.console import health as system_health
 from helios_core._pending import publication
 from helios_core._pending import review as review_store
 from apps.helios import runtime
 from helios_core.atlas import AtlasClient, AtlasError
 from helios_core.atlas import atlas_config
-from helios_core.domain import Model, Organization
-from helios_core._pending.graph import (
+from apps.helios.console.domain import Model, Organization
+from apps.helios.console.graph import (
     ArtifactGraphRepository,
     GraphEdge,
     GraphNode,
@@ -37,7 +37,7 @@ from helios_core._pending.graph import (
     graph_response,
     navigation_graph_response,
 )
-from helios_core.metadata import (
+from apps.helios.console.metadata import (
     AuditEvent,
     AuditSession,
     ConversationVersionConflict,

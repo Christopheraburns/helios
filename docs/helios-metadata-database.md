@@ -175,7 +175,7 @@ Run explicit checks from a Workbench Session:
 ```bash
 cd "$CDSW_PROJECT_DIR/helios"
 python - <<'PY'
-from helios_core.metadata import SQLiteMetadataRepository
+from apps.helios.console.metadata import SQLiteMetadataRepository
 
 repository = SQLiteMetadataRepository()
 print(repository.path)
@@ -187,14 +187,14 @@ PY
 Helios provides backup-first repair tooling:
 
 ```bash
-python -m helios_core.metadata.repair \
+python -m apps.helios.console.metadata.repair \
   --rebuild-index audit_events_principal_session_time_idx
 ```
 
 If a damaged b-tree prevents index rebuilding:
 
 ```bash
-python -m helios_core.metadata.repair --recover
+python -m apps.helios.console.metadata.repair --recover
 ```
 
 Repair must be performed only after all metadata users stop. The tooling:

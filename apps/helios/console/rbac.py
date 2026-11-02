@@ -1,12 +1,12 @@
-"""Compatibility imports; new code should use :mod:`helios_core.authz`."""
+"""Compatibility imports; new code should use :mod:`apps.helios.console.authz`."""
 
-from helios_core.authz import (
+from apps.helios.console.authz import (
     Action,
     Grant,
     Policy as RbacAuthorizer,
     Role,
 )
-from helios_core.authz.roles import ROLE_PERMISSIONS, RoleAssignment
+from apps.helios.console.authz.roles import ROLE_PERMISSIONS, RoleAssignment
 
 __all__ = [
     "Action",

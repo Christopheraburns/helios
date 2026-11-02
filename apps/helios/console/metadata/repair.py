@@ -2,7 +2,7 @@
 
 Run only after stopping Helios API, MCP, and metadata-writing Jobs:
 
-    python -m helios_core.metadata.repair --rebuild-index INDEX_NAME
+    python -m apps.helios.console.metadata.repair --rebuild-index INDEX_NAME
 """
 
 from __future__ import annotations

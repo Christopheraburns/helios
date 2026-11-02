@@ -17,13 +17,13 @@ import anyio
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from helios_core import audit, authz
-from helios_core.domain import Model, Organization
+from apps.helios.console import audit, authz
+from apps.helios.console.domain import Model, Organization
 from helios_core.index import runs as index_runs
 from helios_core.llm import LLMClient, LLMError, LLMTimeoutError, llm_from_settings
 from helios_core.settings import Settings
-from helios_core.metadata import MetadataRepository
-from helios_core.tracing import TraceRecorder, utcnow
+from apps.helios.console.metadata import MetadataRepository
+from apps.helios.console.tracing import TraceRecorder, utcnow
 from apps.helios import runtime
 from apps.helios.console import ontology
 from apps.helios.console.api import (

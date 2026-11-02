@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from helios_core._pending import health
+from apps.helios.console import health
 from helios_core.settings import Settings
 
 

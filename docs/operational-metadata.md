@@ -20,7 +20,7 @@ database for history and audit but are omitted from the default active list.
 Conversation APIs always reapply Model authorization and owner isolation.
 
 SQLite is used through the standard library and is hidden behind
-`helios_core.metadata.MetadataRepository`. The implementation enables foreign
+`apps.helios.console.metadata.MetadataRepository`. The implementation enables foreign
 keys and a busy timeout. The default journal mode is `DELETE`, because WAL
 shared-memory files are unsafe when Cloudera Applications on different hosts
 access the same project filesystem. Set `HELIOS_SQLITE_JOURNAL_MODE=WAL` only
@@ -33,10 +33,10 @@ The default database is `state/helios.db` under `HELIOS_ROOT`. Set
 startup. It can also be prepared explicitly:
 
 ```bash
-python -m helios_core.metadata.setup
+python -m apps.helios.console.metadata.setup
 ```
 
-Migrations are append-only entries in `helios_core.metadata.migrations`.
+Migrations are append-only entries in `apps.helios.console.metadata.migrations`.
 `schema_migrations` records applied versions. Add a new numbered migration rather
 than modifying one that has shipped.
 
@@ -63,7 +63,7 @@ To repair metadata:
 
    ```bash
    python - <<'PY'
-   from helios_core.metadata import SQLiteMetadataRepository
+   from apps.helios.console.metadata import SQLiteMetadataRepository
    repository = SQLiteMetadataRepository()
    print(repository.path)
    print(repository.integrity_check())
@@ -74,7 +74,7 @@ To repair metadata:
 3. If diagnostics identify only a rebuildable non-constraint index, run:
 
    ```bash
-   python -m helios_core.metadata.repair \
+   python -m apps.helios.console.metadata.repair \
      --rebuild-index audit_events_principal_session_time_idx
    ```
 
@@ -82,7 +82,7 @@ To repair metadata:
    recover all readable tables into a clean database:
 
    ```bash
-   python -m helios_core.metadata.repair --recover
+   python -m apps.helios.console.metadata.repair --recover
    ```
 
 Both repair modes refuse a non-empty WAL, create a timestamped raw backup under

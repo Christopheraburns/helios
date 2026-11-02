@@ -5,10 +5,10 @@ import json
 from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
-from helios_core import authz
+from apps.helios.console import authz
 from helios_core._pending import review as review_store
 from helios_core.artifacts import ArtifactStore
-from helios_core.domain import Model
+from apps.helios.console.domain import Model
 
 
 @dataclass(frozen=True)

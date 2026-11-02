@@ -1,6 +1,6 @@
 import pytest
 
-from helios_core.authorization import (
+from apps.helios.console.authorization import (
     HeliosResource,
     ResourceAuthorizationDecision,
     ResourceAuthorizationError,
@@ -10,7 +10,7 @@ from helios_core.data_authorization import (
     DataAuthorizationDecision,
     DataResource,
 )
-from helios_core.identity import Principal, PrincipalKind
+from apps.helios.console.identity import Principal, PrincipalKind
 
 
 @pytest.fixture
@@ -87,9 +87,9 @@ def test_helios_resource_grant_does_not_imply_data_access(human):
 
 
 def test_principal_and_authorization_modules_do_not_import_fastapi():
-    import helios_core.authorization as resource_module
+    import apps.helios.console.authorization as resource_module
     import helios_core.data_authorization as data_module
-    import helios_core.identity as identity_module
+    import apps.helios.console.identity as identity_module
 
     for module in (identity_module, resource_module, data_module):
         assert "fastapi" not in module.__dict__

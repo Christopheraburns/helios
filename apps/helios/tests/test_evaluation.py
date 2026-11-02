@@ -7,7 +7,7 @@ from apps.helios.console.evaluation import (
     load_suite,
     save_suite,
 )
-from helios_core.metadata import EvaluationResult
+from apps.helios.console.metadata import EvaluationResult
 from helios_core.ossie import SemanticModel
 
 

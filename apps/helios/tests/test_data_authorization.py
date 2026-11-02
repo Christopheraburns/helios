@@ -1,4 +1,5 @@
-from helios_core import Caller, authz
+from helios_core import Caller
+from apps.helios.console import authz
 from helios_core.settings import Settings
 from helios_core.engines.impala import impala_config
 from helios_core.data_authorization import (

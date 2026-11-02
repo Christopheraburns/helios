@@ -7,7 +7,7 @@ from typing import Callable, Literal
 from helios_core.atlas import AtlasClient, atlas_config
 from helios_core.engines import ImpalaEngine, impala_config
 from helios_core.llm import llm_from_settings
-from helios_core.metadata import MetadataRepository
+from apps.helios.console.metadata import MetadataRepository
 from helios_core.settings import Settings
 
 HealthState = Literal["healthy", "degraded", "unavailable", "unknown"]

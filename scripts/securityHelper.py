@@ -1,11 +1,11 @@
-from helios_core import authz
-from helios_core.domain import (
+from apps.helios.console import authz
+from apps.helios.console.domain import (
     DataSource,
     DataSourceReference,
     Model,
     Organization,
 )
-from helios_core.metadata import PrincipalRecord, SQLiteMetadataRepository
+from apps.helios.console.metadata import PrincipalRecord, SQLiteMetadataRepository
 from helios_core.settings import Settings
 
 username = "cburns"

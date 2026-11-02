@@ -12,8 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator
 
-from helios_core import authz
-from helios_core.domain import (
+from apps.helios.console import authz
+from apps.helios.console.domain import (
     DataSource,
     DataSourceReference,
     Model,

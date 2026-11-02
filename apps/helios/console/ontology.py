@@ -111,7 +111,7 @@ def require_ontology_edit(request: Request, organization_id: str | None) -> str:
     """The caller's principal ID if they hold ontology.edit in ``organization_id``
     (401 without an identity, 400 without an organization, 403 without the role)."""
     from apps.helios.console.api import principal_from_request
-    from helios_core import authz
+    from apps.helios.console import authz
 
     principal = principal_from_request(request)
     if principal is None:

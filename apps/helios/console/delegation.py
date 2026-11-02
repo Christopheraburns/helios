@@ -9,7 +9,7 @@ import secrets
 import time
 from dataclasses import dataclass
 
-from helios_core.authz import Principal, PrincipalKind
+from apps.helios.console.authz import Principal, PrincipalKind
 
 
 class DelegationError(ValueError):

@@ -11,7 +11,6 @@ from helios_core.artifacts import ArtifactStore
 from helios_core.atlas import atlas_config_for
 from helios_core.engines.impala import impala_config_for
 from helios_core.llm import llm_from_settings
-from helios_core.metadata import SQLiteMetadataRepository
 from helios_core.runs import RunStore
 from helios_core.settings import Settings
 
@@ -294,7 +293,7 @@ def test_parity_with_the_code_before_settings(monkeypatch, name):
     s = Settings()
     expected = EXPECTED[name]
 
-    assert SQLiteMetadataRepository.from_settings(s).path == expected["metadata_db"]
+    assert str(s.metadata_db) == expected["metadata_db"]
     assert RunStore.from_settings(s).runs_dir == expected["runs_dir"]
     assert ArtifactStore.from_settings(s).root == Path(expected["artifacts_dir"])
     assert str(s.evidence.index) == expected["evidence_index"]

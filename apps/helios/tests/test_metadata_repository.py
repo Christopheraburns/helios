@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from helios_core import authz
-from helios_core.domain import (
+from apps.helios.console import authz
+from apps.helios.console.domain import (
     DataSource,
     DataSourceReference,
     Model,
     Organization,
 )
-from helios_core.metadata import (
+from apps.helios.console.metadata import (
     EvaluationResult,
     EvaluationRun,
     PrincipalRecord,
@@ -20,8 +20,8 @@ from helios_core.metadata import (
     TraceRun,
     TraceSpan,
 )
-from helios_core.metadata.repair import rebuild_index, recover_database
-from helios_core.tracing import TraceRecorder
+from apps.helios.console.metadata.repair import rebuild_index, recover_database
+from apps.helios.console.tracing import TraceRecorder
 
 
 @pytest.fixture

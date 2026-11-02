@@ -1,6 +1,6 @@
 """Register principals and grant them access.
 
-Run with ``python -m helios_core.metadata.users``.
+Run with ``python -m apps.helios.console.metadata.users``.
 
 There is no REST or UI path for this: organization membership and model grants
 are repository-level operations, so this is the supported way to onboard a user.
@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from helios_core import authz
+from apps.helios.console import authz
 from helios_core.settings import Settings
 
 from .repository import PrincipalRecord
@@ -134,7 +134,7 @@ def show(arguments: argparse.Namespace) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python -m helios_core.metadata.users",
+        prog="python -m apps.helios.console.metadata.users",
         description="Register Helios principals and grant them access.",
         epilog=(
             "examples:\n"

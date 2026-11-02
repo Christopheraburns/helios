@@ -1,4 +1,4 @@
-"""The user-onboarding CLI: python -m helios_core.metadata.users.
+"""The user-onboarding CLI: python -m apps.helios.console.metadata.users.
 
 Adding a user is repository-level only -- no REST, no UI -- so this CLI is the
 supported path and its validation is the only thing standing between an operator
@@ -7,9 +7,9 @@ and a silently broken account.
 
 import pytest
 
-from helios_core import authz
-from helios_core.domain import DataSource, DataSourceReference, Model, Organization
-from helios_core.metadata import PrincipalRecord, SQLiteMetadataRepository, users
+from apps.helios.console import authz
+from apps.helios.console.domain import DataSource, DataSourceReference, Model, Organization
+from apps.helios.console.metadata import PrincipalRecord, SQLiteMetadataRepository, users
 
 
 @pytest.fixture

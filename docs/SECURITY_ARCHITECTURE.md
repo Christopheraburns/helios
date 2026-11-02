@@ -7,7 +7,7 @@ authorization as three separate decisions.
 
 Authentication adapters live at each application boundary. They validate the
 credential appropriate to that workload and construct a
-`helios_core.identity.Principal`.
+`apps.helios.console.identity.Principal`.
 
 - The Web UI/API can translate identity asserted by Workbench SSO.
 - The MCP server can translate a validated token or future workload credential.
@@ -28,7 +28,7 @@ proxy delegation is configured.
 
 ## 2. Helios resource authorization: what may it do in Helios?
 
-`helios_core.authorization.ResourceAuthorizer` evaluates a `Principal`, an action,
+`apps.helios.console.authorization.ResourceAuthorizer` evaluates a `Principal`, an action,
 and a `HeliosResource`. This covers Helios-owned resources such as organizations,
 data-source definitions, models, versions, and discovery runs.
 
@@ -36,7 +36,7 @@ The interface and denial exception are transport-neutral. A FastAPI route may ma
 a denial to HTTP 403, an MCP tool may return an MCP error, and a job may fail or
 skip work without putting transport concerns into the policy layer.
 
-The first policy implementation is `helios_core.rbac.RbacAuthorizer`. Each
+The first policy implementation is `apps.helios.console.rbac.RbacAuthorizer`. Each
 `Grant` links one Principal to one Role on one explicit Resource. Grants are
 organization-scoped for `org_admin` and model-scoped for `model_owner`,
 `model_editor`, `model_viewer`, and `model_consumer`. A principal may therefore
@@ -105,11 +105,14 @@ initiating user's physical-data permissions.
 
 ## Calling authorization from another component
 
-`helios_core.authz` is the stable public interface. A component loads persisted
+Helios's own users, organizations, roles and grants belong to the old console
+(`apps.helios.console`, deleted in Phase 8); the libraries take a host-supplied
+`helios_core.Caller` instead. Within the console, `apps.helios.console.authz` is the
+interface. A component loads persisted
 grants once, constructs a policy, and asks about domain actions and resources:
 
 ```python
-from helios_core import authz
+from apps.helios.console import authz
 
 policy = authz.Policy(grants)
 resource = authz.Resource(

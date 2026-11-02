@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
-from helios_core import authz
-from helios_core.domain import DataSource, Model, Organization
+from apps.helios.console import authz
+from apps.helios.console.domain import DataSource, Model, Organization
 
 
 @dataclass(frozen=True)

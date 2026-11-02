@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from helios_core.metadata import MetadataRepository, TraceRun, TraceSpan
+from apps.helios.console.metadata import MetadataRepository, TraceRun, TraceSpan
 
 PROMPT_VERSION = "talk-to-data-v1"
 _SENSITIVE_KEYS = {

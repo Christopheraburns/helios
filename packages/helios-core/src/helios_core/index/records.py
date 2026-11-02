@@ -287,9 +287,9 @@ class EvaluationRecord(BaseModel):
     crawl_run_id: str
     dataset_id: str = Field(description="The helios_ground_truth dataset scored against")
     evaluated_at: str
-    evaluator: str = Field(description="The principal the harness ran as")
+    evaluator: str = Field(description="The caller the harness ran as")
     evaluator_mode: str = Field(
-        description='"proxy" (Impala delegation to the principal) or "workload_user"'
+        description='"proxy" (Impala delegation to the caller) or "workload_user"'
     )
     harness_version: str
     ontology_version: str

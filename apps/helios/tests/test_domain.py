@@ -1,6 +1,6 @@
 import pytest
 
-from helios_core.domain import DataSource, DataSourceReference, Model, Organization
+from apps.helios.console.domain import DataSource, DataSourceReference, Model, Organization
 
 
 def source(source_id: str = "warehouse") -> DataSource:

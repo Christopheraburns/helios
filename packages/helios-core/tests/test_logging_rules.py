@@ -10,9 +10,6 @@ PACKAGES = Path(__file__).resolve().parents[2]
 COMMANDS = {
     Path("helios-core/src/helios_core/engines/impala_diagnose.py"),
     Path("helios-core/src/helios_core/index/__main__.py"),
-    Path("helios-core/src/helios_core/metadata/repair.py"),
-    Path("helios-core/src/helios_core/metadata/setup.py"),
-    Path("helios-core/src/helios_core/metadata/users.py"),
 }
 CONFIGURES_LOGGING = {"basicConfig", "dictConfig", "fileConfig", "addHandler", "setLevel"}
 HANDLERS = {"StreamHandler", "FileHandler", "RotatingFileHandler", "TimedRotatingFileHandler"}

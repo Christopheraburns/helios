@@ -162,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from helios_core.engines.impala import impala_config
     from helios_core._pending.crawler.sources import is_crawlable
-    from helios_core.domain import DataSource
+    from apps.helios.console.domain import DataSource
     from helios_core.engines.impala import ImpalaEngine
     from helios_core.index import impala_index_store, ontology_versions
     from helios_core._pending import crawler_settings
@@ -174,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     from .gazetteer import Gazetteer
 
     if args.source:
-        from helios_core.metadata import SQLiteMetadataRepository
+        from apps.helios.console.metadata import SQLiteMetadataRepository
 
         source = SQLiteMetadataRepository.from_settings(HeliosSettings()).data_source(args.source)
         if source is None:

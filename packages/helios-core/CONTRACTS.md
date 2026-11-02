@@ -64,8 +64,8 @@ helios-core is pre-1.0 (0.y.z).
 | Module | Names | Level | Notes |
 |---|---|---|---|
 | `helios_core.artifacts` | `ArtifactStore` | Provisional | Object-storage backends selected by URL in 4.3. |
-| `helios_core.metadata` | `MetadataRepository`, `SemanticRevision` | Provisional | The registry protocol. 4.1 splits out a model registry (models, data sources, semantic revisions); the conversation, trace and evaluation parts leave core. |
-| `helios_core.domain` | `Model`, `DataSource`, `DataSourceReference` | Provisional | Organization ownership leaves with identity in Phase 2. |
+| `helios_core.registry` | the model registry protocol (models, data sources, semantic revisions) | Planned | 4.1. The old console's SQLite repository moved to `apps/helios/console/metadata` in 2.6. |
+| `helios_core.domain` | `Model`, `DataSource`, `DataSourceReference` | Provisional | Registry records with no ownership (organizations left in 2.6). 4.1 may reshape them with the registry. |
 
 ### Engines and LLM
 
@@ -80,6 +80,8 @@ helios-core is pre-1.0 (0.y.z).
 |---|---|---|---|
 | `helios_core` | `IdentityMode`, `IdentityError` | Stable | `service`, `impersonate`, `token`; `IdentityError` (a `PermissionError`) when a caller lacks the username or token its mode needs. |
 | `helios_core.data_authorization` | `DataPolicy`, `DataResource`, `DataAction`, `EngineIdentityAuthorizer`, `PlatformDataAuthorizer`, `PlatformDataDecision`, `DataRestriction`, `DataRestrictionDecision`, `DataAuthorizationDecision`, `DataAuthorizationDenied` | Stable | Platform enforcement plus deny-only host restrictions. The default platform authorizer allows query execution only when `DataResource.identity_mode` runs it as the caller. |
+| `helios_core.visibility` | `ModelVisibility`, `AllModels`, `ModelNotVisible`, `visible_models`, `require_visible` | Stable | The host decides which models a caller may list and use; the default shows every model in the registry. A hidden model raises the same `LookupError` as a missing one. |
+| `helios_core.audit_sink` | `AuditRecord`, `AuditSink`, `LoggingAuditSink`, `record_safely`, `sql_fingerprint` | Stable | Libraries emit `AuditRecord`s (action, outcome, model, caller username, row count, SQL fingerprint, error); the host's sink stores them. The default logs to `helios_core.audit_sink`. New optional fields are allowed. |
 | `helios_core` | `Caller` | Stable | The host's caller: `username`, `token` (left out of `repr`, never logged) and free-form `attributes`, all optional. Helios authenticates no one; the engine's identity mode (2.2) decides which field it uses. |
 | `helios_core.plugins` | entry-point groups `helios.engines`, `helios.catalogs`, `helios.stores`, `helios.tools`, `helios.commands` | Planned | 3.1. |
 
@@ -90,11 +92,8 @@ why it stays where it is instead of moving under `_internal/` and then moving ag
 
 | Code | Where it goes |
 |---|---|
-| `authz/`, `authorization.py`, `rbac.py`, `identity.py`, `delegation.py`, `metadata/users.py` | The old console, then deleted (2.6, Phase 8) |
-| `audit.py` | The `AuditSink` hook (2.5) |
 | `engines/impala.py`, `engines/impala_diagnose.py`, `atlas/` | helios-cloudera (3.3) |
 | `engines/duckdb_engine.py` | Stays as the built-in DuckDB engine plugin (3.5) |
-| `metadata/sqlite.py`, `metadata/migrations.py`, `metadata/repair.py`, `metadata/setup.py`, `tracing.py` | The SQLAlchemy registry backend; console tables leave core (4.1, 4.2) |
 | `runs.py` | Onto `ArtifactStore` (4.4) |
 | `catalog/`, `profiler/`, `propose/`, `ossie/build.py` | helios-model (5.3) |
 | `ontology/parser.py`, the rest of `ontology/mapping.py`, `index/` modules other than the store and records | Reviewed for promotion when helios-crawl is built (Phase 10) |

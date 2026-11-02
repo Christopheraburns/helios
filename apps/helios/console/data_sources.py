@@ -24,9 +24,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from helios_core import authz
+from apps.helios.console import authz
 from helios_core._pending.crawler.sources import CrawlConfig, catalog, is_crawlable, validate_scope
-from helios_core.domain import DataSource
+from apps.helios.console.domain import DataSource
 from helios_core.index import runs
 from pydantic import BaseModel, Field, ValidationError
 

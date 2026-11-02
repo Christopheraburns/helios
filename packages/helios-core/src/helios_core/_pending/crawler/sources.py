@@ -1,6 +1,6 @@
 """Crawlable data sources: connector types and their configuration (DS-1, DS-2).
 
-A data source (helios_core.domain.DataSource, stored in Helios's metadata store)
+A data source (helios_core.domain.DataSource, stored in the registry)
 says *where* documents live. For crawling it carries:
 
 - ``connector``: one of ``CONNECTOR_TYPES``;

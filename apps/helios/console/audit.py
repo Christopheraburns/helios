@@ -1,7 +1,9 @@
-"""Structured, redacted audit events shared by Helios applications and jobs."""
+"""The old console's audit log: redacted events persisted in its metadata database.
+
+Library code emits through ``helios_core.audit_sink`` instead; this module goes with
+the console's tables (Phase 8)."""
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import re
@@ -14,7 +16,8 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from helios_core.metadata import AuditEvent, MetadataRepository
+from helios_core.audit_sink import sql_fingerprint  # noqa: F401 - re-exported for the console
+from apps.helios.console.metadata import AuditEvent, MetadataRepository
 from helios_core.settings import environment_secret_values
 
 LOGGER = logging.getLogger(__name__)
@@ -127,11 +130,6 @@ def new_request_id() -> str:
 def normalize_correlation_id(value: str | None) -> str | None:
     candidate = (value or "").strip()
     return candidate if _CORRELATION_PATTERN.fullmatch(candidate) else None
-
-
-def sql_fingerprint(sql: str) -> str:
-    normalized = " ".join(sql.split()).encode()
-    return hashlib.sha256(normalized).hexdigest()
 
 
 def exception_diagnostics(

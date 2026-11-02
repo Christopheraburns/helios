@@ -18,12 +18,12 @@ from apps.helios.console.conversation import (
     MCPClientConfig,
 )
 from helios_core import Caller, IdentityMode
-from helios_core.authz import Principal
+from apps.helios.console.authz import Principal
 from helios_core.engines.impala import impala_config
 from helios_core.settings import Settings
 from helios_core.engines import ImpalaEngine
 from helios_core.llm import LLMClient
-from helios_core.metadata import (
+from apps.helios.console.metadata import (
     EvaluationResult,
     EvaluationRun,
     MetadataRepository,

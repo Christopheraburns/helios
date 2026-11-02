@@ -3,8 +3,8 @@ from fastapi.testclient import TestClient
 
 from apps.helios.console.main import app
 from apps.helios.console.api import ResourceStore
-from helios_core import authz
-from helios_core.domain import DataSourceReference, Model, Organization
+from apps.helios.console import authz
+from apps.helios.console.domain import DataSourceReference, Model, Organization
 
 
 ORG_ACME = Organization("acme", "Acme")

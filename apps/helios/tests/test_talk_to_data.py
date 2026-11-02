@@ -30,7 +30,8 @@ from apps.helios.console.model_provider import (
     provider_availability,
 )
 from apps.helios.mcp_server import server as mcp_server
-from helios_core import Caller, IdentityMode, audit, authz
+from helios_core import Caller, IdentityMode
+from apps.helios.console import audit, authz
 from helios_core.engines.impala import ImpalaConfig
 from helios_core.compiler import (
     Compiler,
@@ -38,12 +39,12 @@ from helios_core.compiler import (
     FilterValueTypeError,
     SemanticRequest,
 )
-from helios_core.metadata.migrations import MIGRATIONS
+from apps.helios.console.metadata.migrations import MIGRATIONS
 from helios_core.data_authorization import (
     DataPolicy,
     PlatformDataDecision,
 )
-from helios_core.delegation import (
+from apps.helios.console.delegation import (
     DelegationError,
     issue_assertion,
     verify_assertion,
@@ -64,20 +65,20 @@ from helios_core.artifacts import ArtifactStore
 from helios_core.runs import RunStore
 from helios_core.settings import Settings
 from apps.helios import runtime
-from helios_core.domain import (
+from apps.helios.console.domain import (
     DataSource,
     DataSourceReference,
     Model,
     Organization,
 )
-from helios_core.metadata import (
+from apps.helios.console.metadata import (
     ConversationVersionConflict,
     PrincipalRecord,
     SQLiteMetadataRepository,
     TraceRun,
 )
 from helios_core.ossie import SemanticModel, build as build_ossie
-from helios_core.tracing import TraceRecorder
+from apps.helios.console.tracing import TraceRecorder
 
 
 SECRET = "test-delegation-secret-that-is-at-least-32-bytes"
@@ -679,6 +680,95 @@ def test_mcp_tools_lock_model_and_propagate_principal(
         "compile_query",
     }
     assert {item.outcome for item in events} == {"success", "denied"}
+
+
+def test_mcp_tools_respect_the_hosts_model_visibility(
+    persistent_auth_stack,
+    monkeypatch,
+):
+    class HideCustomer360:
+        def can_see(self, caller, model_id):
+            assert caller.username == "owner"
+            return model_id != "customer360"
+
+    monkeypatch.setattr(
+        mcp_server, "metadata_repository", persistent_auth_stack.repository
+    )
+    monkeypatch.setattr(
+        mcp_server.store,
+        "sources",
+        lambda: [{"name": "customer360", "status": "published"}],
+    )
+    monkeypatch.setattr(
+        mcp_server.store,
+        "load",
+        lambda model=None: (
+            {"name": model, "status": "published"},
+            canonical_model(),
+        ),
+    )
+    token = mcp_server._caller_context.set(
+        mcp_server.MCPCaller(principal(), None, "acme")
+    )
+    try:
+        assert mcp_server.list_models() == [
+            {"name": "customer360", "status": "published"}
+        ]
+        monkeypatch.setattr(mcp_server, "model_visibility", HideCustomer360())
+        listed = mcp_server.list_models()
+        hidden = mcp_server.describe_model("customer360")
+        missing = mcp_server.describe_model("customer361")
+    finally:
+        mcp_server._caller_context.reset(token)
+
+    assert listed == []
+    assert hidden["error"] == missing["error"] == "model_not_found"
+    assert hidden["message"].replace("customer360", "X") == missing[
+        "message"
+    ].replace("customer361", "X")
+
+
+def test_mcp_tools_send_audit_records_to_the_hosts_sink(
+    persistent_auth_stack,
+    monkeypatch,
+):
+    class Collect:
+        def __init__(self):
+            self.records = []
+
+        def record(self, event):
+            self.records.append(event)
+
+    sink = Collect()
+    monkeypatch.setattr(mcp_server, "audit_sink", sink)
+    monkeypatch.setattr(
+        mcp_server, "metadata_repository", persistent_auth_stack.repository
+    )
+    monkeypatch.setattr(
+        mcp_server.store,
+        "sources",
+        lambda: [{"name": "customer360", "status": "published"}],
+    )
+    token = mcp_server._caller_context.set(
+        mcp_server.MCPCaller(principal(), None, "acme")
+    )
+    try:
+        mcp_server.list_models()
+        mcp_server.describe_model(model="no-such-model")
+    finally:
+        mcp_server._caller_context.reset(token)
+
+    assert [
+        (r.action, r.outcome, r.model, r.caller, r.error_code)
+        for r in sink.records
+    ] == [
+        ("list_models", "success", None, "owner", None),
+        ("describe_model", "error", "no-such-model", "owner", "model_not_found"),
+    ]
+    _, total = persistent_auth_stack.repository.audit_events(
+        component="mcp", offset=0, limit=20
+    )
+    assert total == 0  # the host's sink replaced the SQLite log
 
 
 def test_mcp_tools_load_published_ossie_artifact(
