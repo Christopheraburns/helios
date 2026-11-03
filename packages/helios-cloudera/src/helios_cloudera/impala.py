@@ -11,9 +11,9 @@ from urllib.parse import parse_qsl, urlencode
 
 from pydantic import BaseModel, ConfigDict, SecretStr, ValidationInfo, model_validator
 
-from ..caller import Caller, IdentityError, IdentityMode
-from ..settings import ConnectionSettings, Settings
-from .base import Engine, QueryResult
+from helios_core.caller import Caller, IdentityError, IdentityMode
+from helios_core.engines.base import Engine, QueryResult
+from helios_core.settings import ConnectionSettings, Settings
 
 LOGGER = logging.getLogger(__name__)
 

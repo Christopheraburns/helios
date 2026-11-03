@@ -160,11 +160,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "baseline":
         return baseline_main(args)
 
-    from helios_core.engines.impala import impala_config
+    from helios_cloudera.impala import impala_config
     from helios_core._pending.crawler.sources import is_crawlable
     from apps.helios.console.domain import DataSource
-    from helios_core.engines.impala import ImpalaEngine
-    from helios_core.index import impala_index_store, ontology_versions
+    from helios_cloudera.impala import ImpalaEngine
+    from helios_cloudera.index import impala_index_store
+    from helios_core.index import ontology_versions
     from helios_core._pending import crawler_settings
     from helios_core.index.store import duckdb_index_store
 
@@ -331,9 +332,9 @@ def source_uri(source: Any, connector: Any) -> str:
 def evaluate_main(args: Any) -> int:
     """``evaluate``: score a crawl run as the session's Impala user (which must be
     allowed to read helios_ground_truth; the crawler identity never is)."""
-    from helios_core.engines.impala import impala_config
-    from helios_core.engines.impala import ImpalaEngine
-    from helios_core.index import impala_index_store
+    from helios_cloudera.impala import impala_config
+    from helios_cloudera.impala import ImpalaEngine
+    from helios_cloudera.index import impala_index_store
     from helios_core.index.store import duckdb_index_store
 
     from . import evaluate as harness
@@ -373,9 +374,10 @@ def baseline_main(args: Any) -> int:
     """``baseline``: 0 if recorded or the same, 1 if the crawl differs, 2 if it could not run."""
     import json
 
-    from helios_core.engines.impala import impala_config
-    from helios_core.engines.impala import ImpalaEngine
-    from helios_core.index import impala_index_store, runs
+    from helios_cloudera.impala import impala_config
+    from helios_cloudera.impala import ImpalaEngine
+    from helios_cloudera.index import impala_index_store
+    from helios_core.index import runs
 
     from . import baseline
 

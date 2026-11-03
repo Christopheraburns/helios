@@ -10,6 +10,7 @@ authors = [{name = "Helios Team"}]
 requires-python = ">=3.11"
 dependencies = [
     "helios-core @ {path=../../packages/helios-core}",
+    "helios-cloudera @ {path=../../packages/helios-cloudera}",
     "fastapi>=0.100",
     "uvicorn>=0.23",
     "pydantic>=2.0",
@@ -34,7 +35,7 @@ packages = ["src/helios_ds"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src", "../../packages/helios-core/src"]
+pythonpath = ["src", "../../packages/helios-core/src", "../../packages/helios-cloudera/src"]
 
 [tool.ruff]
 line-length = 100
@@ -48,7 +49,7 @@ extend-immutable-calls = ["fastapi.Query", "fastapi.Depends"]
 
 [tool.mypy]
 python_version = "3.11"
-mypy_path = "src:../../packages/helios-core/src"
+mypy_path = "src:../../packages/helios-core/src:../../packages/helios-cloudera/src"
 packages = ["helios_ds", "helios_ds_generation"]
 plugins = ["pydantic.mypy"]
 
@@ -57,5 +58,5 @@ module = ["boto3", "botocore", "botocore.*", "cml", "cml.*", "cmlapi", "cmlapi.*
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["helios_core", "helios_core.*"]
+module = ["helios_core", "helios_core.*", "helios_cloudera", "helios_cloudera.*"]
 follow_imports = "silent"

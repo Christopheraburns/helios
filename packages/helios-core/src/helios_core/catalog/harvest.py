@@ -1,5 +1,5 @@
 """
-Harvest: snapshot the warehouse catalog, the Atlas glossary and available query history.
+Harvest: snapshot the warehouse catalog, a catalog's glossary (Atlas) and available query history.
 Output is a plain dict (serialised to harvest.json) that profile and propose consume.
 """
 from __future__ import annotations
@@ -10,16 +10,16 @@ import os
 import re
 from datetime import datetime, timezone
 
-from ..atlas import AtlasClient, AtlasError
 from ..engines.base import Engine
+from .base import CatalogError, GlossaryCatalog
 
 LOGGER = logging.getLogger(__name__)
 
 
 class Harvester:
-    def __init__(self, engine: Engine, atlas: AtlasClient | None = None):
+    def __init__(self, engine: Engine, catalog: GlossaryCatalog | None = None):
         self.engine = engine
-        self.atlas = atlas
+        self.catalog = catalog
 
     # ------------------------------------------------------------ engine side
     def row_count(self, db: str, table: str) -> int | None:
@@ -46,21 +46,21 @@ class Harvester:
                 out.append({"database": db, "table": t, "columns": cols, "row_count": self.row_count(db, t)})
         return out
 
-    # ------------------------------------------------------------ atlas side
+    # ----------------------------------------------------------- catalog side
     def harvest_glossary(self, glossary_names: list[str] | None = None) -> list[dict]:
-        if self.atlas is None:
+        if self.catalog is None:
             return []
         terms_out = []
-        for g in self.atlas.list_glossaries():
+        for g in self.catalog.list_glossaries():
             if glossary_names and g["name"] not in glossary_names:
                 continue
-            for t in self.atlas.list_terms(g["guid"]):
+            for t in self.catalog.list_terms(g["guid"]):
                 cols = []
                 try:
-                    for e in self.atlas.assigned_entities(t["guid"]):
+                    for e in self.catalog.assigned_entities(t["guid"]):
                         qn = e.get("displayText") or ""
                         cols.append(qn)
-                except AtlasError:
+                except CatalogError:
                     pass
                 terms_out.append({"glossary": g["name"], "name": t["name"],
                                   "short_description": t.get("shortDescription") or "",

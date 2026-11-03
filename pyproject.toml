@@ -15,7 +15,8 @@ requires-python = ">=3.11"
 classifiers = ["Private :: Do Not Upload"]
 # Mirrors apps/helios/console/requirements.txt, which Workbench still installs from.
 dependencies = [
-    "helios-core",
+    "helios-cloudera",
+    "helios-core[llm,ontology]",
     "fastapi>=0.115.0",
     "httpx>=0.27.0",
     "httpx2>=2.13.1",
@@ -46,15 +47,16 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 helios-core = { workspace = true }
+helios-cloudera = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["apps"]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/helios-core/tests", "apps/helios/tests"]
+testpaths = ["packages/helios-core/tests", "packages/helios-cloudera/tests", "apps/helios/tests"]
 
 [tool.importlinter]
-root_packages = ["helios_core"]
+root_packages = ["helios_core", "helios_cloudera"]
 include_external_packages = true  # so apps.* and sibling packages can be named
 
 [[tool.importlinter.contracts]]
@@ -68,6 +70,19 @@ forbidden_modules = [
     "helios_mcp",
     "helios_cloudera",
     "helios_crawl",
+]
+
+[[tool.importlinter.contracts]]
+name = "helios-cloudera imports no app code and no sibling package but helios-core"
+type = "forbidden"
+source_modules = ["helios_cloudera"]
+forbidden_modules = [
+    "apps",
+    "helios_model",
+    "helios_serve",
+    "helios_mcp",
+    "helios_crawl",
+    "helios_core._pending",
 ]
 
 [[tool.importlinter.contracts]]

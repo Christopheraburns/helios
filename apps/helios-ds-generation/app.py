@@ -36,6 +36,7 @@ if os.environ.get("HELIOS_DEV") == "1":
 print("starting helios-ds-generation:", " ".join(cmd), flush=True)
 python_paths = [
     os.path.join(ROOT, "packages", "helios-core", "src"),  # helios-core until the runtime installs wheels
+    os.path.join(ROOT, "packages", "helios-cloudera", "src"),  # helios-cloudera, likewise
     os.path.join(APP_DIR, "src"),  # helios_ds and helios_ds_generation packages
     ROOT,  # repo root for monorepo structure
 ]

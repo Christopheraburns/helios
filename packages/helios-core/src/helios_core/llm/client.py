@@ -21,7 +21,12 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
-import httpx
+from helios_core._optional import missing_extra
+
+try:
+    import httpx
+except ModuleNotFoundError as exc:
+    raise missing_extra("helios_core.llm", "llm", exc) from exc
 
 if TYPE_CHECKING:
     from helios_core.settings import LLMSettings

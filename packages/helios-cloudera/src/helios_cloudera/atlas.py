@@ -12,7 +12,8 @@ from typing import Any
 import requests
 from pydantic import BaseModel, ConfigDict, SecretStr
 
-from ..settings import CatalogSettings, Settings
+from helios_core.catalog import CatalogError
+from helios_core.settings import CatalogSettings, Settings
 
 COLUMN_TYPES = ("hive_column", "iceberg_column")
 
@@ -53,7 +54,7 @@ def atlas_config(settings: Settings, name: str | None = None) -> AtlasConfig | N
     return atlas_config_for(catalog)
 
 
-class AtlasError(RuntimeError):
+class AtlasError(CatalogError):
     def __init__(self, status: int, message: str):
         super().__init__(f"Atlas {status}: {message}")
         self.status = status

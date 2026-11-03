@@ -15,14 +15,25 @@ def contract_rows():
             yield module, re.findall(r"`([A-Za-z_]\w*)`", names), level
 
 
+def _import_unless_extra_missing(module):
+    """The module, or None when it needs a helios-core extra that is not installed."""
+    try:
+        return importlib.import_module(module)
+    except ModuleNotFoundError as exc:
+        if "pip install 'helios-core[" in str(exc):
+            return None
+        raise
+
+
 def test_every_contract_name_imports_from_its_module():
     rows = [row for row in contract_rows() if row[2] != "Planned"]
     assert len(rows) >= 10, "CONTRACTS.md tables did not parse"
     missing = [
         f"{module}.{name}"
         for module, names, _ in rows
+        if (imported := _import_unless_extra_missing(module)) is not None
         for name in names
-        if not hasattr(importlib.import_module(module), name)
+        if not hasattr(imported, name)
     ]
     assert not missing, f"named in CONTRACTS.md but not importable: {missing}"
 

@@ -144,7 +144,7 @@ def run(
 
 def _mapped_table() -> str | None:
     """database.table of the first class in an active mapping, if there is one."""
-    from helios_core.index import impala_index_store
+    from helios_cloudera.index import impala_index_store
     from helios_core.index import mappings as stored
     from helios_core.ontology.mapping import resolution_config
 
@@ -168,8 +168,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    from helios_core.engines.impala import impala_config
-    from helios_core.engines.impala import ImpalaEngine
+    from helios_cloudera.impala import impala_config
+    from helios_cloudera.impala import ImpalaEngine
 
     config = impala_config(HeliosSettings())
     if config is None:

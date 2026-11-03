@@ -39,6 +39,7 @@ cmd = [sys.executable, "-m", "uvicorn", "apps.helios.graph.gateway:app",
 print("starting helios graph gateway:", " ".join(cmd), flush=True)
 python_paths = [
     os.path.join(ROOT, "packages", "helios-core", "src"),  # helios-core until the runtime installs wheels
+    os.path.join(ROOT, "packages", "helios-cloudera", "src"),  # helios-cloudera, likewise
     ROOT,  # repo root, so apps.helios.graph resolves
 ]
 dependency_dir = os.environ.get("HELIOS_PYTHON_DEPS") or os.path.join(

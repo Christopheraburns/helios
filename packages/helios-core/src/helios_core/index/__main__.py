@@ -1,14 +1,14 @@
 """helios_index administration.
 
-python -m helios_core.index ddl          print the Impala DDL (for Hue / impala-shell)
-python -m helios_core.index init-tables  create the tables through Impala (Helios settings)
+python -m helios_core.index ddl   print the Impala DDL (for Hue / impala-shell)
+
+Creating the tables through Impala is ``python -m helios_cloudera.index init-tables``.
 """
 
 from __future__ import annotations
 
 import sys
 
-from .store import impala_index_store
 from .tables import ddl_statements
 
 
@@ -26,16 +26,6 @@ def main(argv: list[str]) -> int:
     command = argv[0] if argv else "ddl"
     if command == "ddl":
         sys.stdout.write(impala_ddl())
-        return 0
-    if command == "init-tables":
-        from helios_core.settings import Settings
-
-        store = impala_index_store(Settings())
-        if store is None:
-            print("Impala is not configured (IMPALA_HOST, WORKLOAD_USER, WORKLOAD_PASSWORD).")
-            return 2
-        store.ensure_tables()
-        print("helios_index tables are in place.")
         return 0
     print(__doc__)
     return 2

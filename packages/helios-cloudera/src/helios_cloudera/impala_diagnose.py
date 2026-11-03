@@ -5,13 +5,14 @@ import argparse
 from dataclasses import replace
 
 from helios_core.caller import Caller, IdentityMode
-from helios_core.engines import (
+from helios_core.settings import Settings
+
+from helios_cloudera.impala import (
     ImpalaAuthenticationError,
     ImpalaEngine,
     ImpalaProxyDelegationError,
     impala_config,
 )
-from helios_core.settings import Settings
 
 
 def main() -> None:

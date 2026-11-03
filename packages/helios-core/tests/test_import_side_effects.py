@@ -72,7 +72,12 @@ PROBE = textwrap.dedent(
         for info in pkgutil.iter_modules(package.__path__, package.__name__ + "."):
             if info.name.endswith(("._pending", ".__main__")):
                 continue
-            module = importlib.import_module(info.name)
+            try:
+                module = importlib.import_module(info.name)
+            except ModuleNotFoundError as exc:
+                if "pip install 'helios-core[" in str(exc):
+                    continue  # needs an extra that is not installed
+                raise
             if info.ispkg:
                 yield from modules(module)
             else:

@@ -40,7 +40,7 @@ from starlette.responses import JSONResponse
 from helios_core import __version__
 from apps.helios.console import audit, authz
 from apps.helios import runtime
-from helios_core.atlas import atlas_config
+from helios_cloudera.atlas import atlas_config
 from helios_core.compiler import (
     CompileError,
     Compiler,
@@ -63,7 +63,7 @@ from helios_core import Caller, IdentityMode
 from helios_core.audit_sink import AuditRecord, AuditSink, record_safely, sql_fingerprint
 from helios_core.visibility import AllModels, ModelNotVisible, ModelVisibility, require_visible
 from apps.helios.console.identity import Principal, PrincipalKind
-from helios_core.engines.impala import impala_config
+from helios_cloudera.impala import impala_config
 from apps.helios.console.metadata import SQLiteMetadataRepository, TraceSpan
 from helios_core.ossie import SemanticModel, build as build_ossie
 from helios_core.settings import Settings
@@ -816,7 +816,7 @@ def compile_query(metrics: list[str], dimensions: list[str] | None = None, filte
 @_audited_tool("run_query")
 def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: list[dict] | None = None,
               limit: int = 100, model: str | None = None) -> dict:
-    from helios_core.engines import (
+    from helios_cloudera.impala import (
         ImpalaAuthenticationError,
         ImpalaEngine,
         ImpalaProxyDelegationError,
@@ -994,7 +994,7 @@ def explain_lineage(column: str, depth: int = 3, model: str | None = None) -> di
     _, _, denied = _authorized_tool(authz.Action.DATASOURCE_READ, model)
     if denied:
         return denied
-    from helios_core.atlas import AtlasClient
+    from helios_cloudera.atlas import AtlasClient
     cfg = atlas_config(Settings())
     if cfg is None:
         return _error(
@@ -1171,7 +1171,7 @@ def entity_claims(entity: str, predicate: str | None = None, model: str | None =
     _, _, denied = _authorized_tool(authz.Action.QUERY_EXECUTE, model)
     if denied:
         return denied
-    from helios_core.index import impala_index_store
+    from helios_cloudera.index import impala_index_store
     from helios_core._pending import evidence
 
     index = impala_index_store(Settings())

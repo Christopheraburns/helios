@@ -13,7 +13,10 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from ..llm import LLMClient
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..llm import LLMClient
 
 LOGGER = logging.getLogger(__name__)
 

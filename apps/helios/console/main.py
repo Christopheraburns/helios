@@ -16,11 +16,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from helios_core import __version__
 from apps.helios.console import audit
-from helios_core.atlas import AtlasClient, AtlasError
-from helios_core.atlas import atlas_config
-from helios_core.engines.impala import impala_config
+from helios_cloudera.atlas import AtlasClient, AtlasError
+from helios_cloudera.atlas import atlas_config
+from helios_cloudera.impala import impala_config
 from helios_core.settings import Settings
-from helios_core.engines import ImpalaEngine
+from helios_cloudera.impala import ImpalaEngine
 from apps.helios import runtime
 from fastapi import HTTPException
 

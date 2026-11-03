@@ -177,7 +177,7 @@ The crawler runs as a **Workbench Job in the Helios project** (`apps/helios/`). 
   - **Tables:** 11 Iceberg tables. `crawl_runs` is append-only, and a run's final state is its latest row. `assets`, `segments`, `mentions`, `entities`, `entity_links` (SameAs / PossiblySameAs with `resolved_by`, score and evidence segments), `relationships` (asset or entity at either end, typed by an ontology relationship class), `claims` and `claim_evidence`, plus the two ontology tables from CR-0c. Every run table carries `crawl_run_id` and `ontology_version`.
   - **Stable IDs** (`index.ids`) are derived from content, not the run, so runs compare row by row and unchanged assets can be carried forward. Entities are keyed by class plus source key (`tpcds.customer:c_customer_sk=…`).
   - **The store** batches inserts (500 rows or about 2 MB per statement), so each Iceberg commit isn't one row. It stores lists and dicts as canonical JSON and decodes them on read. A failed run's partial rows are deleted.
-  - **CLI:** `python -m helios_core.index ddl | init-tables`. `schema_impala.sql` is checked for drift.
+  - **CLI:** `python -m helios_core.index ddl` and `python -m helios_cloudera.index init-tables` (split in decomposition 3.3). `schema_impala.sql` is checked for drift.
   - **Tests:** 6 in `test_index_schema.py`.
 
   Original task: `helios_index` schema, in a shared module (`shared/helios_core/index/`) that replaces the documentation-only copy in `helios_ds/schemas.py`, with the same pydantic → Impala DDL generation as Helios-DS. Tables:

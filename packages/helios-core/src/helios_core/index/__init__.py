@@ -20,7 +20,7 @@ from .records import (
     RelationshipRecord,
     SegmentRecord,
 )
-from .store import IndexStore, impala_index_store
+from .store import IndexStore
 from .tables import NAMESPACE, RUN_TABLES, TABLES, ddl_statements
 
 __all__ = [
@@ -42,6 +42,5 @@ __all__ = [
     "SegmentRecord",
     "ddl_statements",
     "ids",
-    "impala_index_store",
     "runs",
 ]

@@ -12,7 +12,8 @@ import yaml
 from apps.helios import runtime
 from apps.helios.graph import store
 from fastapi import APIRouter, HTTPException, Request
-from helios_core.index import IndexStore, impala_index_store
+from helios_core.index import IndexStore
+from helios_cloudera.index import impala_index_store
 from helios_core.index import ontology_versions as lakehouse_versions
 from helios_core.ontology.graph import OntologyGraph
 from helios_core.index import mappings as stored_mappings
@@ -645,7 +646,7 @@ def probe_mapping(body: MappingProbeRequest, request: Request) -> dict[str, Any]
     """Ask the warehouse about a mapping being edited, as the signed-in user:
     for a class, whether its key is unique and what its identifiers look like;
     for an anchor, whether its query runs. Nothing is written."""
-    from helios_core.engines.impala import ImpalaProxyDelegationError
+    from helios_cloudera.impala import ImpalaProxyDelegationError
     from helios_core.ontology.mapping import _PLAIN
 
     if (body.entity is None) == (body.anchor is None):

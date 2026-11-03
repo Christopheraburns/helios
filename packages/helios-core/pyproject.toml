@@ -9,21 +9,28 @@ description = "Helios core: shared semantic query and data governance layer"
 authors = [{name = "Helios Team"}]
 license = "Apache-2.0"
 requires-python = ">=3.11"
+# The base install: the compiler, semantic model, DuckDB and SQLite (stdlib).
+# Everything else is an extra; tests/test_optional_dependencies.py keeps it so.
 dependencies = [
     "duckdb>=1.3.0",
-    "httpx>=0.27.0",
-    "impyla>=0.20.0",
     "jsonschema>=4.23.0",
-    "linkml-runtime>=1.8.0",
     "platformdirs>=4.0",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6",
-    "pyyaml>=6.0.0", # ontology mappings (helios_core.ontology.mapping)
-    "requests>=2.32.0",
+    "pyyaml>=6.0.0", # semantic model files and ontology mappings
     "sqlglot>=27.0.0",
 ]
 
 [project.optional-dependencies]
+# LLM providers (helios_core.llm), used to propose models.
+llm = [
+    "httpx>=0.27.0",
+]
+# LinkML ontology parsing (helios_core.ontology.parser).
+ontology = [
+    "linkml-runtime>=1.8.0",
+]
+# Storage backends ([postgres], [s3], [azure], [gcs]) arrive with their stores in Phase 4.
 # Searching crawled documents. Without these, crawls run and evidence search
 # reports that it is unavailable. sentence-transformers brings PyTorch.
 evidence = [
@@ -31,14 +38,10 @@ evidence = [
     "sentence-transformers>=6.1.0",
 ]
 
-# Plugins core ships until 3.3 moves impala and atlas to helios-cloudera
+# The built-in engine plugin. Impala and Atlas come with helios-cloudera
 # (see helios_core.plugins).
 [project.entry-points."helios.engines"]
 duckdb = "helios_core.engines.duckdb_engine:DuckDBEngine"
-impala = "helios_core.engines.impala:ImpalaEngine"
-
-[project.entry-points."helios.catalogs"]
-atlas = "helios_core.atlas:AtlasClient"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/helios_core"]

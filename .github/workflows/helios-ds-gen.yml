@@ -5,12 +5,14 @@ on:
     paths:
       - "apps/helios-ds-generation/**"
       - "packages/helios-core/**"
+      - "packages/helios-cloudera/**"
       - ".github/workflows/helios-ds-gen.yml"
   push:
     branches: [main]
     paths:
       - "apps/helios-ds-generation/**"
       - "packages/helios-core/**"
+      - "packages/helios-cloudera/**"
       - ".github/workflows/helios-ds-gen.yml"
 
 jobs:

@@ -5,8 +5,10 @@ from pathlib import Path
 import pytest
 import yaml
 from helios_core.ontology.mapping import load_mappings, resolution_config, template_columns
-from helios_core.ontology.parser import parse
-from linkml_runtime.utils.schemaview import SchemaView
+pytest.importorskip("linkml_runtime", reason="needs helios-core[ontology]")
+
+from helios_core.ontology.parser import parse  # noqa: E402
+from linkml_runtime.utils.schemaview import SchemaView  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MAPPING = REPO_ROOT / "ontology/mappings/ossie/tpcds.yaml"

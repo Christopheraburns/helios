@@ -72,7 +72,8 @@ helios-core is pre-1.0 (0.y.z).
 | Module | Names | Level | Notes |
 |---|---|---|---|
 | `helios_core.engines` | `Engine`, `QueryResult` | Provisional | `query(sql, caller=None, *, limit)` runs as the service identity with no caller, and as the caller under the connection's identity mode otherwise; `identity_modes` lists the modes an engine supports. Plugins register under `helios.engines` (`helios_core.plugins`). |
-| `helios_core.llm` | `LLMClient`, `LLMError`, `LLMTimeoutError`, `llm_from_settings` | Stable | |
+| `helios_core.catalog` | `CatalogError`, `GlossaryCatalog` | Provisional | What a catalog plugin (`helios.catalogs`) gives the harvester: glossaries, their terms and the columns assigned to each; plugins raise `CatalogError` subclasses. 3.7 makes the glossary and lineage optional capabilities. Atlas implements it in helios-cloudera. |
+| `helios_core.llm` | `LLMClient`, `LLMError`, `LLMTimeoutError`, `llm_from_settings` | Stable | Needs the `[llm]` extra; without it, importing the module says so. |
 
 ### Identity and plugins
 
@@ -92,10 +93,9 @@ why it stays where it is instead of moving under `_internal/` and then moving ag
 
 | Code | Where it goes |
 |---|---|
-| `engines/impala.py`, `engines/impala_diagnose.py`, `atlas/` | helios-cloudera (3.3) |
 | `engines/duckdb_engine.py` | Stays as the built-in DuckDB engine plugin (3.5) |
 | `runs.py` | Onto `ArtifactStore` (4.4) |
-| `catalog/`, `profiler/`, `propose/`, `ossie/build.py` | helios-model (5.3) |
+| `catalog/harvest.py`, `profiler/`, `propose/`, `ossie/build.py` | helios-model (5.3) |
 | `ontology/parser.py`, the rest of `ontology/mapping.py`, `index/` modules other than the store and records | Reviewed for promotion when helios-crawl is built (Phase 10) |
 | `_pending/` | helios-model, helios-serve and helios-crawl; import-linter keeps other code from importing it |
 

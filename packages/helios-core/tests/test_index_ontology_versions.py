@@ -8,7 +8,9 @@ import yaml
 from helios_core.index import TABLES, ddl_statements
 from helios_core.index import ontology_versions as versions
 from helios_core.ontology.mapping import load_mappings
-from helios_core.ontology.parser import parse
+pytest.importorskip("linkml_runtime", reason="needs helios-core[ontology]")
+
+from helios_core.ontology.parser import parse  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EXTENSION = REPO_ROOT / "ontology/customers/example-tenant/extension.yaml"

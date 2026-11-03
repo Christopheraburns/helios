@@ -226,7 +226,7 @@ def _connector_for(source: DataSource) -> Any:
     """The source's connector, with the API's credentials (see the module notes)."""
     from apps.helios.crawler.connector import s3_client_from_connection
     from apps.helios.crawler.connectors import build
-    from helios_core.engines.impala import ImpalaEngine, impala_config
+    from helios_cloudera.impala import ImpalaEngine, impala_config
     from helios_core.settings import Settings
 
     config = impala_config(Settings(), source.connection_ref)

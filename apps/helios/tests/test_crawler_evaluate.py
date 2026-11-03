@@ -735,7 +735,7 @@ def test_evaluate_scores_the_run_and_the_views_show_it(client, run_id, truth, mo
 
 
 def test_cli_scores_a_duckdb_run_against_impala_truth(tmp_path, truth, monkeypatch, capsys):
-    import helios_core.engines.impala as impala_module
+    import helios_cloudera.impala as impala_module
     from apps.helios.crawler.__main__ import main
 
     path = str(tmp_path / "index.duckdb")

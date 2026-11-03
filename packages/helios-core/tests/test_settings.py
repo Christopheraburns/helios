@@ -1,4 +1,8 @@
-"""helios_core.settings: resolution order, defaults, and parity with the code it replaces."""
+"""helios_core.settings: resolution order and defaults.
+
+The Impala and Atlas options, and parity with the code Settings replaced on
+Workbench, are tested in helios-cloudera (test_cloudera_settings.py).
+"""
 
 import os
 from pathlib import Path
@@ -7,16 +11,9 @@ import platformdirs
 import pytest
 from pydantic import ValidationError
 
-from helios_core.artifacts import ArtifactStore
-from helios_core.atlas import atlas_config_for
-from helios_core.engines.impala import impala_config_for
-from helios_core.llm import llm_from_settings
-from helios_core.runs import RunStore
 from helios_core.settings import Settings
 
 PREFIXES = ("HELIOS_", "IMPALA_", "WORKLOAD_", "ATLAS_", "INFERENCE_", "ANTHROPIC_", "MISTRAL_", "CDSW_")
-
-JDBC = "jdbc:impala://vw.example.com:443/default;AuthMech=12;transportMode=http;httpPath=cliservice/vw;ssl=1"
 
 
 @pytest.fixture(autouse=True)
@@ -140,26 +137,6 @@ def test_unrelated_helios_variables_are_ignored(monkeypatch):
     Settings()
 
 
-def test_impala_jdbc_url_supplies_port_and_http_path_unless_given():
-    s = Settings(connections={"w": {"engine": "impala", "host": JDBC, "user": "u", "password": "p"}})
-    cfg = impala_config_for(s.connections["w"])
-    assert (cfg.host, cfg.port, cfg.http_path) == ("vw.example.com", 443, "cliservice/vw")
-    s = Settings(connections={"w": {
-        "engine": "impala", "host": JDBC, "user": "u", "password": "p", "port": 21050, "http_path": "x"}})
-    cfg = impala_config_for(s.connections["w"])
-    assert (cfg.port, cfg.http_path) == (21050, "x")
-
-
-def test_plugins_validate_their_own_options(monkeypatch):
-    monkeypatch.setenv("IMPALA_HOST", "vw")   # no credentials: no default connection, as before
-    assert Settings().connections == {}
-    s = Settings(connections={"w": {"engine": "impala", "host": "vw"}})  # loads ...
-    with pytest.raises(ValidationError):
-        impala_config_for(s.connections["w"])                            # ... fails when used
-    with pytest.raises(ValueError):
-        impala_config_for(Settings(connections={"d": {"engine": "duckdb"}}).connections["d"])
-
-
 @pytest.mark.parametrize(("raw", "days"), [("45", 45), ("0", 1), ("99999", 3650), ("soon", 30)])
 def test_audit_retention_is_clamped_like_before(monkeypatch, raw, days):
     monkeypatch.setenv("HELIOS_AUDIT_RETENTION_DAYS", raw)
@@ -185,137 +162,11 @@ def test_secrets_are_not_printed():
     for secret in ("hunter2", "hunter3", "t0k", "sk-1"):
         assert secret not in repr(s)
     assert s.connections["w"].password.get_secret_value() == "hunter2"
-    assert impala_config_for(s.connections["w"]).password == "hunter2"
 
 
 def test_settings_are_immutable():
     with pytest.raises(ValidationError):
         Settings().runs_dir = Path("/x")
-
-
-# Parity: in the environments Helios runs in today, the stores and clients built from
-# Settings resolve exactly what the code before Settings resolved. EXPECTED was
-# recorded by running that code (commit ef2b6f5 plus 1.3) in each environment.
-ENVIRONMENTS = {
-    "workbench": {
-        "CDSW_PROJECT_DIR": "/home/cdsw",
-        "IMPALA_HOST": JDBC,
-        "WORKLOAD_USER": "svc-helios",
-        "WORKLOAD_PASSWORD": "pw",
-        "IMPALA_PROXY_DELEGATION": "true",
-        "ATLAS_BASE": "https://dl.example.com/atlas/api/atlas/v2/",
-        "ATLAS_USER": "atlas",
-        "ATLAS_PASS": "pw",
-        "ATLAS_VERIFY_SSL": "false",
-        "INFERENCE_BASE_URL": "https://caii.example.com/v1",
-        "INFERENCE_TOKEN": "jwt",
-        "INFERENCE_MODEL": "llama",
-        "HELIOS_AUDIT_RETENTION_DAYS": "90",
-    },
-    "workbench-without-project-dir": {"CDSW_PROJECT_ID": "abc123"},
-    "local": {
-        "HELIOS_ROOT": "/srv/helios",
-        "HELIOS_METADATA_DB": "/var/lib/helios.db",
-        "HELIOS_RUNS_DIR": "/var/runs",
-        "HELIOS_EVIDENCE_INDEX": "/var/evidence.lance",
-        "IMPALA_HOST": "vw.example.com:21050",
-        "IMPALA_PORT": "28000",
-        "IMPALA_DATABASE": "tpcds",
-        "WORKLOAD_USER": "me",
-        "WORKLOAD_PASSWORD": "pw",
-        "ANTHROPIC_API_KEY": "sk-ant",
-        "MISTRAL_API_KEY": "ignored-anthropic-wins",
-        "HELIOS_LLM_TIMEOUT_SECONDS": "45",
-    },
-    "mistral": {
-        "HELIOS_ROOT": "/srv/helios",
-        "LLM_PROVIDER": "mistral",
-        "MISTRAL_API_KEY": "mk",
-        "MISTRAL_MODEL": "mistral-large",
-        "ANTHROPIC_API_KEY": "present-but-not-chosen",
-    },
-    "provider-without-key": {"HELIOS_ROOT": "/srv/helios", "LLM_PROVIDER": "anthropic"},
-}
-
-
-EXPECTED = {'workbench': {'metadata_db': '/home/cdsw/helios/state/helios.db',
-               'runs_dir': '/home/cdsw/helios/runs',
-               'artifacts_dir': '/home/cdsw/helios',
-               'evidence_index': '/home/cdsw/helios/state/evidence.lance',
-               'audit_retention_days': 90,
-               'impala': ['vw.example.com',
-                          443,
-                          'svc-helios',
-                          'pw',
-                          'default',
-                          'cliservice/vw',
-                          'impersonate'],
-               'atlas': ['https://dl.example.com/atlas/api/atlas/v2', 'atlas', 'pw', False],
-               'llm': ['openai', 'llama', 'jwt', 'https://caii.example.com/v1', 30.0]},
- 'workbench-without-project-dir': {'metadata_db': '/home/cdsw/helios/state/helios.db',
-                                   'runs_dir': '/home/cdsw/helios/runs',
-                                   'artifacts_dir': '/home/cdsw/helios',
-                                   'evidence_index': '/home/cdsw/helios/state/evidence.lance',
-                                   'audit_retention_days': 30,
-                                   'impala': None,
-                                   'atlas': None,
-                                   'llm': None},
- 'local': {'metadata_db': '/var/lib/helios.db',
-           'runs_dir': '/var/runs',
-           'artifacts_dir': '/srv/helios',
-           'evidence_index': '/var/evidence.lance',
-           'audit_retention_days': 30,
-           'impala': ['vw.example.com', 28000, 'me', 'pw', 'tpcds', 'cliservice', 'service'],
-           'atlas': None,
-           'llm': ['anthropic', 'claude-sonnet-5', 'sk-ant', None, 45.0]},
- 'mistral': {'metadata_db': '/srv/helios/state/helios.db',
-             'runs_dir': '/srv/helios/runs',
-             'artifacts_dir': '/srv/helios',
-             'evidence_index': '/srv/helios/state/evidence.lance',
-             'audit_retention_days': 30,
-             'impala': None,
-             'atlas': None,
-             'llm': ['mistral', 'mistral-large', 'mk', 'https://api.mistral.ai/v1', 30.0]},
- 'provider-without-key': {'metadata_db': '/srv/helios/state/helios.db',
-                          'runs_dir': '/srv/helios/runs',
-                          'artifacts_dir': '/srv/helios',
-                          'evidence_index': '/srv/helios/state/evidence.lance',
-                          'audit_retention_days': 30,
-                          'impala': None,
-                          'atlas': None,
-                          'llm': None}}
-
-
-@pytest.mark.parametrize("name", ENVIRONMENTS)
-def test_parity_with_the_code_before_settings(monkeypatch, name):
-    for key, value in ENVIRONMENTS[name].items():
-        monkeypatch.setenv(key, value)
-    s = Settings()
-    expected = EXPECTED[name]
-
-    assert str(s.metadata_db) == expected["metadata_db"]
-    assert RunStore.from_settings(s).runs_dir == expected["runs_dir"]
-    assert ArtifactStore.from_settings(s).root == Path(expected["artifacts_dir"])
-    assert str(s.evidence.index) == expected["evidence_index"]
-    assert s.audit_retention_days == expected["audit_retention_days"]
-
-    if expected["impala"] is None:
-        assert "default" not in s.connections
-    else:
-        c = impala_config_for(s.connections["default"])
-        assert [c.host, c.port, c.user, c.password, c.database, c.http_path, c.identity.value] == expected["impala"]
-
-    if expected["atlas"] is None:
-        assert "default" not in s.catalogs
-    else:
-        a = atlas_config_for(s.catalogs["default"])
-        assert [a.base_url, a.user, a.password, a.verify_ssl] == expected["atlas"]
-
-    llm = llm_from_settings(s.llm)
-    if expected["llm"] is None:
-        assert llm is None
-    else:
-        assert [llm.provider, llm.model, llm.api_key, llm.base_url, llm.timeout] == expected["llm"]
 
 
 def test_connection_refs_resolve_by_name_then_default():
@@ -329,22 +180,3 @@ def test_connection_refs_resolve_by_name_then_default():
     assert s.resolve_connection(None) == "default"
     assert Settings().resolve_connection("sales") is None          # nothing configured
     assert Settings(connections={"sales": {"engine": "duckdb"}}).resolve_connection("other") is None
-
-
-def test_impala_and_atlas_lookups():
-    from helios_core.atlas import atlas_config
-    from helios_core.engines.impala import impala_config
-
-    s = Settings(
-        connections={
-            "default": {"engine": "impala", "host": "vw", "user": "u", "password": "p"},
-            "local": {"engine": "duckdb", "path": "/x.duckdb"},
-        },
-        catalogs={"default": {"catalog": "atlas", "base_url": "https://dl/atlas/", "user": "a", "password": "p"}},
-    )
-    assert impala_config(s).host == "vw"
-    assert impala_config(s, "unknown-ref").host == "vw"   # falls back to default
-    assert impala_config(s, "local") is None              # not an Impala connection
-    assert impala_config(Settings()) is None
-    assert atlas_config(s).base_url == "https://dl/atlas"
-    assert atlas_config(Settings()) is None

@@ -130,14 +130,15 @@ flowchart TB
 
 | Package | Responsibility |
 |---------|----------------|
-| `helios_core.atlas` | Atlas REST client: glossary CRUD, term assignment, entity search, lineage |
-| `helios_core.catalog` | HMS metadata: databases, tables, columns, partitions |
-| `helios_core.engines` | Engine adapters (Impala first; Hive, Spark next): connection, query execution, query-history extraction, dialect name for the compiler |
+| `helios_core.catalog` | HMS metadata: databases, tables, columns, partitions; the glossary interface catalog plugins implement |
+| `helios_core.engines` | The `Engine` interface and the built-in DuckDB engine: connection, query execution, dialect name for the compiler |
 | `helios_core.profiler` | Sampling queries and statistics used as evidence |
 | `helios_core.glossary` | Glossary generation and CSV import/export |
 | `helios_core.ossie` | Build, validate (against `osi-schema.json`), diff and version Ossie models |
 | `helios_core.ontology` | Ontology model, inference from the other layers, serialization |
 | `helios_core.compiler` | Ossie model → join graph → canonical SQL AST → engine dialect via SQLGlot; engine-specific quirks live in the adapter, not here |
+
+**`helios_cloudera`** (`packages/helios-cloudera`) — the Cloudera plugins: the Impala engine (`helios_cloudera.impala`), the Atlas REST client (`helios_cloudera.atlas`: glossary CRUD, term assignment, entity search, lineage) and the Impala-backed index store (`helios_cloudera.index`).
 | `helios_core.llm` | Client for Cloudera AI Inference with schema-constrained structured output |
 
 ### State

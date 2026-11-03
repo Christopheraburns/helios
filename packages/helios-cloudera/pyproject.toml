@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "helios-cloudera"
+version = "0.1.0"
+description = "Helios plugins for Cloudera: the Impala engine and the Atlas catalog"
+authors = [{name = "Helios Team"}]
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "helios-core",
+    "impyla>=0.20.0",
+    "requests>=2.32.0",
+]
+
+[project.entry-points."helios.engines"]
+impala = "helios_cloudera.impala:ImpalaEngine"
+
+[project.entry-points."helios.catalogs"]
+atlas = "helios_cloudera.atlas:AtlasClient"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/helios_cloudera"]

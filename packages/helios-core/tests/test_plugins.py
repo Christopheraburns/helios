@@ -22,8 +22,7 @@ def registered(monkeypatch):
 
 
 def test_helios_core_registers_its_own_plugins():
-    assert {"duckdb", "impala"} <= set(plugins.names(plugins.ENGINES))
-    assert "atlas" in plugins.names(plugins.CATALOGS)
+    assert "duckdb" in plugins.names(plugins.ENGINES)
     assert plugins.load(plugins.ENGINES, "duckdb") is DuckDBEngine
     [duckdb] = [info for info in plugins.installed(plugins.ENGINES) if info.name == "duckdb"]
     assert duckdb.distribution == "helios-core"

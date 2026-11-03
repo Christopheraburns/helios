@@ -32,7 +32,7 @@ from apps.helios.console.model_provider import (
 from apps.helios.mcp_server import server as mcp_server
 from helios_core import Caller, IdentityMode
 from apps.helios.console import audit, authz
-from helios_core.engines.impala import ImpalaConfig
+from helios_cloudera.impala import ImpalaConfig
 from helios_core.compiler import (
     Compiler,
     Filter,
@@ -49,10 +49,7 @@ from apps.helios.console.delegation import (
     issue_assertion,
     verify_assertion,
 )
-from helios_core.engines.impala import (
-    ImpalaAuthenticationError,
-    ImpalaEngine,
-)
+from helios_cloudera.impala import ImpalaAuthenticationError, ImpalaEngine
 from helios_core.llm import (
     LLMClient,
     LLMTimeoutError,

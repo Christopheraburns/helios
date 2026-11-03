@@ -4,8 +4,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Callable, Literal
 
-from helios_core.atlas import AtlasClient, atlas_config
-from helios_core.engines import ImpalaEngine, impala_config
+from helios_cloudera.atlas import AtlasClient, atlas_config
+from helios_cloudera.impala import ImpalaEngine, impala_config
 from helios_core.llm import llm_from_settings
 from apps.helios.console.metadata import MetadataRepository
 from helios_core.settings import Settings

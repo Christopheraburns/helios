@@ -25,8 +25,8 @@ from apps.helios.console import health as system_health
 from helios_core._pending import publication
 from helios_core._pending import review as review_store
 from apps.helios import runtime
-from helios_core.atlas import AtlasClient, AtlasError
-from helios_core.atlas import atlas_config
+from helios_cloudera.atlas import AtlasClient, AtlasError
+from helios_cloudera.atlas import atlas_config
 from apps.helios.console.domain import Model, Organization
 from apps.helios.console.graph import (
     ArtifactGraphRepository,

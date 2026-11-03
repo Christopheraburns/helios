@@ -12,14 +12,11 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel
 
 from .tables import DUCKDB, IMPALA, TABLES, Dialect, columns, ddl_statements, json_columns
-
-if TYPE_CHECKING:
-    from helios_core.settings import Settings
 
 MAX_BATCH_ROWS = 500
 MAX_BATCH_CHARS = 2_000_000  # stay well under Impala's statement size limit
@@ -117,16 +114,6 @@ class IndexStore:
         """Remove one crawl run's rows (to clear a failed or partial run)."""
         for table in tables:
             self._execute(f"DELETE FROM {table} WHERE crawl_run_id = ?", [crawl_run_id])
-
-
-def impala_index_store(settings: Settings) -> IndexStore | None:
-    """The Workbench store on the ``default`` Impala connection; None if not configured."""
-    from ..engines.impala import ImpalaEngine, impala_config
-
-    config = impala_config(settings)
-    if config is None:
-        return None
-    return IndexStore(ImpalaEngine(config).connect, IMPALA)
 
 
 def duckdb_index_store(path: str = ":memory:") -> IndexStore:

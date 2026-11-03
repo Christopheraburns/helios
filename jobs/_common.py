@@ -9,8 +9,12 @@ from datetime import datetime, timezone
 
 ROOT = os.environ.get("HELIOS_ROOT") or os.path.join(os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios")
 # Workbench Jobs run from the checkout, not an install: put the repo (for apps.*)
-# and helios-core's source on the path until the runtime installs wheels.
-for path in (ROOT, os.path.join(ROOT, "packages", "helios-core", "src")):
+# and the helios-core and helios-cloudera sources on the path until the runtime installs wheels.
+for path in (
+    ROOT,
+    os.path.join(ROOT, "packages", "helios-core", "src"),
+    os.path.join(ROOT, "packages", "helios-cloudera", "src"),
+):
     if path not in sys.path:
         sys.path.insert(0, path)
 
@@ -128,7 +132,7 @@ def audit_job(stage: str, run_id: str, model_id: str | None = None):
 
 
 def engine():
-    from helios_core.engines import ImpalaEngine, impala_config
+    from helios_cloudera.impala import ImpalaEngine, impala_config
     from helios_core.settings import Settings
     cfg = impala_config(Settings())
     if cfg is None:
@@ -137,7 +141,7 @@ def engine():
 
 
 def atlas():
-    from helios_core.atlas import AtlasClient, atlas_config
+    from helios_cloudera.atlas import AtlasClient, atlas_config
     from helios_core.settings import Settings
     cfg = atlas_config(Settings())
     return AtlasClient(cfg) if cfg else None

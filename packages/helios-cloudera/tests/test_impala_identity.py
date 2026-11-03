@@ -1,13 +1,18 @@
-"""Engine identity modes: whose identity a query runs as (burndown 2.2)."""
+"""The Impala engine's identity modes: whose identity a query runs as (burndown 2.2)."""
 import impala.dbapi as impala_dbapi
 import pytest
 from pydantic import ValidationError
 
 from helios_core import Caller, IdentityError, IdentityMode
-from helios_core.engines import ImpalaAuthenticationError, ImpalaEngine, ImpalaProxyDelegationError
-from helios_core.engines.duckdb_engine import DuckDBEngine
-from helios_core.engines.impala import ImpalaConfig, impala_config_for
 from helios_core.settings import Settings
+
+from helios_cloudera.impala import (
+    ImpalaAuthenticationError,
+    ImpalaConfig,
+    ImpalaEngine,
+    ImpalaProxyDelegationError,
+    impala_config_for,
+)
 
 
 class Cursor:
@@ -58,15 +63,6 @@ def warehouse(monkeypatch):
 
 def impala(identity, user="svc-helios", password="pw"):
     return ImpalaEngine(ImpalaConfig("vw.example.com", 443, user, password, identity=identity))
-
-
-def test_duckdb_supports_service_only():
-    assert DuckDBEngine.identity_modes == {IdentityMode.SERVICE}
-    with pytest.raises(ValueError, match="does not support identity mode 'impersonate'"):
-        DuckDBEngine(identity_mode="impersonate")
-    engine = DuckDBEngine()
-    assert engine.query("SELECT 7", Caller("alice", token="t")).rows == [(7,)]
-    assert engine.query("SELECT 7", limit=1).rows == [(7,)]
 
 
 def test_impala_supports_every_mode():
