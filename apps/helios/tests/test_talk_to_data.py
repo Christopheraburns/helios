@@ -1089,6 +1089,116 @@ def test_mcp_run_query_uses_delegated_identity(
     assert "SELECT" not in rendered
 
 
+# The Phase 2 gate: run_query runs as the host's caller, through the default
+# DataPolicy and the real ImpalaEngine, down to the impyla connect call.
+
+IDENTITY_CONFIGS = {
+    IdentityMode.IMPERSONATE: ImpalaConfig(
+        "warehouse.example", 443, "helios-service", "secret",
+        identity=IdentityMode.IMPERSONATE,
+    ),
+    IdentityMode.TOKEN: ImpalaConfig(
+        "warehouse.example", 443, None, identity=IdentityMode.TOKEN
+    ),
+}
+
+
+@pytest.fixture
+def warehouse_as(persistent_auth_stack, monkeypatch):
+    """Point run_query at a fake warehouse in ``mode``; returns the connect calls."""
+    monkeypatch.setattr(
+        mcp_server, "metadata_repository", persistent_auth_stack.repository
+    )
+    monkeypatch.setattr(
+        mcp_server.store,
+        "load",
+        lambda model=None: ({"name": model, "status": "published"}, canonical_model()),
+    )
+    monkeypatch.setattr(mcp_server, "data_policy", DataPolicy())
+
+    def configure(mode, connection):
+        calls = []
+
+        def connect(**kwargs):
+            calls.append(kwargs)
+            return connection
+
+        monkeypatch.setattr(
+            mcp_server, "impala_config", lambda *args, **kwargs: IDENTITY_CONFIGS[mode]
+        )
+        monkeypatch.setattr(impala_dbapi, "connect", connect)
+        return calls
+
+    return configure
+
+
+def _run_query_as(caller):
+    context_token = mcp_server._caller_context.set(caller)
+    try:
+        return mcp_server.run_query(["Customer count"], model="customer360")
+    finally:
+        mcp_server._caller_context.reset(context_token)
+
+
+def test_run_query_impersonates_the_hosts_caller(warehouse_as):
+    connection = FakeConnection("owner")
+    calls = warehouse_as(IdentityMode.IMPERSONATE, connection)
+
+    result = _run_query_as(mcp_server.MCPCaller(principal(), "customer360", "acme"))
+
+    assert result["rows"] == [[7]]
+    [call] = calls
+    assert call["auth_mechanism"] == "LDAP"
+    assert call["user"] == "helios-service"
+    assert "doAs=owner" in call["http_path"]
+    assert connection.cursor_value.executed == ["SELECT EFFECTIVE_USER()", result["sql"]]
+
+
+def test_run_query_sends_the_hosts_caller_token(warehouse_as):
+    connection = FakeConnection("owner")
+    calls = warehouse_as(IdentityMode.TOKEN, connection)
+
+    result = _run_query_as(
+        mcp_server.MCPCaller(principal(), "customer360", "acme", token="caller-jwt")
+    )
+
+    assert result["rows"] == [[7]]
+    [call] = calls
+    assert call["auth_mechanism"] == "JWT"
+    assert call["jwt"] == "caller-jwt"
+    assert "user" not in call and "password" not in call
+    assert connection.cursor_value.executed == [result["sql"]]
+
+
+def test_run_query_in_token_mode_refuses_a_caller_without_a_token(warehouse_as):
+    calls = warehouse_as(IdentityMode.TOKEN, FakeConnection("owner"))
+
+    result = _run_query_as(mcp_server.MCPCaller(principal(), "customer360", "acme"))
+
+    assert result["error"] == "data_authorization_denied"
+    assert calls == []
+
+
+def test_run_query_reports_a_rejected_caller_token_without_a_service_retry(warehouse_as):
+    calls = warehouse_as(IdentityMode.TOKEN, FailedOpenConnection())
+
+    result = _run_query_as(
+        mcp_server.MCPCaller(principal(), "customer360", "acme", token="caller-jwt")
+    )
+
+    assert result["error"] == "caller_token_rejected"
+    assert result["message"] == "CDW rejected the caller's token"
+    assert not result["retryable"]
+    assert len(calls) == 1
+    assert "caller-jwt" not in repr(result)
+
+
+def test_the_mcp_caller_never_shows_its_token():
+    caller = mcp_server.MCPCaller(principal(), "customer360", "acme", token="caller-jwt")
+    assert "caller-jwt" not in repr(caller)
+    assert caller.caller.token == "caller-jwt"
+
+
 class FakeCursor:
     def __init__(self, effective_user):
         self.effective_user = effective_user

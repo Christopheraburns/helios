@@ -71,7 +71,7 @@ helios-core is pre-1.0 (0.y.z).
 
 | Module | Names | Level | Notes |
 |---|---|---|---|
-| `helios_core.engines` | `Engine`, `QueryResult` | Provisional | `query(sql, caller=None, *, limit)` runs as the service identity with no caller, and as the caller under the connection's identity mode otherwise; `identity_modes` lists the modes an engine supports. Plugins register under `helios.engines` in 3.1. |
+| `helios_core.engines` | `Engine`, `QueryResult` | Provisional | `query(sql, caller=None, *, limit)` runs as the service identity with no caller, and as the caller under the connection's identity mode otherwise; `identity_modes` lists the modes an engine supports. Plugins register under `helios.engines` (`helios_core.plugins`). |
 | `helios_core.llm` | `LLMClient`, `LLMError`, `LLMTimeoutError`, `llm_from_settings` | Stable | |
 
 ### Identity and plugins
@@ -83,7 +83,7 @@ helios-core is pre-1.0 (0.y.z).
 | `helios_core.visibility` | `ModelVisibility`, `AllModels`, `ModelNotVisible`, `visible_models`, `require_visible` | Stable | The host decides which models a caller may list and use; the default shows every model in the registry. A hidden model raises the same `LookupError` as a missing one. |
 | `helios_core.audit_sink` | `AuditRecord`, `AuditSink`, `LoggingAuditSink`, `record_safely`, `sql_fingerprint` | Stable | Libraries emit `AuditRecord`s (action, outcome, model, caller username, row count, SQL fingerprint, error); the host's sink stores them. The default logs to `helios_core.audit_sink`. New optional fields are allowed. |
 | `helios_core` | `Caller` | Stable | The host's caller: `username`, `token` (left out of `repr`, never logged) and free-form `attributes`, all optional. Helios authenticates no one; the engine's identity mode (2.2) decides which field it uses. |
-| `helios_core.plugins` | entry-point groups `helios.engines`, `helios.catalogs`, `helios.stores`, `helios.tools`, `helios.commands` | Planned | 3.1. |
+| `helios_core.plugins` | `load`, `installed`, `names`, `missing_configured`, `require_configured`, `PluginInfo`, `PluginError`, `PluginNotFound`, `PluginLoadError`, `ENGINES`, `CATALOGS`, `STORES`, `TOOLS`, `COMMANDS`, `GROUPS` | Provisional | Entry-point groups `helios.engines`, `helios.catalogs`, `helios.stores`, `helios.tools`, `helios.commands`; the group names are Stable. What a plugin object must provide is set per group: engines and catalogs in 3.3 and 3.5, stores in 4.x, tools in 5.x, commands in 5.5. Settings that name a missing plugin still load; `require_configured` is the host's startup check. |
 
 ## Internal
 

@@ -27,6 +27,7 @@ import re
 import time
 import uuid
 from contextvars import ContextVar
+import dataclasses
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any
@@ -58,7 +59,7 @@ from apps.helios.console.delegation import (
     verify_assertion,
 )
 from apps.helios.audit_sink import RepositoryAuditSink
-from helios_core import Caller
+from helios_core import Caller, IdentityMode
 from helios_core.audit_sink import AuditRecord, AuditSink, record_safely, sql_fingerprint
 from helios_core.visibility import AllModels, ModelNotVisible, ModelVisibility, require_visible
 from apps.helios.console.identity import Principal, PrincipalKind
@@ -95,11 +96,18 @@ class MCPCaller:
     session_id: str | None = None
     trace_run_id: str | None = None
     semantic_revision_id: str | None = None
+    # The end user's warehouse token, for connections in token identity mode. This
+    # server's transport does not carry one; helios-mcp will (burndown 6.x).
+    token: str | None = dataclasses.field(default=None, repr=False)
 
     @property
     def caller(self) -> Caller:
         """The library-facing caller: the principal's subject is the username."""
-        return Caller(username=self.principal.subject, attributes={"principal_id": self.principal.id})
+        return Caller(
+            username=self.principal.subject,
+            token=self.token,
+            attributes={"principal_id": self.principal.id},
+        )
 
 
 _caller_context: ContextVar[MCPCaller | None] = ContextVar(
@@ -876,6 +884,14 @@ def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: 
             "delegated Impala authentication failed request_id=%s",
             caller.request_id,
         )
+        if cfg.identity is IdentityMode.TOKEN:
+            # The caller's own token was refused; the workload account is not involved.
+            return _diagnostic_error(
+                "caller_token_rejected",
+                "CDW rejected the caller's token",
+                exc,
+                stage="impala_token_authentication",
+            )
         try:
             service_authenticated = ImpalaEngine(cfg).ping()
         except ImpalaAuthenticationError as service_exc:

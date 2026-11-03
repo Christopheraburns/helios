@@ -31,5 +31,14 @@ evidence = [
     "sentence-transformers>=6.1.0",
 ]
 
+# Plugins core ships until 3.3 moves impala and atlas to helios-cloudera
+# (see helios_core.plugins).
+[project.entry-points."helios.engines"]
+duckdb = "helios_core.engines.duckdb_engine:DuckDBEngine"
+impala = "helios_core.engines.impala:ImpalaEngine"
+
+[project.entry-points."helios.catalogs"]
+atlas = "helios_core.atlas:AtlasClient"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/helios_core"]
