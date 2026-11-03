@@ -2,8 +2,8 @@
 the semantic revisions published for each.
 
 Libraries depend on the ModelRegistry protocol, not on a database. InMemoryRegistry
-is the reference implementation (and a test double); the SQLAlchemy backend (4.2)
-stores the same records by URL. The registry records no ownership: which models a
+is the reference implementation (and a test double); SqlRegistry stores the same
+records in any database SQLAlchemy supports, chosen by URL (``Settings.registry_url``). The registry records no ownership: which models a
 caller may see is the host's ModelVisibility.
 
 Rules every backend keeps:
@@ -208,3 +208,7 @@ class InMemoryRegistry:
     def latest_semantic_revision(self, model_id: str) -> SemanticRevision | None:
         revisions = self.semantic_revisions(model_id)
         return revisions[0] if revisions else None
+
+
+from helios_core.registry.sql import RegistryNotReady as RegistryNotReady  # noqa: E402 - needs the records above
+from helios_core.registry.sql import SqlRegistry as SqlRegistry  # noqa: E402

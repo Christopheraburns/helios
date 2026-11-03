@@ -149,11 +149,15 @@ class Settings(BaseSettings):
     )
 
     # Where Helios keeps its files. The others default to places inside it:
-    # <data_dir>/models (artifacts), <data_dir>/runs, <data_dir>/state/helios.db.
+    # <data_dir>/models (artifacts), <data_dir>/runs, <data_dir>/state/helios.db,
+    # and the model registry at sqlite:///<data_dir>/state/registry.db.
     data_dir: Path = Field(default_factory=lambda: platformdirs.user_data_path("helios"))
     artifacts_dir: Path | None = None
     runs_dir: Path | None = None
     metadata_db: Path | None = None
+    # The model registry's database (helios_core.registry.SqlRegistry), any SQLAlchemy URL.
+    # Secret because a URL may carry a password.
+    registry_url: SecretStr | None = None
     sqlite_journal_mode: JournalMode = "DELETE"
     audit_retention_days: int = DEFAULT_AUDIT_RETENTION_DAYS
 
@@ -210,6 +214,8 @@ class Settings(BaseSettings):
             "metadata_db": state / "helios.db",
         }
         updates: dict[str, Any] = {k: v for k, v in defaults.items() if getattr(self, k) is None}
+        if self.registry_url is None:
+            updates["registry_url"] = SecretStr(f"sqlite:///{state / 'registry.db'}")
         if self.evidence.index is None:
             updates["evidence"] = self.evidence.model_copy(update={"index": state / "evidence.lance"})
         for name, value in updates.items():

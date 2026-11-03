@@ -1,6 +1,5 @@
 """Engines are plugins built from settings: duckdb and sqlalchemy ship with core (burndown 3.5)."""
 from importlib.metadata import EntryPoint
-from importlib.util import find_spec
 
 import pytest
 from pydantic import ValidationError
@@ -12,7 +11,6 @@ from helios_core.engines.duckdb_engine import DuckDBEngine
 from helios_core.ossie import SemanticModel
 from helios_core.settings import Settings
 
-needs_sqlalchemy = pytest.mark.skipif(find_spec("sqlalchemy") is None, reason="needs helios-core[sqlalchemy]")
 
 
 def connection(**entry):
@@ -36,7 +34,6 @@ def test_a_plugin_rejects_options_it_does_not_know_and_modes_it_cannot_honour():
         engine_for(connection(engine="duckdb", identity="impersonate"))
 
 
-@needs_sqlalchemy
 def test_sqlalchemy_needs_a_url():
     with pytest.raises(ValidationError, match="url"):
         engine_for(connection(engine="sqlalchemy"))
@@ -51,7 +48,6 @@ def sales(tmp_path):
     return engine
 
 
-@needs_sqlalchemy
 def test_sqlalchemy_runs_sql_on_any_dialect_it_knows(sales):
     from helios_core.engines.sqlalchemy_engine import SqlAlchemyEngine
 
@@ -65,7 +61,6 @@ def test_sqlalchemy_runs_sql_on_any_dialect_it_knows(sales):
     assert sales.query("SELECT '12:30', 'a%b' LIKE 'a%'").rows == [("12:30", 1)]
 
 
-@needs_sqlalchemy
 def test_sqlalchemy_introspects_through_the_inspector(sales):
     assert sales.databases() == ["main"]
     assert sales.tables("main") == ["big_orders", "orders"]
@@ -76,7 +71,6 @@ def test_sqlalchemy_introspects_through_the_inspector(sales):
     ]
 
 
-@needs_sqlalchemy
 def test_sqlalchemy_is_service_only_and_never_shows_its_url():
     from helios_core.engines.sqlalchemy_engine import SqlAlchemyEngine
 
@@ -88,7 +82,6 @@ def test_sqlalchemy_is_service_only_and_never_shows_its_url():
     assert engine.query("SELECT 7", Caller("alice", token="t")).rows == [(7,)]  # service: the caller is not used
 
 
-@needs_sqlalchemy
 def test_the_compiler_targets_the_engines_dialect(sales):
     def ansi(expression):
         return {"dialects": [{"dialect": "ANSI_SQL", "expression": expression}]}

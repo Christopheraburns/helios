@@ -36,7 +36,7 @@ helios-core is pre-1.0 (0.y.z).
 
 | Module | Names | Level | Notes |
 |---|---|---|---|
-| `helios_core.settings` | `Settings`, `ConnectionSettings`, `CatalogSettings`, `LLMSettings` | Stable | Resolution order, the config file and named connections and catalogs. A connection's `identity` (`service`, the default, `impersonate` or `token`) picks the engine identity mode. Core reads `HELIOS_*` and the LLM ecosystem's names (`ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`, `LLM_PROVIDER`). A subclass adds a platform's variables by overriding `profile_sources` (after the conventional environment, before the config file); helios-cloudera's `WorkbenchSettings` reads the Workbench and Cloudera names. |
+| `helios_core.settings` | `Settings`, `ConnectionSettings`, `CatalogSettings`, `LLMSettings` | Stable | Resolution order, the config file and named connections and catalogs. A connection's `identity` (`service`, the default, `impersonate` or `token`) picks the engine identity mode. Core reads `HELIOS_*` and the LLM ecosystem's names (`ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`, `LLM_PROVIDER`). A subclass adds a platform's variables by overriding `profile_sources` (after the conventional environment, before the config file); helios-cloudera's `WorkbenchSettings` reads the Workbench and Cloudera names. `registry_url` (secret) names the model registry's database. |
 
 ### Semantic model and compiler
 
@@ -64,7 +64,7 @@ helios-core is pre-1.0 (0.y.z).
 | Module | Names | Level | Notes |
 |---|---|---|---|
 | `helios_core.artifacts` | `ArtifactStore` | Provisional | Object-storage backends selected by URL in 4.3. |
-| `helios_core.registry` | `ModelRegistry`, `InMemoryRegistry`, `RegisteredModel`, `SemanticRevision`, `RegistryError`, `RevisionConflict`, `DRAFT`, `PUBLISHED` | Provisional | What libraries need to find models: data sources, models (status, creation) and their immutable semantic revisions. Every backend keeps the rules in the module docstring and passes `tests/test_registry.py`. `InMemoryRegistry` is the reference; the SQLAlchemy backend by URL is 4.2. No ownership: which models a caller sees is the host's `ModelVisibility`. The old console keeps its own SQLite repository (with organizations and grants) until Phase 8, sharing `SemanticRevision`. |
+| `helios_core.registry` | `ModelRegistry`, `InMemoryRegistry`, `SqlRegistry`, `RegisteredModel`, `SemanticRevision`, `RegistryError`, `RegistryNotReady`, `RevisionConflict`, `DRAFT`, `PUBLISHED` | Provisional | What libraries need to find models: data sources, models (status, creation) and their immutable semantic revisions. Every backend keeps the rules in the module docstring and passes `tests/test_registry.py`. `InMemoryRegistry` is the reference; `SqlRegistry` stores the records in any SQLAlchemy database by URL (`Settings.registry_url`, default a SQLite file in the data directory), with Alembic migrations in the package (`python -m helios_core.registry upgrade`; version table `helios_registry_version`, tables prefixed `helios_`). No ownership: which models a caller sees is the host's `ModelVisibility`. The old console keeps its own SQLite repository until Phase 8, sharing `SemanticRevision`. |
 | `helios_core.domain` | `Model`, `DataSource`, `DataSourceReference` | Provisional | Registry records with no ownership (organizations left in 2.6). The registry stores them as they are. |
 
 ### Engines and LLM

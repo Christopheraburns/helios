@@ -9,6 +9,7 @@ from pathlib import Path
 PACKAGES = Path(__file__).resolve().parents[2]
 COMMANDS = {
     Path("helios-core/src/helios_core/index/__main__.py"),
+    Path("helios-core/src/helios_core/registry/__main__.py"),
     Path("helios-cloudera/src/helios_cloudera/impala_diagnose.py"),
     Path("helios-cloudera/src/helios_cloudera/index.py"),
 }

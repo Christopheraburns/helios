@@ -1,8 +1,6 @@
 """Harvest and profile run on any engine (burndown 3.6): the same star schema on DuckDB
 and on SQLite through the SQLAlchemy engine gives the same evidence, and on SQLite a
 compiled metric then runs too."""
-from importlib.util import find_spec
-
 import pytest
 
 from helios_core.catalog import Harvester
@@ -38,8 +36,6 @@ def duckdb_engine(tmp_path):
 
 
 def sqlite_engine(tmp_path):
-    if find_spec("sqlalchemy") is None:
-        pytest.skip("needs helios-core[sqlalchemy]")
     url = f"sqlite:///{tmp_path / 'sales.db'}"
     return load(engine_for(Settings(connections={"s": {"engine": "sqlalchemy", "url": url}}).connection("s")), "main"), "main"
 

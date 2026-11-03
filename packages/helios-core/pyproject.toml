@@ -9,7 +9,8 @@ description = "Helios core: shared semantic query and data governance layer"
 authors = [{name = "Helios Team"}]
 license = "Apache-2.0"
 requires-python = ">=3.11"
-# The base install: the compiler, semantic model, DuckDB and SQLite (stdlib).
+# The base install: the compiler, semantic model, DuckDB, and the model registry on
+# SQLite (SQLAlchemy and Alembic; the database itself is the standard library).
 # Everything else is an extra; tests/test_optional_dependencies.py keeps it so.
 dependencies = [
     "duckdb>=1.3.0",
@@ -19,6 +20,8 @@ dependencies = [
     "pydantic-settings>=2.6",
     "pyyaml>=6.0.0", # semantic model files and ontology mappings
     "sqlglot>=27.0.0",
+    "sqlalchemy>=2.0", # the model registry (SQLite by default) and the sqlalchemy engine
+    "alembic>=1.13", # registry schema migrations
 ]
 
 [project.optional-dependencies]
@@ -30,15 +33,16 @@ llm = [
 ontology = [
     "linkml-runtime>=1.8.0",
 ]
-# The sqlalchemy engine plugin; add the database's own driver (psycopg, snowflake-sqlalchemy, ...).
-sqlalchemy = [
-    "sqlalchemy>=2.0",
+# Postgres for the registry (postgresql+psycopg://...) and the sqlalchemy engine. Other
+# databases: install their SQLAlchemy driver (snowflake-sqlalchemy, mysqlclient, ...).
+postgres = [
+    "psycopg[binary]>=3.2",
 ]
 # The trino engine plugin (all three identity modes).
 trino = [
     "trino>=0.330",
 ]
-# Storage backends ([postgres], [s3], [azure], [gcs]) arrive with their stores in Phase 4.
+# Object storage ([s3], [azure], [gcs]) arrives with the artifact store backends (4.3).
 # Searching crawled documents. Without these, crawls run and evidence search
 # reports that it is unavailable. sentence-transformers brings PyTorch.
 evidence = [
@@ -47,7 +51,7 @@ evidence = [
 ]
 
 # The built-in engine plugins. Impala and Atlas come with helios-cloudera
-# (see helios_core.plugins). sqlalchemy and trino need their extras.
+# (see helios_core.plugins). trino needs its extra; sqlalchemy needs the database's driver.
 [project.entry-points."helios.engines"]
 duckdb = "helios_core.engines.duckdb_engine:DuckDBEngine"
 sqlalchemy = "helios_core.engines.sqlalchemy_engine:SqlAlchemyEngine"

@@ -5,7 +5,7 @@ BigQuery, Trino, Databricks, MySQL, SQLite, ...), named by a SQLAlchemy URL.
     engine = "sqlalchemy"
     url = "postgresql+psycopg://helios@db.example.com/sales"
 
-Install the database's own driver beside ``helios-core[sqlalchemy]``. The URL's
+Install the database's own driver (``helios-core[postgres]`` brings Postgres's). The URL's
 credentials are the connection's service identity, so ``service`` is the only
 identity mode. Catalog introspection goes through the SQLAlchemy inspector.
 """
@@ -17,15 +17,11 @@ from pydantic import BaseModel, ConfigDict, SecretStr
 from sqlglot import exp
 from sqlglot.dialects.dialect import Dialect
 
-from .._optional import missing_extra
 from ..caller import Caller, IdentityMode
 from .base import Engine, QueryResult
 from .dialect import SqlDialect
 
-try:
-    import sqlalchemy
-except ModuleNotFoundError as exc:
-    raise missing_extra("the SQLAlchemy engine", "sqlalchemy", exc) from exc
+import sqlalchemy
 
 if TYPE_CHECKING:
     from ..settings import ConnectionSettings
