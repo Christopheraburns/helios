@@ -106,6 +106,20 @@ class CatalogSettings(_PluginSection):
     catalog: str
 
 
+class ArtifactStorageSettings(_PluginSection):
+    """Object storage for artifacts (``helios_core.artifact_storage``): ``location`` is a
+    URL (``s3://bucket/helios``, ``abfss://…``, ``gs://…``, ``ofs://…``); every other key
+    goes to the storage's filesystem (``key``, ``secret``, ``endpoint_url``,
+    ``account_key``, ``httpfs_url``, ...). Secret-looking keys stay hidden in output."""
+
+    location: str
+
+    @property
+    def storage_options(self) -> dict[str, Any]:
+        """The options with secrets revealed, for the filesystem."""
+        return {k: v.get_secret_value() if isinstance(v, SecretStr) else v for k, v in self.options.items()}
+
+
 class LLMSettings(_Section):
     """The LLM used for proposals and the console. Unconfigured when ``provider`` is None."""
 
@@ -163,6 +177,8 @@ class Settings(BaseSettings):
 
     connections: dict[str, ConnectionSettings] = {}
     catalogs: dict[str, CatalogSettings] = {}
+    # Object storage for artifacts; when unset they live in artifacts_dir.
+    artifact_storage: ArtifactStorageSettings | None = None
     llm: LLMSettings = LLMSettings()
     evidence: EvidenceSettings = EvidenceSettings()
 

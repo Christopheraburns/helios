@@ -21,6 +21,11 @@ BASE = {"alembic", "duckdb", "jsonschema", "platformdirs", "pydantic", "pydantic
 OPTIONAL_MODULES = {
     "httpx": "httpx",
     "psycopg": "psycopg",
+    "s3fs": "s3fs",
+    "adlfs": "adlfs",
+    "gcsfs": "gcsfs",
+    "fsspec": "fsspec",
+    "requests": "requests",
     "trino": "trino",
     "linkml-runtime": "linkml_runtime",
     "lancedb": "lancedb",
@@ -53,7 +58,7 @@ def test_the_base_dependencies_are_only_the_base():
 
 def test_every_extra_is_known_to_the_isolation_check():
     extras = _project()["optional-dependencies"]
-    assert {"llm", "ontology", "postgres", "trino"} <= set(extras)
+    assert {"azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"} <= set(extras)
     assert "cloudera" not in extras  # helios-cloudera is its own package (3.3)
     assert {_name(r) for reqs in extras.values() for r in reqs} == set(OPTIONAL_MODULES)
 

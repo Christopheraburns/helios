@@ -42,7 +42,20 @@ postgres = [
 trino = [
     "trino>=0.330",
 ]
-# Object storage ([s3], [azure], [gcs]) arrives with the artifact store backends (4.3).
+# Object storage for the ArtifactStore (helios_core.artifact_storage), by URL scheme.
+s3 = [
+    "s3fs>=2024.6",       # s3:// (AWS S3, MinIO, Ozone's S3 gateway)
+]
+azure = [
+    "adlfs>=2024.4",      # abfs://, abfss://, az:// (ADLS Gen2, Blob storage)
+]
+gcs = [
+    "gcsfs>=2024.6",      # gs://
+]
+ozone = [
+    "fsspec>=2024.6",     # ofs://, through Ozone's HttpFS (WebHDFS) gateway
+    "requests>=2.32",
+]
 # Searching crawled documents. Without these, crawls run and evidence search
 # reports that it is unavailable. sentence-transformers brings PyTorch.
 evidence = [

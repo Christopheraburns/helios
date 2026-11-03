@@ -152,14 +152,16 @@ class SemanticModel:
         return cls(doc)
 
     @classmethod
-    def load_published(cls, model_id: str, root: str | os.PathLike[str]) -> "SemanticModel":
-        """Load by stable Helios Model ID, with legacy flat-layout fallback."""
-        return cls.load(str(ArtifactStore(root).published_ossie_path(model_id)))
+    def load_published(cls, model_id: str, root: str | os.PathLike[str] | ArtifactStore) -> "SemanticModel":
+        """The model's active published revision, from an ArtifactStore or its location
+        (a directory or an object-store URL); falls back to legacy published files."""
+        store = root if isinstance(root, ArtifactStore) else ArtifactStore(root)
+        return cls(yaml.safe_load(store.read_published_ossie(model_id, "yaml")))
 
     @staticmethod
-    def list_published(root: str | os.PathLike[str]) -> list[str]:
+    def list_published(root: str | os.PathLike[str] | ArtifactStore) -> list[str]:
         """Return stable Model IDs with published semantic artifacts."""
-        return ArtifactStore(root).published_model_ids()
+        return (root if isinstance(root, ArtifactStore) else ArtifactStore(root)).published_model_ids()
 
     # ------------------------------------------------------------ lookups
     def _infer_metric_dataset(self, expression: str) -> str:
