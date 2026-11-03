@@ -12,7 +12,7 @@ from typing import Any
 import requests
 from pydantic import BaseModel, ConfigDict, SecretStr
 
-from helios_core.catalog import CatalogError
+from helios_core.catalog import CatalogError, ColumnLineage
 from helios_core.settings import CatalogSettings, Settings
 
 COLUMN_TYPES = ("hive_column", "iceberg_column")
@@ -61,6 +61,8 @@ class AtlasError(CatalogError):
 
 
 class AtlasClient:
+    """The ``atlas`` catalog plugin: a glossary and column lineage (both catalog capabilities)."""
+
     def __init__(self, cfg: AtlasConfig):
         self.base = cfg.base_url
         self.s = requests.Session()
@@ -193,3 +195,20 @@ class AtlasClient:
 
     def lineage(self, guid: str, depth: int = 3) -> dict:
         return self._req("GET", f"/lineage/{guid}", params={"depth": depth, "direction": "BOTH"})
+
+    # ------------------------------------------------------------ catalog plugin
+    @classmethod
+    def from_catalog(cls, catalog: CatalogSettings) -> AtlasClient:
+        return cls(atlas_config_for(catalog))
+
+    def column_lineage(self, database: str, table: str, column: str, depth: int = 3) -> ColumnLineage | None:
+        hit = self.find_column(database, table, column)
+        if not hit:
+            return None
+        graph = self.lineage(hit[0], depth)
+        return ColumnLineage(
+            column=f"{database}.{table}.{column}",
+            entities={guid: {"type": e.get("typeName"), "name": e.get("displayText")}
+                      for guid, e in (graph.get("guidEntityMap") or {}).items()},
+            edges=[(r["fromEntityId"], r["toEntityId"]) for r in graph.get("relations") or []],
+        )

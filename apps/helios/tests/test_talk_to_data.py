@@ -679,6 +679,31 @@ def test_mcp_tools_lock_model_and_propagate_principal(
     assert {item.outcome for item in events} == {"success", "denied"}
 
 
+def test_explain_lineage_returns_the_catalogs_column_lineage(persistent_auth_stack, monkeypatch):
+    from helios_cloudera.atlas import AtlasClient, AtlasConfig
+    from helios_core.catalog import ColumnLineage
+
+    monkeypatch.setattr(mcp_server, "metadata_repository", persistent_auth_stack.repository)
+    monkeypatch.setattr(mcp_server, "atlas_config", lambda settings: AtlasConfig("https://dl/atlas", "a", "pw"))
+
+    def column_lineage(self, database, table, column, depth=3):
+        if column != "region":
+            return None
+        return ColumnLineage(f"{database}.{table}.{column}", {"c1": {"type": "hive_column", "name": "region"}}, [("p1", "c1")])
+
+    monkeypatch.setattr(AtlasClient, "column_lineage", column_lineage)
+    token = mcp_server._caller_context.set(mcp_server.MCPCaller(principal(), "customer360", "acme"))
+    try:
+        found = mcp_server.explain_lineage("crm.customers.region", model="customer360")
+        missing = mcp_server.explain_lineage("crm.customers.nope", model="customer360")
+    finally:
+        mcp_server._caller_context.reset(token)
+
+    assert found == {"column": "crm.customers.region", "entities": {"c1": {"type": "hive_column", "name": "region"}},
+                     "edges": [{"from": "p1", "to": "c1"}]}
+    assert missing["error"] == "semantic_not_found"
+
+
 def test_mcp_tools_respect_the_hosts_model_visibility(
     persistent_auth_stack,
     monkeypatch,

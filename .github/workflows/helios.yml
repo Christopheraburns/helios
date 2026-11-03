@@ -40,6 +40,32 @@ jobs:
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/base/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-core/tests"
 
+  # The Trino engine against a real coordinator (burndown 3.8): harvest, profile,
+  # a compiled metric, and impersonation on an open cluster's memory catalog.
+  trino:
+    runs-on: ubuntu-latest
+    services:
+      trino:
+        image: trinodb/trino:484
+        ports: ["8080:8080"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Wait for Trino to start
+        run: |
+          for _ in $(seq 1 60); do
+            curl -sf http://localhost:8080/v1/info | grep -q '"starting":false' && exit 0
+            sleep 3
+          done
+          echo "Trino did not start"; exit 1
+      - run: uv run pytest -q -rs packages/helios-core/tests/test_trino_live.py
+        env:
+          HELIOS_TEST_TRINO: localhost:8080
+
   # helios-cloudera installed from wheels beside a base helios-core (burndown 3.3):
   # its entry points register and its tests pass without the workspace.
   cloudera-install:

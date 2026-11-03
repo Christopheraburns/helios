@@ -1010,17 +1010,13 @@ def explain_lineage(column: str, depth: int = 3, model: str | None = None) -> di
             "invalid_semantic_reference",
             "column must be database.table.column",
         )
-    a = AtlasClient(cfg)
-    hit = a.find_column(*parts)
-    if not hit:
+    lineage = AtlasClient(cfg).column_lineage(*parts, depth)
+    if lineage is None:
         return _error(
             "semantic_not_found",
             f"{column} was not found in Atlas",
         )
-    lin = a.lineage(hit[0], depth)
-    ents = {g: {"type": e.get("typeName"), "name": e.get("displayText")} for g, e in (lin.get("guidEntityMap") or {}).items()}
-    return {"column": column, "entities": ents,
-            "edges": [{"from": r["fromEntityId"], "to": r["toEntityId"]} for r in lin.get("relations", [])]}
+    return lineage.as_dict()
 
 
 def _json(v):

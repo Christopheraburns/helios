@@ -34,6 +34,10 @@ ontology = [
 sqlalchemy = [
     "sqlalchemy>=2.0",
 ]
+# The trino engine plugin (all three identity modes).
+trino = [
+    "trino>=0.330",
+]
 # Storage backends ([postgres], [s3], [azure], [gcs]) arrive with their stores in Phase 4.
 # Searching crawled documents. Without these, crawls run and evidence search
 # reports that it is unavailable. sentence-transformers brings PyTorch.
@@ -43,10 +47,11 @@ evidence = [
 ]
 
 # The built-in engine plugins. Impala and Atlas come with helios-cloudera
-# (see helios_core.plugins). sqlalchemy needs the [sqlalchemy] extra.
+# (see helios_core.plugins). sqlalchemy and trino need their extras.
 [project.entry-points."helios.engines"]
 duckdb = "helios_core.engines.duckdb_engine:DuckDBEngine"
 sqlalchemy = "helios_core.engines.sqlalchemy_engine:SqlAlchemyEngine"
+trino = "helios_core.engines.trino_engine:TrinoEngine"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/helios_core"]

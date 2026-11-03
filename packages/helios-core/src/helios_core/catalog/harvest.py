@@ -11,13 +11,14 @@ import re
 from datetime import datetime, timezone
 
 from ..engines.base import Engine
-from .base import CatalogError, GlossaryCatalog
+from .base import GLOSSARY, CatalogError, GlossaryCatalog, capabilities
 
 LOGGER = logging.getLogger(__name__)
 
 
 class Harvester:
-    def __init__(self, engine: Engine, catalog: GlossaryCatalog | None = None):
+    def __init__(self, engine: Engine, catalog: object | None = None):
+        """``engine`` supplies tables and columns; ``catalog``, any catalog plugin, a glossary if it has one."""
         self.engine = engine
         self.catalog = catalog
 
@@ -40,16 +41,17 @@ class Harvester:
 
     # ----------------------------------------------------------- catalog side
     def harvest_glossary(self, glossary_names: list[str] | None = None) -> list[dict]:
-        if self.catalog is None:
+        if GLOSSARY not in capabilities(self.catalog):
             return []
+        catalog: GlossaryCatalog = self.catalog  # type: ignore[assignment]
         terms_out = []
-        for g in self.catalog.list_glossaries():
+        for g in catalog.list_glossaries():
             if glossary_names and g["name"] not in glossary_names:
                 continue
-            for t in self.catalog.list_terms(g["guid"]):
+            for t in catalog.list_terms(g["guid"]):
                 cols = []
                 try:
-                    for e in self.catalog.assigned_entities(t["guid"]):
+                    for e in catalog.assigned_entities(t["guid"]):
                         qn = e.get("displayText") or ""
                         cols.append(qn)
                 except CatalogError:
@@ -146,6 +148,7 @@ class Harvester:
         return {
             "harvested_at": datetime.now(timezone.utc).isoformat(),
             "engine": self.engine.name,
+            "catalog_capabilities": sorted(capabilities(self.catalog)),
             "databases": databases,
             "tables": tables,
             "glossary_terms": glossary_terms,
