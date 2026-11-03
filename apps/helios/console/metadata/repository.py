@@ -8,6 +8,7 @@ from typing import Any, Protocol
 
 from apps.helios.console import authz
 from apps.helios.console.domain import DataSource, Model, Organization
+from helios_core.registry import SemanticRevision  # one record for the console and the libraries
 
 
 @dataclass(frozen=True)
@@ -130,19 +131,6 @@ class TraceRun:
     tokens_in: int = 0
     tokens_out: int = 0
     semantic_revision_id: str | None = None
-
-
-@dataclass(frozen=True)
-class SemanticRevision:
-    id: str
-    model_id: str
-    sha256: str
-    artifact_path: str
-    published_at: datetime
-    size_bytes: int
-    ossie_version: str | None = None
-    discovery_run_id: str | None = None
-    published_by: str | None = None
 
 
 @dataclass(frozen=True)

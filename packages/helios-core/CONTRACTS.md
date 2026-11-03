@@ -64,8 +64,8 @@ helios-core is pre-1.0 (0.y.z).
 | Module | Names | Level | Notes |
 |---|---|---|---|
 | `helios_core.artifacts` | `ArtifactStore` | Provisional | Object-storage backends selected by URL in 4.3. |
-| `helios_core.registry` | the model registry protocol (models, data sources, semantic revisions) | Planned | 4.1. The old console's SQLite repository moved to `apps/helios/console/metadata` in 2.6. |
-| `helios_core.domain` | `Model`, `DataSource`, `DataSourceReference` | Provisional | Registry records with no ownership (organizations left in 2.6). 4.1 may reshape them with the registry. |
+| `helios_core.registry` | `ModelRegistry`, `InMemoryRegistry`, `RegisteredModel`, `SemanticRevision`, `RegistryError`, `RevisionConflict`, `DRAFT`, `PUBLISHED` | Provisional | What libraries need to find models: data sources, models (status, creation) and their immutable semantic revisions. Every backend keeps the rules in the module docstring and passes `tests/test_registry.py`. `InMemoryRegistry` is the reference; the SQLAlchemy backend by URL is 4.2. No ownership: which models a caller sees is the host's `ModelVisibility`. The old console keeps its own SQLite repository (with organizations and grants) until Phase 8, sharing `SemanticRevision`. |
+| `helios_core.domain` | `Model`, `DataSource`, `DataSourceReference` | Provisional | Registry records with no ownership (organizations left in 2.6). The registry stores them as they are. |
 
 ### Engines and LLM
 
