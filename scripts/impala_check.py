@@ -10,7 +10,7 @@ from dataclasses import replace
 
 from helios_core import Caller, IdentityMode
 from helios_cloudera.impala import ImpalaEngine, impala_config
-from helios_core.settings import Settings
+from helios_cloudera.workbench import WorkbenchSettings as Settings
 
 delegate = sys.argv[1] if len(sys.argv) > 1 else None
 cfg = impala_config(Settings())

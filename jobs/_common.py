@@ -57,7 +57,7 @@ def read_json(path: str):
 def audit_job(stage: str, run_id: str, model_id: str | None = None):
     from apps.helios.console import audit
     from apps.helios.console.metadata import SQLiteMetadataRepository
-    from helios_core.settings import Settings
+    from helios_cloudera.workbench import WorkbenchSettings as Settings
 
     repository = SQLiteMetadataRepository.from_settings(Settings())
     findings = repository.integrity_check()
@@ -133,7 +133,7 @@ def audit_job(stage: str, run_id: str, model_id: str | None = None):
 
 def engine():
     from helios_cloudera.impala import ImpalaEngine, impala_config
-    from helios_core.settings import Settings
+    from helios_cloudera.workbench import WorkbenchSettings as Settings
     cfg = impala_config(Settings())
     if cfg is None:
         raise SystemExit("IMPALA_HOST / credentials are not set in the project environment")
@@ -142,6 +142,6 @@ def engine():
 
 def atlas():
     from helios_cloudera.atlas import AtlasClient, atlas_config
-    from helios_core.settings import Settings
+    from helios_cloudera.workbench import WorkbenchSettings as Settings
     cfg = atlas_config(Settings())
     return AtlasClient(cfg) if cfg else None

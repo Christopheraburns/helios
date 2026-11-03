@@ -10,6 +10,7 @@ from pathlib import Path
 import platformdirs
 import pytest
 from pydantic import ValidationError
+from pydantic_settings import PydanticBaseSettingsSource
 
 from helios_core.settings import Settings
 
@@ -60,16 +61,43 @@ def test_resolution_order(monkeypatch, tmp_path):
     assert s.sqlite_journal_mode == "TRUNCATE"   # file beats the default
 
 
-def test_nested_helios_variables_merge_with_conventional_ones(monkeypatch):
-    monkeypatch.setenv("IMPALA_HOST", "vw.example.com")
-    monkeypatch.setenv("WORKLOAD_USER", "svc")
-    monkeypatch.setenv("WORKLOAD_PASSWORD", "pw")
-    monkeypatch.setenv("HELIOS_CONNECTIONS__DEFAULT__DATABASE", "sales")
-    monkeypatch.setenv("HELIOS_LLM__TIMEOUT_SECONDS", "12")
+def test_core_reads_no_workbench_variables(monkeypatch):
+    """The Cloudera and Workbench names belong to helios-cloudera's WorkbenchSettings."""
+    for name, value in {
+        "CDSW_PROJECT_DIR": "/home/cdsw", "CDSW_PROJECT_ID": "abc",
+        "IMPALA_HOST": "vw", "WORKLOAD_USER": "svc", "WORKLOAD_PASSWORD": "pw",
+        "ATLAS_BASE": "https://dl/atlas", "ATLAS_USER": "a", "ATLAS_PASS": "pw",
+        "INFERENCE_BASE_URL": "https://caii.example.com/v1", "INFERENCE_TOKEN": "jwt",
+    }.items():
+        monkeypatch.setenv(name, value)
     s = Settings()
-    default = s.connections["default"]
-    assert (default.engine, default.host, default.user, default.database) == ("impala", "vw.example.com", "svc", "sales")
-    assert s.llm.timeout_seconds == 12
+    assert (s.connections, s.catalogs, s.llm.provider) == ({}, {}, None)
+    assert s.data_dir == platformdirs.user_data_path("helios")
+
+
+def test_a_profile_source_sits_between_the_environment_and_the_config_file(monkeypatch):
+    class Profile(PydanticBaseSettingsSource):
+        def get_field_value(self, field, field_name):
+            return None, field_name, False
+
+        def __call__(self):
+            return {"data_dir": "/profile", "audit_retention_days": 7, "connections": {"default": {"engine": "duckdb"}}}
+
+    class ProfileSettings(Settings):
+        @classmethod
+        def profile_sources(cls, settings_cls):
+            return (Profile(settings_cls),)
+
+    Path("helios.toml").write_text('audit_retention_days = 99\nsqlite_journal_mode = "WAL"\n')
+    monkeypatch.setenv("HELIOS_ROOT", "/root")                                 # conventional beats the profile
+    monkeypatch.setenv("HELIOS_CONNECTIONS__DEFAULT__PATH", "/x.duckdb")       # HELIOS_* merges into it
+    s = ProfileSettings()
+    assert s.data_dir == Path("/root")
+    assert s.audit_retention_days == 7                                          # the profile beats the file
+    assert s.sqlite_journal_mode == "WAL"                                       # the file still applies
+    assert (s.connections["default"].engine, s.connections["default"].options) == ("duckdb", {"path": "/x.duckdb"})
+    monkeypatch.delenv("HELIOS_CONNECTIONS__DEFAULT__PATH")
+    assert Settings().audit_retention_days == 99                                # plain Settings has no profile
 
 
 def test_connections_of_any_engine_from_a_file(tmp_path):

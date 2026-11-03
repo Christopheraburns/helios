@@ -27,7 +27,7 @@ from helios_core.llm import (
     llm_from_settings,
 )
 from apps.helios.console.metadata import MetadataRepository, SemanticRevision
-from helios_core.settings import Settings
+from helios_cloudera.workbench import WorkbenchSettings as Settings
 from apps.helios.console.tracing import TraceRecorder, utcnow
 
 LOGGER = logging.getLogger(__name__)

@@ -15,7 +15,7 @@ from .tables import IMPALA
 def impala_connector(database: str = "default") -> Callable[[], Any]:
     """A zero-argument factory returning a new impyla DB-API connection."""
     from helios_cloudera.impala import impala_config
-    from helios_core.settings import Settings
+    from helios_cloudera.workbench import WorkbenchSettings as Settings
 
     cfg = impala_config(Settings())
     if cfg is None:

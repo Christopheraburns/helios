@@ -16,7 +16,7 @@ classifiers = ["Private :: Do Not Upload"]
 # Mirrors apps/helios/console/requirements.txt, which Workbench still installs from.
 dependencies = [
     "helios-cloudera",
-    "helios-core[llm,ontology]",
+    "helios-core[llm,ontology,sqlalchemy]",
     "fastapi>=0.115.0",
     "httpx>=0.27.0",
     "httpx2>=2.13.1",

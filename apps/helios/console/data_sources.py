@@ -227,7 +227,7 @@ def _connector_for(source: DataSource) -> Any:
     from apps.helios.crawler.connector import s3_client_from_connection
     from apps.helios.crawler.connectors import build
     from helios_cloudera.impala import ImpalaEngine, impala_config
-    from helios_core.settings import Settings
+    from helios_cloudera.workbench import WorkbenchSettings as Settings
 
     config = impala_config(Settings(), source.connection_ref)
 

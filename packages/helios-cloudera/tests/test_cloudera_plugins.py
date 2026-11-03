@@ -1,6 +1,7 @@
 """helios-cloudera registers its plugins under the names Settings use (burndown 3.3)."""
 from helios_core import plugins
 from helios_core.catalog import CatalogError, Harvester
+from helios_core.engines import engine_for
 from helios_core.settings import Settings
 
 from helios_cloudera.atlas import AtlasClient, AtlasError
@@ -38,3 +39,11 @@ def test_atlas_errors_are_catalog_errors_so_the_harvester_tolerates_them():
 
     [term] = Harvester(engine=None, catalog=Atlas()).harvest_glossary()
     assert (term["glossary"], term["name"], term["columns"]) == ("Sales", "Revenue", [])
+
+
+def test_engine_for_builds_impala_from_its_connection():
+    connection = Settings(connections={"cdw": {
+        "engine": "impala", "host": "vw.example.com", "identity": "token"}}).connection("cdw")
+    engine = engine_for(connection)
+    assert isinstance(engine, ImpalaEngine)
+    assert (engine.cfg.host, engine.cfg.user, engine.identity_mode.value) == ("vw.example.com", None, "token")

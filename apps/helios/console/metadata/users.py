@@ -18,7 +18,7 @@ import argparse
 import sys
 
 from apps.helios.console import authz
-from helios_core.settings import Settings
+from helios_cloudera.workbench import WorkbenchSettings as Settings
 
 from .repository import PrincipalRecord
 from .sqlite import SQLiteMetadataRepository

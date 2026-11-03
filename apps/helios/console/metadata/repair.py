@@ -14,7 +14,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from helios_core.settings import Settings
+from helios_cloudera.workbench import WorkbenchSettings as Settings
 
 from .sqlite import SQLiteMetadataRepository
 

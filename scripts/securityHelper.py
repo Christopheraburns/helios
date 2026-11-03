@@ -6,7 +6,7 @@ from apps.helios.console.domain import (
     Organization,
 )
 from apps.helios.console.metadata import PrincipalRecord, SQLiteMetadataRepository
-from helios_core.settings import Settings
+from helios_cloudera.workbench import WorkbenchSettings as Settings
 
 username = "cburns"
 principal_id = f"cloudera-workbench:{username}"

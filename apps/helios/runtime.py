@@ -9,7 +9,7 @@ from pathlib import Path
 
 from helios_core.artifacts import ArtifactStore
 from helios_core.runs import RunStore
-from helios_core.settings import Settings
+from helios_cloudera.workbench import WorkbenchSettings as Settings
 
 # Files that ship in this repository (docs, ontology/, eval/), not runtime state:
 # runtime state lives under settings.data_dir.

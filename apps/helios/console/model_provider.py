@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 
 from helios_core.llm import LLMClient, llm_from_settings
-from helios_core.settings import Settings
+from helios_cloudera.workbench import WorkbenchSettings as Settings
 
 SUPPORTED_PROVIDERS = frozenset({
     "anthropic",

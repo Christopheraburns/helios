@@ -8,7 +8,7 @@ from helios_cloudera.atlas import AtlasClient, atlas_config
 from helios_cloudera.impala import ImpalaEngine, impala_config
 from helios_core.llm import llm_from_settings
 from apps.helios.console.metadata import MetadataRepository
-from helios_core.settings import Settings
+from helios_cloudera.workbench import WorkbenchSettings as Settings
 
 HealthState = Literal["healthy", "degraded", "unavailable", "unknown"]
 

@@ -23,19 +23,11 @@ class Harvester:
 
     # ------------------------------------------------------------ engine side
     def row_count(self, db: str, table: str) -> int | None:
-        """Prefer table stats (cheap); fall back to COUNT(*) when stats are missing (-1)."""
+        """The engine's row count (table stats where it has them); None when it fails."""
         try:
-            res = self.engine.query(f"SHOW TABLE STATS {db}.{table}")
-            if "#Rows" in res.columns:
-                rows = [r[res.columns.index("#Rows")] for r in res.rows]
-                total = sum(int(x) for x in rows if x is not None and int(x) >= 0)
-                if total > 0 or all(int(x) == 0 for x in rows if x is not None):
-                    return total
-        except Exception:  # noqa: BLE001 - stats are optional
-            pass
-        try:
-            return int(self.engine.query(f"SELECT COUNT(*) FROM {db}.{table}").rows[0][0])
-        except Exception:  # noqa: BLE001
+            return self.engine.row_count(db, table)
+        except Exception:  # noqa: BLE001 - a table that cannot be counted is still harvested
+            LOGGER.warning("could not count rows in %s.%s", db, table, exc_info=True)
             return None
 
     def harvest_tables(self, databases: list[str]) -> list[dict]:
@@ -105,15 +97,17 @@ class Harvester:
         table_names = {t["table"].lower() for t in tables}
         raw, sources, stats = [], [], {}
         try:
-            res = self.engine.query(
-                f"SELECT sql FROM sys.impala_query_log WHERE query_type = 'QUERY' "
-                f"ORDER BY start_time_utc DESC LIMIT {log_window}", limit=log_window)
-            log = [r[0] for r in res.rows if r[0]]
-            raw += [("sys.impala_query_log", q) for q in log]
-            sources.append("sys.impala_query_log")
-            stats["log_statements_read"] = len(log)
-        except Exception as e:  # noqa: BLE001 - not every VW exposes the log
-            sources.append(f"sys.impala_query_log unavailable: {str(e)[:120]}")
+            recent = self.engine.recent_queries(log_window)
+        except Exception as e:  # noqa: BLE001 - not every warehouse exposes its log
+            sources.append(f"query log unavailable: {str(e)[:120]}")
+        else:
+            if recent is None:
+                sources.append(f"no query log for the {self.engine.name} engine")
+            else:
+                log_name, log = recent
+                raw += [(log_name, q) for q in log]
+                sources.append(log_name)
+                stats["log_statements_read"] = len(log)
         if query_dir and os.path.isdir(query_dir):
             n = 0
             for path in sorted(glob.glob(os.path.join(query_dir, "*.sql"))):

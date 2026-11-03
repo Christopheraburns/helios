@@ -45,7 +45,7 @@ from apps.helios.crawler import evaluate as harness
 from fastapi import APIRouter, HTTPException, Request
 from helios_core import Caller, IdentityMode
 from helios_cloudera.impala import impala_config
-from helios_core.settings import Settings
+from helios_cloudera.workbench import WorkbenchSettings as Settings
 from helios_core._pending.crawler import settings as settings_model
 from helios_core._pending.crawler.settings import EMPTY_SETTINGS, CrawlerSettings, ontology_problems
 from helios_cloudera.impala import ImpalaEngine, ImpalaProxyDelegationError, _same_user

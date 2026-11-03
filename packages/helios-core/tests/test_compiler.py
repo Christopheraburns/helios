@@ -67,13 +67,13 @@ def test_snowflake_join(model, con):
 
 def test_default_and_pinned_relationship(model):
     base = SemanticRequest(metrics=["Catalog Sales Revenue"], dimensions=["d_year"])
-    assert "cs_sold_date_sk" in Compiler(model).compile(base).sql
+    assert "cs_sold_date_sk" in Compiler(model).compile(base, dialect="duckdb").sql
     pinned = SemanticRequest(metrics=["Catalog Sales Revenue"], dimensions=["d_year"], via={"date_dim": "catalog_sales__cs_ship_date_sk__date_dim"})
-    assert "cs_ship_date_sk" in Compiler(model).compile(pinned).sql
+    assert "cs_ship_date_sk" in Compiler(model).compile(pinned, dialect="duckdb").sql
 
 
 def test_errors(model):
     with pytest.raises(CompileError):
-        Compiler(model).compile(SemanticRequest(metrics=["Store Sales Revenue", "Web Sales Revenue"]))
+        Compiler(model).compile(SemanticRequest(metrics=["Store Sales Revenue", "Web Sales Revenue"]), dialect="duckdb")
     with pytest.raises(KeyError):
-        Compiler(model).compile(SemanticRequest(metrics=["Store Sales Revenue"], dimensions=["State"]))  # ambiguous label
+        Compiler(model).compile(SemanticRequest(metrics=["Store Sales Revenue"], dimensions=["State"]), dialect="duckdb")  # ambiguous label

@@ -23,7 +23,7 @@ from apps.helios.console.domain import (
 from .migrations import MIGRATIONS
 
 if TYPE_CHECKING:
-    from helios_core.settings import Settings
+    from helios_cloudera.workbench import WorkbenchSettings as Settings
 from .repository import (
     AuditEvent,
     AuditSession,

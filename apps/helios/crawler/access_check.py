@@ -23,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from helios_core.settings import Settings as HeliosSettings
+from helios_cloudera.workbench import WorkbenchSettings as HeliosSettings
 
 CRAWLABLE = "helios_ds.crawlable_artifacts"
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")

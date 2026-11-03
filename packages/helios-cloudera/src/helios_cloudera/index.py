@@ -14,6 +14,7 @@ from helios_core.index.tables import IMPALA
 from helios_core.settings import Settings
 
 from helios_cloudera.impala import ImpalaEngine, impala_config
+from helios_cloudera.workbench import WorkbenchSettings
 
 
 def impala_index_store(settings: Settings) -> IndexStore | None:
@@ -27,7 +28,7 @@ def impala_index_store(settings: Settings) -> IndexStore | None:
 def main(argv: list[str]) -> int:
     command = argv[0] if argv else ""
     if command == "init-tables":
-        store = impala_index_store(Settings())
+        store = impala_index_store(WorkbenchSettings())
         if store is None:
             print("Impala is not configured (IMPALA_HOST, WORKLOAD_USER, WORKLOAD_PASSWORD).")
             return 2

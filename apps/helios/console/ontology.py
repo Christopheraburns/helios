@@ -24,7 +24,7 @@ from helios_core.ontology.mapping import (
     resolution_config,
 )
 from helios_core.ontology.parser import ParseResult, parse
-from helios_core.settings import Settings
+from helios_cloudera.workbench import WorkbenchSettings as Settings
 from pydantic import BaseModel
 
 LOGGER = logging.getLogger(__name__)

@@ -12,6 +12,7 @@ requires-python = ">=3.11"
 dependencies = [
     "helios-core",
     "impyla>=0.20.0",
+    "pydantic-settings>=2.6",
     "requests>=2.32.0",
 ]
 

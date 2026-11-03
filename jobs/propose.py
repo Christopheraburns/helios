@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.environ.get("HELIOS_ROOT") or os.path.join(os
 from _common import audit_job, latest_run_id, read_json, run_path, write_json  # noqa: E402
 
 from helios_core.llm import llm_from_settings  # noqa: E402
-from helios_core.settings import Settings  # noqa: E402
+from helios_cloudera.workbench import WorkbenchSettings as Settings  # noqa: E402
 from helios_core.propose import Proposer  # noqa: E402
 from helios_core.artifacts import ArtifactStore, model_id_for_run  # noqa: E402
 

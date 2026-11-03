@@ -1,8 +1,7 @@
-"""helios-cloudera's settings: Impala and Atlas options, and parity on Workbench.
+"""helios-cloudera's settings: Impala and Atlas options, and the Workbench profile.
 
-Parity: Settings must resolve on Workbench exactly what the code before it did. The
-Workbench variables are read by helios_core.settings.ConventionalEnvironment until
-3.4 moves them here.
+Parity: WorkbenchSettings must resolve on Workbench exactly what the code before
+Settings did, so existing deployments keep their variables (burndown 3.4).
 """
 
 import os
@@ -18,6 +17,7 @@ from helios_core.settings import Settings
 
 from helios_cloudera.atlas import atlas_config, atlas_config_for
 from helios_cloudera.impala import impala_config, impala_config_for
+from helios_cloudera.workbench import WorkbenchSettings
 
 PREFIXES = ("HELIOS_", "IMPALA_", "WORKLOAD_", "ATLAS_", "INFERENCE_", "ANTHROPIC_", "MISTRAL_", "CDSW_")
 
@@ -48,7 +48,7 @@ def test_impala_jdbc_url_supplies_port_and_http_path_unless_given():
 
 def test_plugins_validate_their_own_options(monkeypatch):
     monkeypatch.setenv("IMPALA_HOST", "vw")   # no credentials: no default connection, as before
-    assert Settings().connections == {}
+    assert WorkbenchSettings().connections == {}
     s = Settings(connections={"w": {"engine": "impala", "host": "vw"}})  # loads ...
     with pytest.raises(ValidationError):
         impala_config_for(s.connections["w"])                            # ... fails when used
@@ -60,6 +60,18 @@ def test_the_plugin_reads_the_secret_settings_keep_hidden():
     s = Settings(connections={"w": {"engine": "impala", "host": "vw", "user": "u", "password": "hunter2"}})
     assert "hunter2" not in repr(s)
     assert impala_config_for(s.connections["w"]).password == "hunter2"
+
+
+def test_nested_helios_variables_merge_with_conventional_ones(monkeypatch):
+    monkeypatch.setenv("IMPALA_HOST", "vw.example.com")
+    monkeypatch.setenv("WORKLOAD_USER", "svc")
+    monkeypatch.setenv("WORKLOAD_PASSWORD", "pw")
+    monkeypatch.setenv("HELIOS_CONNECTIONS__DEFAULT__DATABASE", "sales")
+    monkeypatch.setenv("HELIOS_LLM__TIMEOUT_SECONDS", "12")
+    s = WorkbenchSettings()
+    default = s.connections["default"]
+    assert (default.engine, default.host, default.user, default.database) == ("impala", "vw.example.com", "svc", "sales")
+    assert s.llm.timeout_seconds == 12
 
 
 # Parity: in the environments Helios runs in today, the stores and clients built from
@@ -162,7 +174,7 @@ def test_parity_with_the_code_before_settings(monkeypatch, name):
 
     for key, value in ENVIRONMENTS[name].items():
         monkeypatch.setenv(key, value)
-    s = Settings()
+    s = WorkbenchSettings()
     expected = EXPECTED[name]
 
     assert str(s.metadata_db) == expected["metadata_db"]
@@ -204,3 +216,26 @@ def test_impala_and_atlas_lookups():
     assert impala_config(Settings()) is None
     assert atlas_config(s).base_url == "https://dl/atlas"
     assert atlas_config(Settings()) is None
+
+
+@pytest.mark.parametrize(("chooser", "provider", "base_url"), [
+    ({}, "openai", "https://caii.example.com/v1"),                              # nothing else: Cloudera AI Inference
+    ({"LLM_PROVIDER": "openai"}, "openai", "https://caii.example.com/v1"),
+    ({"ANTHROPIC_API_KEY": "sk-ant"}, "anthropic", None),                       # a key wins, and keeps its own URL
+    ({"LLM_PROVIDER": "mistral", "MISTRAL_API_KEY": "mk"}, "mistral", "https://api.mistral.ai/v1"),
+])
+def test_inference_variables_apply_only_when_nothing_else_chooses_the_llm(monkeypatch, chooser, provider, base_url):
+    monkeypatch.setenv("INFERENCE_BASE_URL", "https://caii.example.com/v1")
+    monkeypatch.setenv("INFERENCE_TOKEN", "jwt")
+    for key, value in chooser.items():
+        monkeypatch.setenv(key, value)
+    llm = WorkbenchSettings().llm
+    assert (llm.provider, llm.base_url) == (provider, base_url)
+    assert (llm.api_key.get_secret_value() == "jwt") is (provider == "openai")
+
+
+def test_helios_root_still_beats_the_workbench_project_dir(monkeypatch):
+    monkeypatch.setenv("CDSW_PROJECT_DIR", "/home/cdsw")
+    assert WorkbenchSettings().data_dir == Path("/home/cdsw/helios")
+    monkeypatch.setenv("HELIOS_ROOT", "/srv/helios")
+    assert WorkbenchSettings().data_dir == Path("/srv/helios")

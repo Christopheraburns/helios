@@ -6,7 +6,7 @@ Compile a semantic request against a published model into SQL for a target engin
         dimensions=["date_dim.d_year", "s_state"],
         filters=[Filter("d_year", "=", 2001), Filter("i_category", "in", ["Music", "Books"])],
         order_by=["-Store Sales Revenue"], limit=100)
-    sql = Compiler(model).compile(request, dialect="hive")
+    sql = Compiler(model).compile(request, dialect=engine.dialect)
 
 How it works
 - every metric names its fact dataset; a request's metrics must share one fact (v1 — cross-fact requests come later)
@@ -14,8 +14,8 @@ How it works
 - dimensions and filter fields resolve to dataset.field via the model (qualified name, unique column, or unique label)
 - the join graph is walked from the fact to every dataset touched; default relationships are taken unless the
   request pins another with `via={"date_dim": "catalog_sales__cs_ship_date_sk__date_dim"}`
-- the query is assembled as a SQLGlot AST and rendered in the engine's dialect; Impala-specific fixes are applied
-  on top of the Hive rendering
+- the query is assembled as a SQLGlot AST and rendered by the engine's dialect (``Engine.dialect``), whose hooks
+  carry the engine's own rules (helios-cloudera's ImpalaDialect drops Hive's backticks)
 """
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ from decimal import Decimal, InvalidOperation
 import sqlglot
 from sqlglot import exp
 
+from ..engines.dialect import SqlDialect, dialect_for
 from ..ossie.model import Field, Metric, Relationship, SemanticModel
 
 OPS = {"=", "!=", "<>", ">", ">=", "<", "<=", "in", "not in", "between", "like", "is null", "is not null"}
@@ -128,7 +129,9 @@ class Compiler:
                     joined.add(rel.other(fact) if fact in (rel.from_dataset, rel.to_dataset) else rel.to_dataset)
         return fact, joins, metrics, measures, dims, filters
 
-    def compile(self, req: SemanticRequest, dialect: str = "hive") -> Compiled:
+    def compile(self, req: SemanticRequest, dialect: SqlDialect | str) -> Compiled:
+        """SQL for ``req`` in ``dialect``: the engine's ``dialect``, or a SQLGlot dialect name."""
+        dialect = dialect_for(dialect)
         fact, joins, metrics, measures, dims, filters = self.plan(req)
         m = self.model
 
@@ -191,10 +194,8 @@ class Compiler:
         if req.limit:
             q = q.limit(req.limit)
 
-        sql = q.sql(dialect=dialect, pretty=True)
-        if dialect in ("hive", "impala"):
-            sql = _impala_fixups(sql)
-        return Compiled(sql=sql, dialect=dialect, fact=fact, joins=[r.name for r in joins], columns=out_cols)
+        sql = dialect.render_query(q)
+        return Compiled(sql=sql, dialect=dialect.name, fact=fact, joins=[r.name for r in joins], columns=out_cols)
 
 
 # ---------------------------------------------------------------- helpers
@@ -399,8 +400,3 @@ def _filter_type_error(
     if guidance:
         detail += f". {guidance}"
     return FilterValueTypeError(detail)
-
-
-def _impala_fixups(sql: str) -> str:
-    """Differences between SQLGlot's Hive rendering and what Impala accepts."""
-    return sql.replace("`", "")  # Impala accepts backticks but the harvested names never need quoting; keep the SQL readable

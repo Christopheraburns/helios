@@ -10,9 +10,11 @@ from dataclasses import dataclass, field
 from urllib.parse import parse_qsl, urlencode
 
 from pydantic import BaseModel, ConfigDict, SecretStr, ValidationInfo, model_validator
+from sqlglot import exp
 
 from helios_core.caller import Caller, IdentityError, IdentityMode
 from helios_core.engines.base import Engine, QueryResult
+from helios_core.engines.dialect import SqlDialect
 from helios_core.settings import ConnectionSettings, Settings
 
 LOGGER = logging.getLogger(__name__)
@@ -119,14 +121,38 @@ def _same_user(a: str, b: str) -> bool:
     return bool(a and b) and _short_name(a) == _short_name(b)
 
 
+class ImpalaDialect(SqlDialect):
+    """Impala SQL. SQLGlot has no Impala dialect; Hive is the closest, with two differences:
+    the approximate distinct count is NDV, and compiled queries drop Hive's backticks,
+    which Impala accepts but harvested names never need, to keep the SQL readable."""
+
+    def __init__(self) -> None:
+        super().__init__("hive", approx_distinct=True)
+
+    def count_distinct(self, expression: exp.Expression, *, approximate: bool = False) -> exp.Expression:
+        if approximate:
+            return exp.Anonymous(this="NDV", expressions=[expression])
+        return super().count_distinct(expression)
+
+    def render_query(self, expression: exp.Expression) -> str:
+        return super().render_query(expression).replace("`", "")
+
+
+IMPALA = ImpalaDialect()
+
+
 class ImpalaEngine(Engine):
     name = "impala"
-    sqlglot_dialect = "hive"   # SQLGlot has no dedicated Impala dialect; Hive is the closest and is post-processed by the compiler
+    sqlglot_dialect = "hive"
     identity_modes = frozenset(IdentityMode)
 
     def __init__(self, cfg: ImpalaConfig):
         super().__init__(cfg.identity)
         self.cfg = cfg
+
+    @classmethod
+    def from_connection(cls, connection: ConnectionSettings) -> ImpalaEngine:
+        return cls(impala_config_for(connection))
 
     def _connect(self, caller: Caller | None = None):
         from impala.dbapi import connect
@@ -202,3 +228,37 @@ class ImpalaEngine(Engine):
     def query_history(self, limit: int = 500) -> QueryResult:
         """Recent statements from Impala's query log, when the VW exposes it via the sys database."""
         return self.query(f"SELECT * FROM sys.impala_query_log ORDER BY start_time_utc DESC LIMIT {limit}", limit=limit)
+
+    # ------------------------------------------------------------ catalog and statistics
+    @property
+    def dialect(self) -> ImpalaDialect:
+        return IMPALA
+
+    def databases(self) -> list[str]:
+        return [r[0] for r in self.query("SHOW DATABASES", limit=None).rows]
+
+    def tables(self, database: str) -> list[str]:
+        return [r[0] for r in self.query(f"SHOW TABLES IN {database}", limit=None).rows]
+
+    def columns(self, database: str, table: str) -> list[dict]:
+        res = self.query(f"DESCRIBE {database}.{table}", limit=None)
+        return [{"name": r[0], "type": r[1], "comment": r[2] if len(r) > 2 else ""} for r in res.rows]
+
+    def row_count(self, database: str, table: str) -> int:
+        """Table stats when they are computed (cheap); COUNT(*) when they are missing (-1)."""
+        try:
+            res = self.query(f"SHOW TABLE STATS {database}.{table}", limit=None)
+            if "#Rows" in res.columns:
+                rows = [r[res.columns.index("#Rows")] for r in res.rows]
+                total = sum(int(x) for x in rows if x is not None and int(x) >= 0)
+                if total > 0 or all(int(x) == 0 for x in rows if x is not None):
+                    return total
+        except Exception:  # noqa: BLE001 - stats are optional
+            LOGGER.debug("no table stats for %s.%s; counting", database, table)
+        return super().row_count(database, table)
+
+    def recent_queries(self, limit: int) -> tuple[str, list[str]]:
+        res = self.query(
+            f"SELECT sql FROM sys.impala_query_log WHERE query_type = 'QUERY' "
+            f"ORDER BY start_time_utc DESC LIMIT {limit}", limit=limit)
+        return "sys.impala_query_log", [r[0] for r in res.rows if r[0]]

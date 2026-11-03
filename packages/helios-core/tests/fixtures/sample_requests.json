@@ -1,0 +1,28 @@
+{
+  "revenue_by_year": {"metrics": ["Store Sales Revenue"], "dimensions": ["d_year"]},
+  "filtered_and_ordered": {
+    "metrics": ["Store Sales Revenue"],
+    "dimensions": ["date_dim.d_year", "s_state"],
+    "filters": [["d_year", "=", 2001], ["i_category", "in", ["Music", "Books"]]],
+    "order_by": ["-Store Sales Revenue"],
+    "limit": 100
+  },
+  "snowflake_join": {
+    "metrics": ["Store Sales Revenue"],
+    "dimensions": ["Buy Potential", "ib_lower_bound"],
+    "filters": [["cd_gender", "=", "F"]]
+  },
+  "ad_hoc_measures": {
+    "measures": [
+      {"field": "ss_ext_sales_price", "agg": "sum", "alias": "sum_agg"},
+      {"field": "ss_customer_sk", "agg": "count_distinct", "alias": "customers"}
+    ],
+    "dimensions": ["d_year", "i_brand"],
+    "limit": 10
+  },
+  "pinned_relationship": {
+    "metrics": ["Catalog Sales Revenue"],
+    "dimensions": ["d_year"],
+    "via": {"date_dim": "catalog_sales__cs_ship_date_sk__date_dim"}
+  }
+}

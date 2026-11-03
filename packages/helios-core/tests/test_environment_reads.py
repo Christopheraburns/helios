@@ -1,4 +1,5 @@
-"""Library code reads the environment only through helios_core.settings (burndown 1.7).
+"""Library code reads the environment only through helios_core.settings, and the
+Workbench profile in helios_cloudera.workbench (burndowns 1.7 and 3.4).
 
 Every package under packages/ is scanned, so new libraries inherit the rule. The
 crawl code in helios_core/_pending moves out with helios-crawl and is exempt until then.
@@ -7,7 +8,10 @@ import ast
 from pathlib import Path
 
 PACKAGES = Path(__file__).resolve().parents[2]
-ALLOWED = {Path("helios-core/src/helios_core/settings.py")}
+ALLOWED = {
+    Path("helios-core/src/helios_core/settings.py"),
+    Path("helios-cloudera/src/helios_cloudera/workbench.py"),
+}
 EXEMPT_DIRS = {Path("helios-core/src/helios_core/_pending")}
 ENV_NAMES = {"environ", "environb", "getenv", "getenvb", "putenv", "unsetenv"}
 

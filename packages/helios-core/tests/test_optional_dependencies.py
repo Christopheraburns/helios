@@ -20,6 +20,7 @@ BASE = {"duckdb", "jsonschema", "platformdirs", "pydantic", "pydantic-settings",
 # The module each optional requirement installs, so the subprocess can block it.
 OPTIONAL_MODULES = {
     "httpx": "httpx",
+    "sqlalchemy": "sqlalchemy",
     "linkml-runtime": "linkml_runtime",
     "lancedb": "lancedb",
     "sentence-transformers": "sentence_transformers",
@@ -30,6 +31,7 @@ CLOUDERA_MODULES = ["helios_cloudera", "impala", "requests"]
 
 # Modules that are an optional feature: importing them without the extra names it.
 FEATURES = {
+    "helios_core.engines.sqlalchemy_engine": "sqlalchemy",
     "helios_core.llm": "llm",
     "helios_core.llm.client": "llm",
     "helios_core.ontology.parser": "ontology",
@@ -50,7 +52,7 @@ def test_the_base_dependencies_are_only_the_base():
 
 def test_every_extra_is_known_to_the_isolation_check():
     extras = _project()["optional-dependencies"]
-    assert {"llm", "ontology"} <= set(extras)
+    assert {"llm", "ontology", "sqlalchemy"} <= set(extras)
     assert "cloudera" not in extras  # helios-cloudera is its own package (3.3)
     assert {_name(r) for reqs in extras.values() for r in reqs} == set(OPTIONAL_MODULES)
 

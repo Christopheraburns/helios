@@ -3,7 +3,7 @@
 Run with: ``python -m apps.helios.console.metadata.setup``.
 """
 
-from helios_core.settings import Settings
+from helios_cloudera.workbench import WorkbenchSettings as Settings
 
 from .sqlite import SQLiteMetadataRepository
 

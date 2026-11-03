@@ -1,11 +1,25 @@
-"""DuckDB adapter for local development and tests: runs the same catalog/profiler code without a warehouse.
-Translates the few Impala idioms helios uses (backtick quoting, NDV, SHOW TABLES IN)."""
+"""DuckDB engine: the built-in plugin for local work and tests. It runs the same harvest,
+profile and compiled queries as a warehouse, rendered in DuckDB's dialect."""
 from __future__ import annotations
 
-import re
+from typing import TYPE_CHECKING
+
+from pydantic import BaseModel, ConfigDict
 
 from ..caller import Caller, IdentityMode
 from .base import Engine, QueryResult
+
+if TYPE_CHECKING:
+    from ..settings import ConnectionSettings
+
+
+class DuckDBOptions(BaseModel):
+    """Options of an ``engine = "duckdb"`` connection. ``path`` is a database file,
+    or ``:memory:`` (the default) for an empty in-process database."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = ":memory:"
 
 
 class DuckDBEngine(Engine):
@@ -19,22 +33,20 @@ class DuckDBEngine(Engine):
         import duckdb
         self.con = duckdb.connect(path)
 
-    def _translate(self, sql: str) -> str:
-        sql = sql.replace("`", '"')
-        sql = re.sub(r"\bNDV\(", "approx_count_distinct(", sql, flags=re.I)
-        m = re.match(r"\s*SHOW TABLES IN (\w+)\s*$", sql, flags=re.I)
-        if m:
-            return f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{m.group(1)}' ORDER BY 1"
-        m = re.match(r"\s*DESCRIBE (\w+)\.(\w+)\s*$", sql, flags=re.I)
-        if m:
-            return (f"SELECT column_name, data_type, '' FROM information_schema.columns "
-                    f"WHERE table_schema = '{m.group(1)}' AND table_name = '{m.group(2)}' ORDER BY ordinal_position")
-        if re.match(r"\s*SHOW TABLE STATS", sql, flags=re.I):
-            raise RuntimeError("no table stats in duckdb")
-        return sql
+    @classmethod
+    def from_connection(cls, connection: ConnectionSettings) -> DuckDBEngine:
+        options = DuckDBOptions.model_validate(connection.options)
+        return cls(options.path, connection.identity)
+
+    def databases(self) -> list[str]:
+        # information_schema lists every attached catalog's schemas (system, temp); keep this database's.
+        rows = self.query(
+            "SELECT DISTINCT schema_name FROM information_schema.schemata "
+            "WHERE catalog_name = current_database() ORDER BY 1", limit=None).rows
+        return [r[0] for r in rows if r[0] not in ("information_schema", "pg_catalog")]
 
     def query(self, sql: str, caller: Caller | None = None, *, limit: int | None = 1000) -> QueryResult:
-        cur = self.con.execute(self._translate(sql))
+        cur = self.con.execute(sql)
         cols = [d[0] for d in cur.description] if cur.description else []
         rows = cur.fetchmany(limit) if limit else cur.fetchall()
         return QueryResult(cols, [tuple(r) for r in rows])

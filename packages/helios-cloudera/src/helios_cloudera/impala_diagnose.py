@@ -5,7 +5,6 @@ import argparse
 from dataclasses import replace
 
 from helios_core.caller import Caller, IdentityMode
-from helios_core.settings import Settings
 
 from helios_cloudera.impala import (
     ImpalaAuthenticationError,
@@ -13,6 +12,7 @@ from helios_cloudera.impala import (
     ImpalaProxyDelegationError,
     impala_config,
 )
+from helios_cloudera.workbench import WorkbenchSettings
 
 
 def main() -> None:
@@ -28,7 +28,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    configuration = impala_config(Settings())
+    configuration = impala_config(WorkbenchSettings())
     if configuration is None:
         raise SystemExit(
             "configuration: failed (set IMPALA_HOST, WORKLOAD_USER, and "

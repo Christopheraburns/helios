@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from apps.helios.runtime import REPO as REPO_ROOT
-from helios_core.settings import Settings as HeliosSettings
+from helios_cloudera.workbench import WorkbenchSettings as HeliosSettings
 
 
 def source_snapshot(source: Any) -> dict[str, Any]:

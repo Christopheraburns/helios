@@ -47,7 +47,7 @@ from apps.helios.console.metadata import (
     EvaluationRun,
 )
 from helios_core.llm import llm_from_settings
-from helios_core.settings import Settings
+from helios_cloudera.workbench import WorkbenchSettings as Settings
 from apps.helios.console.conversation import (
     MCPClientConfig,
     ConversationService,

@@ -5,9 +5,11 @@ Values are resolved in this order, highest first:
 1. arguments to ``Settings(...)``
 2. ``HELIOS_*`` environment variables; sections nest with ``__``
    (``HELIOS_DATA_DIR``, ``HELIOS_CONNECTIONS__SALES__URL``, ``HELIOS_LLM__TIMEOUT_SECONDS``)
-3. the environment variables Helios has always read (``IMPALA_HOST``,
-   ``WORKLOAD_USER``, ``ANTHROPIC_API_KEY``, ``HELIOS_ROOT``, ...); see
-   ``ConventionalEnvironment``
+3. the conventional environment variables: ``HELIOS_ROOT`` and the LLM
+   ecosystem's names (``ANTHROPIC_API_KEY``, ``MISTRAL_API_KEY``, ...); see
+   ``ConventionalEnvironment``. A subclass adds a platform's variables here
+   through ``profile_sources`` (helios-cloudera's ``WorkbenchSettings`` reads
+   ``CDSW_*``, ``IMPALA_*``, ``WORKLOAD_*``, ``ATLAS_*`` and ``INFERENCE_*``)
 4. a config file: ``HELIOS_CONFIG``, else ``./helios.toml``, else
    ``[tool.helios]`` in ``./pyproject.toml``
 5. defaults; files live under the user's data directory
@@ -215,6 +217,12 @@ class Settings(BaseSettings):
         return self
 
     @classmethod
+    def profile_sources(cls, settings_cls: type[BaseSettings]) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Sources a subclass adds for its platform, after the conventional environment
+        and before the config file. Each returns plain values that Settings validates."""
+        return ()
+
+    @classmethod
     def settings_customise_sources(
         cls,
         settings_cls: type[BaseSettings],
@@ -227,6 +235,7 @@ class Settings(BaseSettings):
             init_settings,
             env_settings,
             ConventionalEnvironment(settings_cls),
+            *cls.profile_sources(settings_cls),
             _config_file_source(settings_cls),
         )
 
@@ -267,26 +276,19 @@ def _compact(values: dict[str, Any]) -> dict[str, Any]:
 
 
 class ConventionalEnvironment(PydanticBaseSettingsSource):
-    """The environment variables Helios read before Settings existed.
+    """Environment variables Helios reads without the ``HELIOS_`` nesting: ``HELIOS_ROOT``
+    (the data directory), ``HELIOS_LLM_TIMEOUT_SECONDS``, ``HELIOS_EVIDENCE_INDEX``,
+    ``HELIOS_EMBEDDING_MODEL``, and the LLM ecosystem's names.
 
-    Ecosystem names (``ANTHROPIC_API_KEY``, ``MISTRAL_API_KEY``) stay. The Cloudera
-    and Workbench names (``CDSW_PROJECT_DIR``, ``WORKLOAD_*``, ``IMPALA_*``,
-    ``ATLAS_*``, ``INFERENCE_*``) move to the helios-cloudera Workbench profile
-    (burndown 3.4). ``IMPALA_*`` becomes the ``default`` connection and ``ATLAS_*``
-    the ``default`` catalog, each only when complete, as before: a host, a user
-    and a password.
+    The Cloudera and Workbench names (``CDSW_*``, ``WORKLOAD_*``, ``IMPALA_*``,
+    ``ATLAS_*``, ``INFERENCE_*``) are read by helios-cloudera's Workbench profile.
     """
 
     def get_field_value(self, field: Any, field_name: str) -> tuple[Any, str, bool]:
         return None, field_name, False  # unused: __call__ builds the whole mapping
 
     def __call__(self) -> dict[str, Any]:
-        values: dict[str, Any] = _compact({"data_dir": self._data_dir()})
-        impala, atlas = self._impala(), self._atlas()
-        if impala:
-            values["connections"] = {DEFAULT: impala}
-        if atlas:
-            values["catalogs"] = {DEFAULT: atlas}
+        values: dict[str, Any] = _compact({"data_dir": _env("HELIOS_ROOT")})
         llm = self._llm()
         if llm:
             values["llm"] = llm
@@ -299,52 +301,12 @@ class ConventionalEnvironment(PydanticBaseSettingsSource):
         return values
 
     @staticmethod
-    def _data_dir() -> str | None:
-        if _env("HELIOS_ROOT"):
-            return _env("HELIOS_ROOT")
-        if _env("CDSW_PROJECT_DIR"):
-            return os.path.join(_env("CDSW_PROJECT_DIR"), "helios")
-        if any(_env(name) for name in ("CDSW_PROJECT_ID", "CDSW_ENGINE_ID", "CDSW_DOMAIN")):
-            return "/home/cdsw/helios"  # Workbench without CDSW_PROJECT_DIR: its project directory
-        return None
-
-    @staticmethod
-    def _impala() -> dict[str, Any] | None:
-        host, user, password = _env("IMPALA_HOST"), _env("WORKLOAD_USER"), _env("WORKLOAD_PASSWORD")
-        if not (host and user and password):
-            return None
-        return _compact({
-            "engine": "impala",
-            "host": host,
-            "user": user,
-            "password": password,
-            "port": _env("IMPALA_PORT"),
-            "database": _env("IMPALA_DATABASE"),
-            "http_path": _env("IMPALA_HTTP_PATH"),
-            "identity": "impersonate" if (_env("IMPALA_PROXY_DELEGATION") or "").lower() == "true" else None,
-        })
-
-    @staticmethod
-    def _atlas() -> dict[str, Any] | None:
-        base, user, password = _env("ATLAS_BASE"), _env("ATLAS_USER"), _env("ATLAS_PASS")
-        if not (base and user and password):
-            return None
-        return {
-            "catalog": "atlas",
-            "base_url": base,
-            "user": user,
-            "password": password,
-            "verify_ssl": (_env("ATLAS_VERIFY_SSL") or "true").lower() != "false",
-        }
-
-    @staticmethod
     def _llm() -> dict[str, Any]:
-        """The provider is LLM_PROVIDER, else whichever API key is set (anthropic,
-        then mistral), else an OpenAI-compatible endpoint if INFERENCE_BASE_URL is set."""
+        """The provider is LLM_PROVIDER, else whichever API key is set (anthropic, then
+        mistral). Otherwise it is an OpenAI-compatible endpoint, which a profile or the
+        ``HELIOS_LLM__*`` variables configure."""
         timeout = _compact({"timeout_seconds": _env("HELIOS_LLM_TIMEOUT_SECONDS")})
-        provider = (_env("LLM_PROVIDER") or (
-            "anthropic" if _env("ANTHROPIC_API_KEY") else "mistral" if _env("MISTRAL_API_KEY") else "openai"
-        )).lower()
+        provider = conventional_llm_provider()
         if provider == "anthropic":
             key = _env("ANTHROPIC_API_KEY")
             if not key:
@@ -358,11 +320,13 @@ class ConventionalEnvironment(PydanticBaseSettingsSource):
                 "provider": "mistral", "api_key": key,
                 "model": _env("MISTRAL_MODEL"), "base_url": _env("MISTRAL_BASE_URL"),
             })}
-        base = _env("INFERENCE_BASE_URL")
-        if not base:
-            return timeout
-        return {**timeout, **_compact({
-            "provider": "openai", "base_url": base,
-            "model": _env("INFERENCE_MODEL"),
-            "api_key": _env("INFERENCE_TOKEN") or _env("INFERENCE_API_KEY"),
-        })}
+        return timeout
+
+
+def conventional_llm_provider() -> str:
+    """The LLM provider the conventional variables choose: LLM_PROVIDER, else
+    anthropic or mistral when its key is set, else openai (an OpenAI-compatible
+    endpoint). A profile reads its own endpoint variables only for openai."""
+    return (_env("LLM_PROVIDER") or (
+        "anthropic" if _env("ANTHROPIC_API_KEY") else "mistral" if _env("MISTRAL_API_KEY") else "openai"
+    )).lower()

@@ -63,10 +63,11 @@ from helios_core import Caller, IdentityMode
 from helios_core.audit_sink import AuditRecord, AuditSink, record_safely, sql_fingerprint
 from helios_core.visibility import AllModels, ModelNotVisible, ModelVisibility, require_visible
 from apps.helios.console.identity import Principal, PrincipalKind
-from helios_cloudera.impala import impala_config
+from helios_cloudera.impala import IMPALA, impala_config
+from helios_core.engines.dialect import SqlDialect
 from apps.helios.console.metadata import SQLiteMetadataRepository, TraceSpan
 from helios_core.ossie import SemanticModel, build as build_ossie
-from helios_core.settings import Settings
+from helios_cloudera.workbench import WorkbenchSettings as Settings
 from apps.helios.console.tracing import sanitized, utcnow
 
 LOGGER = logging.getLogger(__name__)
@@ -114,7 +115,8 @@ _caller_context: ContextVar[MCPCaller | None] = ContextVar(
     "helios_mcp_caller", default=None
 )
 
-ENGINE_DIALECT = {"impala": "hive", "hive": "hive", "spark": "spark"}   # sqlglot write dialects
+# Dialects by engine name. "hive" kept the Impala rendering before dialect hooks existed (3.6).
+ENGINE_DIALECT = {"impala": IMPALA, "hive": IMPALA, "spark": SqlDialect("spark")}
 
 # ---------------------------------------------------------------------------- model store
 class ModelStore:

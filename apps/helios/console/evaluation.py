@@ -20,7 +20,7 @@ from apps.helios.console.conversation import (
 from helios_core import Caller, IdentityMode
 from apps.helios.console.authz import Principal
 from helios_cloudera.impala import impala_config
-from helios_core.settings import Settings
+from helios_cloudera.workbench import WorkbenchSettings as Settings
 from helios_cloudera.impala import ImpalaEngine
 from helios_core.llm import LLMClient
 from apps.helios.console.metadata import (

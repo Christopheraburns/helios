@@ -3,6 +3,8 @@ Profile: column statistics, key candidates and verified relationships.
 
 Everything here is deterministic. It produces the evidence the LLM stage reasons over,
 and on a conventionally named warehouse it finds most relationships on its own.
+Statements are built with SQLGlot and written in the engine's dialect, so profiling
+runs on any engine, approximating distinct counts where the database can.
 """
 from __future__ import annotations
 
@@ -10,11 +12,16 @@ import logging
 import re
 from datetime import datetime, timezone
 
+from sqlglot import exp
+
 from ..engines.base import Engine
 
 LOGGER = logging.getLogger(__name__)
 
 NUMERIC = ("int", "bigint", "smallint", "tinyint", "double", "float", "decimal", "real")
+# Types many databases cannot take MIN / MAX of.
+UNORDERED = ("boolean", "bool", "binary", "varbinary", "blob", "bytea", "json", "jsonb", "uuid",
+             "array", "map", "struct", "variant", "object", "geometry", "geography", "xml")
 KEY_SUFFIXES = ("_sk", "_id", "_key", "id")
 STOP_TOKENS = {"sk", "id", "key", "dim", "bill", "ship", "sold", "returned", "return", "refunded", "returning",
                "current", "first", "last", "start", "end", "open", "closed", "close", "creation", "access"}
@@ -44,22 +51,29 @@ def _tokens(name: str) -> list[str]:
 class Profiler:
     def __init__(self, engine: Engine, overlap_threshold: float = 0.95, max_pairs: int = 400):
         self.engine = engine
+        self.dialect = engine.dialect
         self.overlap_threshold = overlap_threshold
         self.max_pairs = max_pairs
 
     # ------------------------------------------------------------ column stats
+    def _query(self, select: exp.Expression) -> list[tuple]:
+        return self.engine.query(self.dialect.render(select)).rows
+
     def column_stats(self, db: str, table: str, columns: list[dict]) -> dict:
-        """One aggregate query per table: count, non-null count, NDV, min, max for every column."""
-        parts = ["COUNT(*) AS n_rows"]
+        """One aggregate query per table: count, non-null count, approximate distinct count,
+        min and max for every column. Values are read by position: some databases change
+        the case of unquoted aliases."""
+        d = self.dialect
+        keys, parts = ["n_rows"], [exp.Count(this=exp.Star())]
         for c in columns:
             n, t = c["name"], _base_type(c["type"])
-            parts.append(f"COUNT(`{n}`) AS `{n}__nn`")
-            parts.append(f"NDV(`{n}`) AS `{n}__ndv`")
-            if t not in ("boolean", "binary"):
-                parts.append(f"MIN(`{n}`) AS `{n}__min`")
-                parts.append(f"MAX(`{n}`) AS `{n}__max`")
-        res = self.engine.query(f"SELECT {', '.join(parts)} FROM {db}.{table}")
-        row = dict(zip(res.columns, res.rows[0]))
+            keys += [f"{n}__nn", f"{n}__ndv"]
+            parts += [exp.Count(this=d.column(n)), d.count_distinct(d.column(n), approximate=True)]
+            if t not in UNORDERED:
+                keys += [f"{n}__min", f"{n}__max"]
+                parts += [exp.Min(this=d.column(n)), exp.Max(this=d.column(n))]
+        select = exp.select(*(e.as_(f"c{i}") for i, e in enumerate(parts))).from_(d.table(f"{db}.{table}"))
+        row = dict(zip(keys, self._query(select)[0]))
         n_rows = int(row["n_rows"])
         stats = {}
         for c in columns:
@@ -78,7 +92,8 @@ class Profiler:
         for name, s in stats["columns"].items():
             if not (n and s["non_null"] == n and s["ndv"] >= n * 0.85 and name.lower().endswith(KEY_SUFFIXES)):
                 continue
-            exact = int(self.engine.query(f"SELECT COUNT(DISTINCT `{name}`) FROM {db}.{table}").rows[0][0])
+            d = self.dialect
+            exact = int(self._query(exp.select(d.count_distinct(d.column(name))).from_(d.table(f"{db}.{table}")))[0][0])
             s["ndv_exact"] = exact
             if exact == n:
                 out.append({"column": name, "confidence": 0.95 if name.lower().endswith(("_sk", "_id")) else 0.8})
@@ -163,10 +178,18 @@ class Profiler:
 
     def measure_overlap(self, c: dict) -> dict:
         """Fraction of distinct non-null FK values that exist in the PK column."""
-        sql = (f"SELECT COUNT(*) AS total, SUM(CASE WHEN b.`{c['to_column']}` IS NULL THEN 1 ELSE 0 END) AS unmatched "
-               f"FROM (SELECT DISTINCT `{c['from_column']}` AS k FROM {c['from']} WHERE `{c['from_column']}` IS NOT NULL) a "
-               f"LEFT JOIN {c['to']} b ON a.k = b.`{c['to_column']}`")
-        total, unmatched = self.engine.query(sql).rows[0]
+        d = self.dialect
+        fk = d.column(c["from_column"])
+        pk = exp.Column(this=d.identifier(c["to_column"]), table=exp.to_identifier("b"))  # the alias stays unquoted
+        values = (exp.select(fk.as_("k")).distinct().from_(d.table(c["from"]))
+                  .where(exp.not_(exp.Is(this=fk.copy(), expression=exp.null()))))
+        unmatched_row = exp.Case(ifs=[exp.If(this=exp.Is(this=pk.copy(), expression=exp.null()), true=exp.Literal.number(1))],
+                                 default=exp.Literal.number(0))
+        select = (exp.select(exp.Count(this=exp.Star()).as_("total"), exp.Sum(this=unmatched_row).as_("unmatched"))
+                  .from_(values.subquery("a"))
+                  .join(d.table(c["to"]).as_("b"), on=exp.EQ(this=exp.column("k", table="a"), expression=pk),
+                        join_type="left"))
+        total, unmatched = self._query(select)[0]
         total, unmatched = int(total or 0), int(unmatched or 0)
         return {**c, "distinct_values": total, "unmatched": unmatched,
                 "match_ratio": round((total - unmatched) / total, 4) if total else 0.0}
