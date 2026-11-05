@@ -55,7 +55,9 @@ class _Section(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-SECRET_OPTIONS = ("password", "token", "secret", "api_key")  # also as suffixes: ssl_token
+# Also as suffixes: ssl_token, client_secret, sas_token. account_key, connection_string and
+# credential are Azure's (adlfs); a connection string carries the account key.
+SECRET_OPTIONS = ("password", "token", "secret", "api_key", "account_key", "connection_string", "credential")
 
 
 def _is_secret(name: str) -> bool:
@@ -66,9 +68,8 @@ def _is_secret(name: str) -> bool:
 class _PluginSection(BaseModel):
     """A named entry that a plugin interprets. Core checks only which plugin; the
     plugin validates the rest (``options``) when it is used, so a config that names
-    a plugin which is not installed still loads. Secret-looking options
-    (password, token, secret, api_key, and url, which often embeds a password)
-    are kept as SecretStr."""
+    a plugin which is not installed still loads. Secret-looking options (those in
+    SECRET_OPTIONS, and url, which often embeds a password) are kept as SecretStr."""
 
     model_config = ConfigDict(extra="allow", frozen=True)
 

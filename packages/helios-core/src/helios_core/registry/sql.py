@@ -104,7 +104,9 @@ def _enable_sqlite_foreign_keys(dbapi_connection: Any, _record: Any) -> None:
 class SqlRegistry:
     def __init__(self, url: str, *, engine: sa.Engine | None = None):
         try:
-            self._engine = engine or sa.create_engine(url)
+            # pre-ping: a connection dropped by a failover or an idle timeout is replaced
+            # before use instead of failing the next call.
+            self._engine = engine or sa.create_engine(url, pool_pre_ping=True)
         except ModuleNotFoundError as exc:  # the database's driver is not installed
             if sa.make_url(url).get_backend_name() == "postgresql":
                 raise missing_extra("a Postgres registry", "postgres", exc) from exc

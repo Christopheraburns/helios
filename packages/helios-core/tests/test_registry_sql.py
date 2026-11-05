@@ -97,3 +97,24 @@ def test_the_command_upgrades_and_reports_the_schema(tmp_path, monkeypatch, caps
     assert "schema 0001_registry" in capsys.readouterr().out
     assert main([]) == 2
     assert Path(tmp_path / "cli.db").is_file()
+
+
+def test_the_registry_survives_its_connections_being_dropped(clean_postgres):
+    """A managed database's failover or idle timeout closes connections under the pool;
+    the registry replaces them instead of failing the next call (burndown 4.7)."""
+    if not POSTGRES:
+        pytest.skip("set HELIOS_TEST_POSTGRES to a Postgres URL to run against Postgres")
+    registry = SqlRegistry(POSTGRES)
+    registry.upgrade()
+    registry.save_data_source(DataSource("warehouse", "Warehouse", "impala", "default"))
+
+    admin = sa.create_engine(POSTGRES)
+    with admin.begin() as connection:
+        dropped = connection.execute(sa.text(
+            "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity "
+            "WHERE datname = current_database() AND pid <> pg_backend_pid() AND backend_type = 'client backend'"
+        )).scalar()
+    admin.dispose()
+
+    assert dropped >= 1
+    assert [d.id for d in registry.data_sources()] == ["warehouse"]

@@ -56,6 +56,11 @@ ozone = [
     "fsspec>=2024.6",     # ofs://, through Ozone's HttpFS (WebHDFS) gateway
     "requests>=2.32",
 ]
+# The backend conformance suite (helios_core.conformance), for testing a registry or
+# storage backend.
+testing = [
+    "pytest>=8.0",
+]
 # Searching crawled documents. Without these, crawls run and evidence search
 # reports that it is unavailable. sentence-transformers brings PyTorch.
 evidence = [

@@ -1,4 +1,6 @@
-"""Read access to discovery runs on the project filesystem (runs/<run_id>/*.json)."""
+"""Discovery runs: ``<run_id>/{harvest,profile,propose,review}.json`` per run, in an
+ArtifactStore's storage under ``runs/`` (local directory or object storage), or in a
+local runs directory."""
 from __future__ import annotations
 
 import json
@@ -7,11 +9,14 @@ import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+from helios_core.artifact_storage import ArtifactStorage, LocalStorage
+
 if TYPE_CHECKING:
     from helios_core.settings import Settings
 
 
 STAGES = ("harvest", "profile", "propose")
+DOCUMENTS = (*STAGES, "review")  # what a run directory may hold
 LIFECYCLE_STATUSES = (
     "queued",
     "running",
@@ -176,39 +181,67 @@ def _finite_number(value: Any) -> bool:
 
 
 class RunStore:
-    """Discovery runs on disk: <runs_dir>/<run_id>/{harvest,profile,propose,review}.json."""
+    """Discovery runs: ``<run_id>/<stage>.json`` under ``prefix`` in a storage.
 
-    def __init__(self, runs_dir: str | os.PathLike[str]):
-        self.runs_dir = str(runs_dir)
+    ``RunStore(path)`` is a local runs directory; ``ArtifactStore.runs`` (and
+    ``from_settings`` with ``[artifact_storage]``) keeps runs with the artifacts."""
+
+    def __init__(self, runs: str | os.PathLike[str] | ArtifactStorage, *, prefix: str = ""):
+        self.storage: ArtifactStorage = runs if hasattr(runs, "create") else LocalStorage(runs)
+        self.prefix = prefix.strip("/")
+        local = self.storage.local_path(self.prefix)
+        self.runs_dir: str | None = str(local) if local is not None else None  # None on object storage
+
+    def __repr__(self) -> str:
+        return f"RunStore({self.storage!r}, prefix={self.prefix!r})"
 
     @classmethod
     def from_settings(cls, settings: Settings) -> RunStore:
+        """With the artifacts when they are on object storage, else ``settings.runs_dir``."""
+        if settings.artifact_storage is not None:
+            from helios_core.artifacts import ArtifactStore
+
+            return ArtifactStore.from_settings(settings).runs
         return cls(settings.runs_dir)
 
+    def _key(self, run_id: str, name: str = "") -> str:
+        return "/".join(part for part in (self.prefix, run_id, name) if part)
+
+    def run_ids(self) -> list[str]:
+        """Every run, newest first (run ids sort by time)."""
+        return sorted((r for r in self.storage.list(self.prefix) if _valid_run_id(r)), reverse=True)
+
+    def latest_run_id(self) -> str | None:
+        ids = self.run_ids()
+        return ids[0] if ids else None
+
+    def write(self, run_id: str, stage: str, document: dict) -> None:
+        """Save one stage's output (``harvest``, ``profile``, ``propose`` or ``review``), replacing it."""
+        if stage not in DOCUMENTS:
+            raise ValueError(f"unknown run document {stage!r}")
+        if not _valid_run_id(run_id):
+            raise ValueError(f"invalid run_id: {run_id!r}")
+        self.storage.write_bytes(self._key(run_id, f"{stage}.json"),
+                                 (json.dumps(document, indent=2, default=str) + "\n").encode())
+
     def list_runs(self) -> list[dict]:
-        if not os.path.isdir(self.runs_dir):
-            return []
         out = []
-        for rid in sorted(os.listdir(self.runs_dir), reverse=True):
-            d = os.path.join(self.runs_dir, rid)
-            if not os.path.isdir(d):
-                continue
+        for rid in self.run_ids():
             item = self.detail(rid)
-            item["updated"] = datetime.fromtimestamp(
-                os.path.getmtime(d), tz=timezone.utc
-            ).strftime("%Y-%m-%d %H:%M UTC")
+            local = self.storage.local_path(self._key(rid))
+            if local is not None and local.is_dir():
+                updated = datetime.fromtimestamp(os.path.getmtime(local), tz=timezone.utc)
+            else:  # object storage keeps no directory times; the stages' own timestamps
+                updated = _parse_timestamp(item.get("completed_at") or item.get("started_at"))
+            item["updated"] = updated.strftime("%Y-%m-%d %H:%M UTC") if updated else ""
             out.append(item)
         return out
 
     def load(self, run_id: str, stage: str) -> dict | None:
-        if stage not in STAGES or not _valid_run_id(run_id):
-            return None
-        p = os.path.join(self.runs_dir, run_id, f"{stage}.json")
-        if not os.path.exists(p):
+        if stage not in DOCUMENTS or not _valid_run_id(run_id):
             return None
         try:
-            with open(p) as f:
-                value = json.load(f)
+            value = json.loads(self.storage.read_bytes(self._key(run_id, f"{stage}.json")))
         except (OSError, json.JSONDecodeError):
             return None
         return value if isinstance(value, dict) else None
@@ -469,7 +502,7 @@ class RunStore:
         h, p = self.load(run_id, "harvest"), self.load(run_id, "profile")
         s = {"id": run_id, "model_id": (h or {}).get("model_id") or (p or {}).get("model_id"),
              "harvest": None, "profile": None,
-             "propose": os.path.exists(os.path.join(self.runs_dir, run_id, "propose.json"))}
+             "propose": self.storage.exists(self._key(run_id, "propose.json"))}
         if h:
             s["harvest"] = {"at": h.get("harvested_at", ""), "engine": h.get("engine", ""), "databases": h.get("databases", []),
                             "tables": len(h.get("tables", [])), "columns": sum(len(t["columns"]) for t in h.get("tables", [])),

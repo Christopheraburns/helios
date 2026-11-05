@@ -1786,6 +1786,9 @@ postgres = [
 s3 = [
     { name = "s3fs" },
 ]
+testing = [
+    { name = "pytest" },
+]
 trino = [
     { name = "trino" },
 ]
@@ -1805,6 +1808,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2.9.0" },
     { name = "pydantic-settings", specifier = ">=2.6" },
+    { name = "pytest", marker = "extra == 'testing'", specifier = ">=8.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "requests", marker = "extra == 'ozone'", specifier = ">=2.32" },
     { name = "s3fs", marker = "extra == 's3'", specifier = ">=2024.6" },
@@ -1813,7 +1817,7 @@ requires-dist = [
     { name = "sqlglot", specifier = ">=27.0.0" },
     { name = "trino", marker = "extra == 'trino'", specifier = ">=0.330" },
 ]
-provides-extras = ["llm", "ontology", "postgres", "trino", "s3", "azure", "gcs", "ozone", "evidence"]
+provides-extras = ["llm", "ontology", "postgres", "trino", "s3", "azure", "gcs", "ozone", "testing", "evidence"]
 
 [[package]]
 name = "hf-xet"

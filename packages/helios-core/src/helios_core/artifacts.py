@@ -10,6 +10,7 @@ Layout, under the storage root:
     models/<model-id>/active/<sequence>.json                 the active-version log
     models/<model-id>/published/...                           a copy of the active revision, for
                                                               readers that predate the log
+    runs/<run-id>/{harvest,profile,propose,review}.json      discovery runs (``runs``)
 
 The active revision is the newest entry in the log. Activating creates the next entry
 only if it does not exist yet, so two writers cannot both move the pointer from the
@@ -67,6 +68,13 @@ class ArtifactStore:
 
     def __repr__(self) -> str:
         return f"ArtifactStore({self.storage!r})"
+
+    @property
+    def runs(self):
+        """The discovery runs kept with these artifacts, under ``runs/`` (helios_core.runs.RunStore)."""
+        from helios_core.runs import RunStore
+
+        return RunStore(self.storage, prefix="runs")
 
     @classmethod
     def from_settings(cls, settings: Settings) -> ArtifactStore:

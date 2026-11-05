@@ -186,10 +186,16 @@ def test_secrets_are_not_printed():
             "pg": {"engine": "sqlalchemy", "url": "postgresql://u:hunter3@db/x", "ssl_token": "t0k"},
         },
         llm={"provider": "anthropic", "api_key": "sk-1"},
+        artifact_storage={"location": "abfss://c@acct.dfs.core.windows.net/h", "account_key": "azk",
+                          "connection_string": "AccountKey=azc", "sas_token": "sv=sas", "client_secret": "cl-x9",
+                          "credential": "cr-x9", "secret": "s3s", "key": "AKIAPUBLICID"},
     )
-    for secret in ("hunter2", "hunter3", "t0k", "sk-1"):
+    for secret in ("hunter2", "hunter3", "t0k", "sk-1", "azk", "azc", "sv=sas", "cl-x9", "cr-x9", "s3s"):
         assert secret not in repr(s)
     assert s.connections["w"].password.get_secret_value() == "hunter2"
+    options = s.artifact_storage.storage_options                      # revealed for the filesystem only
+    assert (options["account_key"], options["connection_string"], options["key"]) == ("azk", "AccountKey=azc",
+                                                                                       "AKIAPUBLICID")
 
 
 def test_settings_are_immutable():

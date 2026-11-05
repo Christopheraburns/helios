@@ -30,6 +30,7 @@ OPTIONAL_MODULES = {
     "linkml-runtime": "linkml_runtime",
     "lancedb": "lancedb",
     "sentence-transformers": "sentence_transformers",
+    "pytest": "pytest",
 }
 
 # Also blocked: helios-cloudera and what it installs, which core must never import.
@@ -37,6 +38,7 @@ CLOUDERA_MODULES = ["helios_cloudera", "impala", "requests"]
 
 # Modules that are an optional feature: importing them without the extra names it.
 FEATURES = {
+    "helios_core.conformance": "testing",
     "helios_core.engines.trino_engine": "trino",
     "helios_core.llm": "llm",
     "helios_core.llm.client": "llm",
@@ -58,7 +60,7 @@ def test_the_base_dependencies_are_only_the_base():
 
 def test_every_extra_is_known_to_the_isolation_check():
     extras = _project()["optional-dependencies"]
-    assert {"azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"} <= set(extras)
+    assert {"azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "testing", "trino"} <= set(extras)
     assert "cloudera" not in extras  # helios-cloudera is its own package (3.3)
     assert {_name(r) for reqs in extras.values() for r in reqs} == set(OPTIONAL_MODULES)
 

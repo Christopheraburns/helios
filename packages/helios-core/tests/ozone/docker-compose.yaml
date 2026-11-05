@@ -1,0 +1,24 @@
+# A one-node Ozone 2.0 with HttpFS on 127.0.0.1:14000, for the ofs:// storage tests.
+# Usage: docs/storage.md, "Testing a backend".
+x-common: &common
+  image: apache/ozone:2.0.0
+  env_file: [docker-config]
+services:
+  scm:
+    <<: *common
+    environment:
+      ENSURE_SCM_INITIALIZED: /data/metadata/scm/current/VERSION
+    command: ["ozone", "scm"]
+  om:
+    <<: *common
+    environment:
+      ENSURE_OM_INITIALIZED: /data/metadata/om/current/VERSION
+      WAITFOR: scm:9876
+    command: ["ozone", "om"]
+  datanode:
+    <<: *common
+    command: ["ozone", "datanode"]
+  httpfs:
+    <<: *common
+    ports: ["127.0.0.1:14000:14000"]
+    command: ["ozone", "httpfs"]

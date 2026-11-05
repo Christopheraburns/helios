@@ -66,6 +66,44 @@ jobs:
         env:
           HELIOS_TEST_TRINO: localhost:8080
 
+  # The backend conformance suite on shared backends (burndown 4.6): the registry on
+  # Postgres and the artifact store on S3. The test job above runs the same suite on
+  # SQLite and a local directory. S3 is a moto server: MinIO no longer publishes images.
+  storage:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: helios
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+      s3:
+        image: motoserver/moto:5.2.5
+        ports: ["5000:5000"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: >-
+          uv run pytest -q -rs
+          packages/helios-core/tests/test_registry.py
+          packages/helios-core/tests/test_registry_sql.py
+          packages/helios-core/tests/test_artifact_storage.py
+          packages/helios-core/tests/test_conformance.py
+        env:
+          HELIOS_TEST_POSTGRES: postgresql+psycopg://postgres:helios@localhost:5432/postgres
+          HELIOS_TEST_S3: http://localhost:5000
+          HELIOS_TEST_S3_KEY: helios
+          HELIOS_TEST_S3_SECRET: helios-secret
+
   # helios-cloudera installed from wheels beside a base helios-core (burndown 3.3):
   # its entry points register and its tests pass without the workspace.
   cloudera-install:
