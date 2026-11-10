@@ -66,10 +66,10 @@ moves; it is not kept deployable (decision 9).
 | 7 helios-mcp (local stdio) | 5 | 2 | A local agent lists tools and runs a query on the sample model |
 | D Daedalus pack (other repo) | 5 | 3.5 | A Daedalus MCP call runs `run_query` as the real user |
 | S Talk-to-data skill | 6 | 1.7 | Skill validates and runs against helios-mcp and Daedalus |
-| 8 Retire the monolith | 5 | 2.75 | `apps/helios` holds only the crawler; all tests live in packages |
+| 8 Retire the monolith | 6 | 3.75 | `apps/helios` holds only the crawler; all tests live in packages |
 | 9 General-use release | 9 | 5.75 | Quickstart runs verbatim in CI; on PyPI; Workbench CI job green |
 | 10 helios-crawl (deferred) | 9 | 7.5 | Evidence tools appear only when helios-crawl is installed |
-| **Total** | **97** | **~61.75** | |
+| **Total** | **98** | **~62.75** | |
 
 ---
 
@@ -194,10 +194,11 @@ moves; it is not kept deployable (decision 9).
 ## Phase 8 — Retire the monolith
 
 - [ ] **8.1** Sort `apps/helios/tests`: behaviour of library code that is still tested only there moves to the package tests or root `tests/integration`; tests of the console routes, UI static server, Workbench launchers, MCP transport and legacy agent are deleted with the app. Crawler tests stay for Phase 10. — 1d
-- [ ] **8.2** Delete `apps/helios` except `crawler/` (Phase 10 moves it): console, MCP server, `runtime.py`, launchers, and the UI and graph gateway unless Q2 keeps them as examples. Delete `jobs/` (replaced by the `helios` command) and `runtime/` (host apps own their images); keep `scripts/` only where it still applies to the libraries. — 0.5d
+- [ ] **8.2** Delete `apps/helios` except `crawler/` (Phase 10 moves it): console, MCP server, `runtime.py`, launchers, the React UI and the Memgraph graph gateway (Q2: the basic viewer of 8.6 replaces the UI, built on the libraries, so none of it is kept). Delete `jobs/` (replaced by the `helios` command) and `runtime/` (host apps own their images); keep `scripts/` only where it still applies to the libraries. — 0.5d
 - [ ] **8.3** Delete core code that only the old apps used: `tracing.py` / `TraceRecorder`, and anything left over from 2.6 and 4.1. — 0.5d
 - [ ] **8.4** The root project stops installing `apps/` (a plain workspace root); `README.md` and `MONOREPO.md` describe the libraries and how a host installs them. — 0.25d
 - [ ] **8.5** CI as a per-package matrix: ruff + mypy + pytest per package, import-linter, integration suite on PR, nightly against Impala; `CODEOWNERS`; tags `helios-<pkg>/vX.Y.Z`. — 0.5d
+- [ ] **8.6** `examples/viewer`, a very basic read-only UI (Q2): one static HTML/JS page with no build step, drawing graphs with a library loaded from a CDN, served by a short Python script that uses only the public library APIs (no console, no Memgraph). Three views: the semantic model (a published Ossie revision from the `ArtifactStore`: datasets as nodes, relationships as edges, fields and metrics on each dataset); the ontology graph (`helios_core.ontology.OntologyGraph`); and a query's path (the compiler's `Compiled`: its fact, joins and columns, drawn over the semantic model). Nothing in it publishes or activates. An example, not a published package; a smoke test serves it on the DuckDB sample. — 1d
 
 **Gate:** `apps/helios` holds only the crawler until Phase 10; every remaining test lives in a package or `tests/integration`.
 
@@ -239,7 +240,7 @@ moves; it is not kept deployable (decision 9).
 | # | Question | Blocks |
 |---|---|---|
 | Q1 | Does the target CDW Virtual Warehouse accept JWTs from the identity provider in front of Daedalus? | `token` mode in 2.2 and D.5 |
-| Q2 | Does anyone need the React UI or the Memgraph graph gateway as an example host, or are they deleted with `apps/helios`? | 8.2 |
+| Q2 | ~~Does anyone need the React UI or the Memgraph graph gateway as an example host, or are they deleted with `apps/helios`?~~ Answered: keep a very basic UI to show the graphs, as an example in the repo: a static page with no build step, read-only, showing the semantic model (Ossie), the ontology graph and a query's path (8.6). The React UI and the graph gateway are deleted (8.2). | 8.2, 8.6 |
 | Q3 | Apache-2.0 for all packages, or a different grant for helios-serve? | 0.3, 9.5 |
 | Q6 | Is Daedalus's `jwt.sub` the same string as the Workbench / Ranger username? | `impersonate` mode in D.5 |
 | Q7 | ~~Which object stores must the "active version" pointer support?~~ Answered: S3, ADLS, GCS and Ozone (ofs://), all built on one primitive, create-if-absent (4.3). | 4.3 |
