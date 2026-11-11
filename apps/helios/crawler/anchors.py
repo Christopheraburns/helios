@@ -1,7 +1,7 @@
 """Record anchors: finding the one warehouse row a case is about (step 8).
 
 An *anchor* is a class whose row a group of documents describes, as the mapping
-declares it (``helios_core.ontology.mapping.Anchor``): how values found in the
+declares it (``helios_cortex.ontology.mapping.Anchor``): how values found in the
 documents constrain that row (lookups, and the entities the row's foreign keys
 name), its date, the classes living on joined tables, and the related records
 joined to it. Nothing here knows which classes those are.
@@ -31,8 +31,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
-from helios_core.index import ids
-from helios_core.ontology.mapping import (
+from helios_cortex.index import ids
+from helios_cortex.ontology.mapping import (
     Anchor,
     ClassIdentifiers,
     DateSource,

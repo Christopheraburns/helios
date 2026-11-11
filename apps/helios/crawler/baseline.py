@@ -18,8 +18,8 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from helios_core.index import IndexStore
-from helios_core.index.records import CrawlRunRecord
+from helios_cortex.index import IndexStore
+from helios_cortex.index.records import CrawlRunRecord
 
 FORMAT = 1
 # table -> the columns that are not part of what the crawl found

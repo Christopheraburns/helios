@@ -3,10 +3,10 @@
 import pytest
 from apps.helios.crawler import tryout
 from crawler_samples import RETAIL_SETTINGS
-from helios_core.index import runs
-from helios_core._pending import browse
-from helios_core.index.records import SegmentRecord
-from helios_core.index.store import duckdb_index_store
+from helios_cortex.index import runs
+from helios_cortex._pending import browse
+from helios_cortex.index.records import SegmentRecord
+from helios_cortex.index.store import duckdb_index_store
 
 TEXT = (
     "Return # RMA-3056773 and RMA-3056773 again. The refund was not approved. "

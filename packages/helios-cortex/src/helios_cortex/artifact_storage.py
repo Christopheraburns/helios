@@ -27,7 +27,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
-from helios_core._optional import missing_extra
+from helios_cortex._optional import missing_extra
 
 # URL scheme -> (fsspec protocol, extra)
 SCHEMES = {

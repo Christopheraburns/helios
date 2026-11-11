@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 from apps.helios.graph import index, memgraph_process
 from apps.helios.tests.test_crawler_evaluate import ONT, build_run
-from helios_core.index.store import duckdb_index_store
+from helios_cortex.index.store import duckdb_index_store
 
 RUN = "crawl_test"
 

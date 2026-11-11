@@ -1,11 +1,14 @@
 """
 Propose: turn harvest + profile evidence into a draft — dataset descriptions, column roles,
 glossary term proposals, relationship decisions and metric candidates — using an LLM for the
-judgement calls. Every element carries a confidence and, where the LLM decided, a rationale.
+judgement calls. Every element carries a confidence and a rationale: the LLM's for what it
+decided, and one written from the evidence for relationships the profiler verified. A
+rationale is None when the LLM gave none.
 
 The output is helios's own draft schema (propose.json). Conversion to the Ossie
-document format is a separate step (helios_core.ossie) so the draft can also feed the
-glossary and ontology layers.
+document format is a separate step (helios_model.build) so the draft can also feed the
+glossary and ontology layers. ``ModelProposer`` is the worker; ``helios_model.Proposer``
+(``discovery``) is the facade, which returns the draft as typed ``Proposals``.
 """
 from __future__ import annotations
 
@@ -16,7 +19,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..llm import LLMClient
+    from helios_cortex.llm import LLMClient
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,7 +43,9 @@ Rules:
   column is a measure, a time, or a dimension a business user would ask about. Set "term" to null for keys,
   system columns and obscure attributes. Reuse the same term name for the same concept across tables
   (e.g. every quantity column is "Quantity sold").
-- confidence is 0-1 for the table and for each column, reflecting how sure you are of the role and meaning."""
+- confidence is 0-1 for the table and for each column, reflecting how sure you are of the role and meaning.
+- rationale is one short sentence for the table and for each column naming the evidence behind its kind or role
+  (statistics, names, linked glossary terms, relationships), e.g. "Unique, never null and referenced by store_sales"."""
 
 SYSTEM_RELATIONSHIPS = """You are a data architect. For each candidate relationship below, the data shows that every value
 in the "from" column exists in the "to" column, but the column name does not obviously point at the target table.
@@ -53,12 +58,13 @@ You are given the fact tables with their measure columns and descriptions, and a
 Propose the metrics a business user would ask for. For each, return:
   name (sentence case), description, dataset (the fact table), expression (an aggregate SQL expression over that
   table's columns, e.g. "SUM(ss_net_paid)" or "SUM(ss_net_profit) / SUM(ss_net_paid)"),
-  source ("query_history" if the aggregation appears in the queries, else "derived"), confidence (0-1).
+  source ("query_history" if the aggregation appears in the queries, else "derived"), confidence (0-1),
+  rationale (one short sentence: why a business user needs it, or which queries compute it).
 Include the obvious totals for every measure that represents money or quantity, ratios that are standard for the domain,
 and anything the query history shows people computing. Do not invent columns. Return {"metrics": [...]}."""
 
 
-class Proposer:
+class ModelProposer:
     def __init__(self, llm: LLMClient, max_queries: int = 40, query_chars: int = 1500):
         self.llm = llm
         self.max_queries = max_queries
@@ -104,8 +110,9 @@ class Proposer:
         user = json.dumps({"table": key, "row_count": prof.get("stats", {}).get("row_count"),
                            "primary_key_candidates": sorted(pks), "columns": cols,
                            "referenced_by": [f"{r['from']}.{r['from_column']}" for r in rels if r["to"] == key]}, default=str)
-        user += ('\n\nReturn {"name": ..., "kind": ..., "description": ..., "confidence": ..., '
-                 '"fields": [{"column": ..., "name": ..., "role": ..., "description": ..., "term": {...}|null, "confidence": ...}]} '
+        user += ('\n\nReturn {"name": ..., "kind": ..., "description": ..., "confidence": ..., "rationale": ..., '
+                 '"fields": [{"column": ..., "name": ..., "role": ..., "description": ..., "term": {...}|null, '
+                 '"confidence": ..., "rationale": ...}]} '
                  'with one entry in fields for every column, in the same order.')
         out = self.llm.complete_json(SYSTEM_TABLE, user)
         fields_by_col = {f.get("column"): f for f in out.get("fields", []) if isinstance(f, dict)}
@@ -117,10 +124,11 @@ class Proposer:
                            "description": f.get("description") or "", "refers_to": c["refers_to"],
                            "glossary_terms": [t["name"] for t in c["glossary_terms"]],
                            "proposed_term": f.get("term") if isinstance(f.get("term"), dict) and not c["glossary_terms"] else None,
-                           "confidence": _conf(f.get("confidence"), 0.6)})
+                           "confidence": _conf(f.get("confidence"), 0.6), "rationale": _text(f.get("rationale"))})
         return {"table": key, "name": out.get("name") or table["table"], "kind": out.get("kind") or "other",
                 "description": out.get("description") or "", "primary_key": sorted(pks),
-                "confidence": _conf(out.get("confidence"), 0.6), "fields": fields}
+                "confidence": _conf(out.get("confidence"), 0.6), "rationale": _text(out.get("rationale")),
+                "fields": fields}
 
     # ------------------------------------------------------------ stage 2: suggested relationships
     def decide_relationships(self, suggested: list[dict], datasets: list[dict]) -> list[dict]:
@@ -137,7 +145,7 @@ class Proposer:
             d = decisions.get(i, {})
             result.append({**c, "source": "llm_confirmed" if d.get("accept") else "llm_rejected",
                            "accepted": bool(d.get("accept")), "confidence": _conf(d.get("confidence"), 0.5),
-                           "reason": d.get("reason", "")})
+                           "reason": d.get("reason", ""), "rationale": _text(d.get("reason"))})
         return result
 
     # ------------------------------------------------------------ stage 3: metrics
@@ -156,7 +164,7 @@ class Proposer:
             if isinstance(m, dict) and m.get("dataset") in valid_tables and m.get("expression"):
                 metrics.append({"name": m.get("name", ""), "description": m.get("description", ""), "dataset": m["dataset"],
                                 "expression": m["expression"], "source": m.get("source", "derived"),
-                                "confidence": _conf(m.get("confidence"), 0.5)})
+                                "confidence": _conf(m.get("confidence"), 0.5), "rationale": _text(m.get("rationale"))})
         return metrics
 
     # ------------------------------------------------------------ all together
@@ -171,7 +179,8 @@ class Proposer:
 
         LOGGER.info("deciding %d suggested relationships", len(profile.get("suggested_relationships", [])))
         decided = self.decide_relationships(profile.get("suggested_relationships", []), datasets)
-        relationships = [{**r, "source": "profile", "accepted": True, "confidence": 0.95} for r in rels] + decided
+        relationships = [{**r, "source": "profile", "accepted": True, "confidence": 0.95,
+                          "rationale": _profile_rationale(r)} for r in rels] + decided
 
         LOGGER.info("proposing metrics")
         metrics = self.propose_metrics(datasets, harvest.get("queries", {}).get("statements", []))
@@ -187,11 +196,26 @@ class Proposer:
                                              "columns": [], "confidence": f["confidence"]})
                     e["columns"].append(f"{d['table']}.{f['column']}")
                     e["confidence"] = max(e["confidence"], f["confidence"])
+        for e in terms.values():
+            e["rationale"] = f"Proposed for {', '.join(e['columns'])}, which no glossary term describes."
 
         return {"proposed_at": datetime.now(timezone.utc).isoformat(),
                 "llm": {"provider": self.llm.provider, "model": self.llm.model, "calls": self.llm.calls},
                 "datasets": datasets, "relationships": relationships, "metrics": metrics,
                 "glossary_terms": sorted(terms.values(), key=lambda x: x["name"])}
+
+
+def _profile_rationale(r: dict) -> str:
+    """Why the profiler's relationship holds, from its evidence: the data and the names."""
+    share = r.get("match_ratio")
+    data = (f"{share:.0%} of the {r['distinct_values']} distinct values" if "distinct_values" in r and share is not None
+            else "the values")
+    return (f"{data} of {r['from']}.{r['from_column']} are found in {r['to']}.{r['to_column']}, "
+            "and the column name points at that table.")
+
+
+def _text(v) -> str | None:
+    return v.strip() if isinstance(v, str) and v.strip() else None
 
 
 def _conf(v, default: float) -> float:

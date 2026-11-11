@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("linkml_runtime", reason="needs helios-core[ontology]")
+pytest.importorskip("linkml_runtime", reason="needs helios-cortex[ontology]")
 
-from helios_core.ontology.parser import parse  # noqa: E402
+from helios_cortex.ontology.parser import parse  # noqa: E402
 
 # Paths: relative to the repo root (two levels up from tests/).
 REPO_ROOT = Path(__file__).resolve().parents[3]

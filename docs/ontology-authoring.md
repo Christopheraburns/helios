@@ -19,9 +19,9 @@ What already exists and should be reused:
 
 | Piece | Where | Reuse |
 |---|---|---|
-| Parse, check, publish, activate, immutable versions | `helios_core/ontology/parser.py`, `console/ontology.py`, `helios_index.ontology_versions` | Unchanged; drafts feed it |
-| Proposal then human review | `helios_core/propose`, `helios_core/review.py`, the review UI | The interaction pattern and UI components |
-| LLM client, provider settings, token reporting | `helios_core/llm` | All model calls |
+| Parse, check, publish, activate, immutable versions | `helios_cortex/ontology/parser.py`, `console/ontology.py`, `helios_index.ontology_versions` | Unchanged; drafts feed it |
+| Proposal then human review | `helios_model.propose`, `helios_model.review`, the review UI | The interaction pattern and UI components |
+| LLM client, provider settings, token reporting | `helios_cortex/llm` | All model calls |
 | Grounded LLM extraction with a reply cache | `apps/helios/crawler/llm_arm.py` | Evidence gathering, caching, provenance |
 | Tool-calling assistant loop with traces | `console/assistant.py` | The authoring copilot |
 | Crawl index and scoring harness | `helios_index.*`, `crawler/evaluate.py` | Evidence for proposals; measuring a draft |
@@ -122,12 +122,12 @@ Browser: Ontology page, new "Drafts" workbench
    ▼
 Helios API ── /api/v1/ontology/drafts/...        (new router, in the existing API)
    │            permissions: ontology.edit; every call audited
-   ├── helios_core/ontology/authoring/    draft model, operations, compiler, validators, diff
-   ├── helios_core/ontology/suggest/      evidence gatherers, prompts, grounding, reply cache
+   ├── helios_cortex/ontology/authoring/    draft model, operations, compiler, validators, diff
+   ├── helios_cortex/ontology/suggest/      evidence gatherers, prompts, grounding, reply cache
    ├── metadata store                     drafts, changes, suggestion runs   (new migration)
    ├── artifact store                     compiled LinkML and mapping per draft revision
    ├── helios_index (lakehouse)           published versions (as today); crawl evidence (read)
-   ├── helios_core.llm                    short assists, inside the request
+   ├── helios_cortex.llm                    short assists, inside the request
    └── Workbench Jobs
          helios-ontology-suggest          long suggestion runs over the model and documents
          helios-crawl                     trial crawl with a draft's compiled version

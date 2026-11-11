@@ -3,13 +3,13 @@
 import itertools
 from pathlib import Path
 
-import helios_core.index
+import helios_cortex.index
 import pytest
-from helios_core.index import RUN_TABLES, TABLES, ddl_statements, ids, records, runs
-from helios_core.index.__main__ import impala_ddl
-from helios_core.index.store import duckdb_index_store
+from helios_cortex.index import RUN_TABLES, TABLES, ddl_statements, ids, records, runs
+from helios_cortex.index.__main__ import impala_ddl
+from helios_cortex.index.store import duckdb_index_store
 
-DDL_FILE = Path(helios_core.index.__file__).parent / "schema_impala.sql"
+DDL_FILE = Path(helios_cortex.index.__file__).parent / "schema_impala.sql"
 RUN = "crawl_test"
 
 
@@ -23,7 +23,7 @@ def index():
 def test_ddl_file_is_current():
     assert DDL_FILE.read_text() == impala_ddl(), (
         "schema_impala.sql is stale; regenerate with "
-        "`uv run python -m helios_core.index ddl > packages/helios-core/src/helios_core/index/schema_impala.sql`"
+        "`uv run python -m helios_cortex.index ddl > packages/helios-cortex/src/helios_cortex/index/schema_impala.sql`"
     )
 
 
@@ -141,7 +141,7 @@ def test_every_table_round_trips_including_json_columns(index):
 
 
 def test_inserts_are_batched(index, monkeypatch):
-    import helios_core.index.store as store_module
+    import helios_cortex.index.store as store_module
 
     statements = []
     original = index._execute
@@ -207,7 +207,7 @@ def test_ids_are_stable_and_distinct():
 
 
 def test_no_column_name_is_an_impala_reserved_word():
-    from helios_core.index.tables import IMPALA_RESERVED, columns
+    from helios_cortex.index.tables import IMPALA_RESERVED, columns
 
     for table, model in TABLES.items():
         clashes = {name for name, _ in columns(model)} & IMPALA_RESERVED

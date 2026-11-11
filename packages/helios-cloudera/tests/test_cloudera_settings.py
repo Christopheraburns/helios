@@ -11,9 +11,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from helios_core.artifacts import ArtifactStore
-from helios_core.runs import RunStore
-from helios_core.settings import Settings
+from helios_cortex.artifacts import ArtifactStore
+from helios_cortex.runs import RunStore
+from helios_cortex.settings import Settings
 
 from helios_cloudera.atlas import atlas_config, atlas_config_for
 from helios_cloudera.impala import impala_config, impala_config_for
@@ -21,8 +21,8 @@ from helios_cloudera.workbench import WorkbenchSettings
 
 PREFIXES = ("HELIOS_", "IMPALA_", "WORKLOAD_", "ATLAS_", "INFERENCE_", "ANTHROPIC_", "MISTRAL_", "CDSW_")
 
-# The LLM client comes with helios-core[llm].
-needs_llm = pytest.mark.skipif(find_spec("httpx") is None, reason="needs helios-core[llm]")
+# The LLM client comes with helios-cortex[llm].
+needs_llm = pytest.mark.skipif(find_spec("httpx") is None, reason="needs helios-cortex[llm]")
 
 JDBC = "jdbc:impala://vw.example.com:443/default;AuthMech=12;transportMode=http;httpPath=cliservice/vw;ssl=1"
 
@@ -170,7 +170,7 @@ EXPECTED = {'workbench': {'metadata_db': '/home/cdsw/helios/state/helios.db',
 @needs_llm
 @pytest.mark.parametrize("name", ENVIRONMENTS)
 def test_parity_with_the_code_before_settings(monkeypatch, name):
-    from helios_core.llm import llm_from_settings
+    from helios_cortex.llm import llm_from_settings
 
     for key, value in ENVIRONMENTS[name].items():
         monkeypatch.setenv(key, value)

@@ -3,7 +3,7 @@
 This module defines the Iceberg table schemas for:
 - helios_ds.*: Generation artifacts and metadata
 - helios_ground_truth.*: Hidden answer key
-- helios_index.*: what the Helios crawler discovers (helios_core.index; never written here)
+- helios_index.*: what the Helios crawler discovers (helios_cortex.index; never written here)
 """
 
 from typing import Any, Dict, List, Optional
@@ -316,5 +316,5 @@ class ExpectedResultRecord(BaseModel):
 # helios_index.* (crawler-discovered knowledge)
 # ============================================================================
 # Written only by the Helios crawler, never by the generator. The record models
-# live in packages/helios-core/src/helios_core/index/records.py; the generator creates the ground
+# live in packages/helios-cortex/src/helios_cortex/index/records.py; the generator creates the ground
 # truth, the crawler discovers what it can, and the gap is measured.

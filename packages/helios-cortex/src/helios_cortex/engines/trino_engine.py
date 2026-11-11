@@ -112,21 +112,21 @@ class TrinoEngine(Engine):
     def ping(self) -> bool:
         return self.query("SELECT 1").rows == [(1,)]
 
-    def row_count(self, database: str, table: str) -> int:
+    def row_count(self, database: str, table: str, *, caller: Caller | None = None) -> int:
         """The connector's statistics when it has them (SHOW STATS); COUNT(*) otherwise."""
         try:
-            stats = self.query(f"SHOW STATS FOR {self.dialect.render(self.dialect.table(f'{database}.{table}'))}", limit=None)
+            stats = self.query(f"SHOW STATS FOR {self.dialect.render(self.dialect.table(f'{database}.{table}'))}", caller, limit=None)
             summary = [r for r in stats.rows if r[0] is None]  # the row without a column name
             count = summary[0][stats.columns.index("row_count")] if summary else None
             if count is not None:
                 return int(count)
         except Exception:  # noqa: BLE001 - statistics are optional
             pass
-        return super().row_count(database, table)
+        return super().row_count(database, table, caller=caller)
 
-    def recent_queries(self, limit: int) -> tuple[str, list[str]]:
+    def recent_queries(self, limit: int, *, caller: Caller | None = None) -> tuple[str, list[str]]:
         """Finished queries the coordinator still remembers (system.runtime.queries)."""
         q = (exp.select("query").from_("system.runtime.queries")
              .where(exp.column("state").eq(exp.Literal.string("FINISHED")))
              .order_by(exp.Ordered(this=exp.column("created"), desc=True)).limit(limit))
-        return "system.runtime.queries", [r[0] for r in self.query(self.dialect.render(q), limit=limit).rows if r[0]]
+        return "system.runtime.queries", [r[0] for r in self.query(self.dialect.render(q), caller, limit=limit).rows if r[0]]

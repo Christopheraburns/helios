@@ -80,7 +80,7 @@ flowchart TB
             C["Helios console<br/><i>Application</i><br/>glossary · semantic model · ontology · runs"]
             M["MCP server<br/><i>Application</i><br/>search · describe · compile · execute"]
             J["Discovery jobs<br/><i>Jobs</i><br/>harvest → profile → propose"]
-            CORE["helios_core (shared Python package)<br/>atlas · catalog · profiler · glossary · ossie · ontology · compiler · llm"]
+            CORE["helios_cortex (shared Python package)<br/>atlas · catalog · profiler · glossary · ossie · ontology · compiler · llm"]
             C --> CORE
             M --> CORE
             J --> CORE
@@ -126,20 +126,21 @@ flowchart TB
 | `run_query(...)` | Compile and execute, returning rows |
 | `explain_lineage(entity)` | Atlas lineage for the underlying columns |
 
-**`helios_core`** — the shared library every workload imports. Jobs and Applications are thin entry points; all logic lives here.
+**`helios_cortex`** — the shared library every workload imports. Jobs and Applications are thin entry points; all logic lives here.
 
 | Package | Responsibility |
 |---------|----------------|
-| `helios_core.catalog` | HMS metadata: databases, tables, columns, partitions; the glossary interface catalog plugins implement |
-| `helios_core.engines` | The `Engine` interface and the built-in DuckDB engine: connection, query execution, dialect name for the compiler |
-| `helios_core.profiler` | Sampling queries and statistics used as evidence |
-| `helios_core.glossary` | Glossary generation and CSV import/export |
-| `helios_core.ossie` | Build, validate (against `osi-schema.json`), diff and version Ossie models |
-| `helios_core.ontology` | Ontology model, inference from the other layers, serialization |
-| `helios_core.compiler` | Ossie model → join graph → canonical SQL AST → engine dialect via SQLGlot; engine-specific quirks live in the adapter, not here |
+| `helios_cortex.catalog` | HMS metadata: databases, tables, columns, partitions; the glossary interface catalog plugins implement |
+| `helios_cortex.engines` | The `Engine` interface and the built-in DuckDB engine: connection, query execution, dialect name for the compiler |
+| `helios_cortex.glossary` | Glossary generation and CSV import/export |
+| `helios_cortex.ossie` | The Ossie model in memory (`SemanticModel`), validation against the vendored schema, YAML output |
+| `helios_cortex.ontology` | Ontology model, inference from the other layers, serialization |
+| `helios_cortex.compiler` | Ossie model → join graph → canonical SQL AST → engine dialect via SQLGlot; engine-specific quirks live in the adapter, not here |
+
+**`helios_model`** (`packages/helios-model`) — model discovery: `harvest`, `profile` (statistics, keys and verified foreign keys), `propose` (the LLM stage), `review`, `build` (a reviewed proposal as an Ossie document), `publication` and `graph`. See its README.
 
 **`helios_cloudera`** (`packages/helios-cloudera`) — the Cloudera plugins: the Impala engine (`helios_cloudera.impala`), the Atlas REST client (`helios_cloudera.atlas`: glossary CRUD, term assignment, entity search, lineage) and the Impala-backed index store (`helios_cloudera.index`).
-| `helios_core.llm` | Client for Cloudera AI Inference with schema-constrained structured output |
+| `helios_cortex.llm` | Client for Cloudera AI Inference with schema-constrained structured output |
 
 ### State
 
@@ -185,7 +186,7 @@ Adding an engine means implementing one adapter (connect, execute, fetch query h
 helios/
 ├── README.md
 ├── runtime/            Dockerfile, requirements.txt — the custom Workbench runtime
-├── helios_core/        shared library (see table above)
+├── helios_cortex/        shared library (see table above)
 ├── jobs/               harvest.py, profile.py, propose.py — Workbench Job entry points
 ├── apps/
 │   ├── console/        Helios console application (FastAPI + static frontend)

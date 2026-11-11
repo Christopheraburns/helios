@@ -1,14 +1,11 @@
-"""Harvest and profile run on any engine (burndown 3.6): the same star schema on DuckDB
-and on SQLite through the SQLAlchemy engine gives the same evidence, and on SQLite a
-compiled metric then runs too."""
+"""A compiled metric runs on the SQLAlchemy engine (burndown 3.6), on the star schema
+helios-model's test_discovery_engines.py harvests and profiles."""
 import pytest
 
-from helios_core.catalog import Harvester
-from helios_core.compiler import Compiler, SemanticRequest
-from helios_core.engines import engine_for
-from helios_core.ossie import SemanticModel
-from helios_core.profiler import Profiler
-from helios_core.settings import Settings
+from helios_cortex.compiler import Compiler, SemanticRequest
+from helios_cortex.engines import engine_for
+from helios_cortex.ossie import SemanticModel
+from helios_cortex.settings import Settings
 
 TABLES = [
     "CREATE TABLE {s}customers (c_customer_sk INTEGER, c_name VARCHAR(40), c_region VARCHAR(10))",
@@ -31,39 +28,9 @@ def load(engine, schema):
     return engine
 
 
-def duckdb_engine(tmp_path):
-    return load(engine_for(Settings(connections={"d": {"engine": "duckdb"}}).connection("d")), "sales"), "sales"
-
-
 def sqlite_engine(tmp_path):
     url = f"sqlite:///{tmp_path / 'sales.db'}"
     return load(engine_for(Settings(connections={"s": {"engine": "sqlalchemy", "url": url}}).connection("s")), "main"), "main"
-
-
-def evidence(engine, schema):
-    harvest = Harvester(engine).run([schema])
-    profile = Profiler(engine).run(harvest)
-    return harvest, profile
-
-
-@pytest.mark.parametrize("make", [duckdb_engine, sqlite_engine], ids=["duckdb", "sqlalchemy-sqlite"])
-def test_harvest_and_profile_find_the_keys_and_the_join(make, tmp_path):
-    engine, schema = make(tmp_path)
-    harvest, profile = evidence(engine, schema)
-
-    tables = {t["table"]: t for t in harvest["tables"]}
-    assert {name: t["row_count"] for name, t in tables.items()} == {"customers": 20, "orders": 60}
-    assert [c["name"] for c in tables["orders"]["columns"]] == ["o_order_sk", "o_customer_sk", "o_amount", "order"]
-    assert harvest["queries"]["sources"] == [f"no query log for the {engine.name} engine"]
-
-    profiles = profile["tables"]
-    orders = profiles[f"{schema}.orders"]
-    assert orders["primary_keys"] == [{"column": "o_order_sk", "confidence": 0.95}]
-    assert orders["stats"]["columns"]["order"]["min"] == 0          # a reserved-word column profiles too
-    assert profiles[f"{schema}.customers"]["stats"]["columns"]["c_region"]["ndv"] == 2
-    [join] = profile["relationships"]
-    assert (join["from"], join["from_column"], join["to"], join["to_column"], join["match_ratio"]) == (
-        f"{schema}.orders", "o_customer_sk", f"{schema}.customers", "c_customer_sk", 1.0)
 
 
 def test_a_compiled_metric_runs_on_the_sqlalchemy_engine(tmp_path):

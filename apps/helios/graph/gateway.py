@@ -24,7 +24,7 @@ from typing import Annotated, Any
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from helios_core.ontology import OntologyGraph, OntologyGraphError
+from helios_cortex.ontology import OntologyGraph, OntologyGraphError
 
 from . import index, memgraph_process, ontology, store
 from .bolt import connect
@@ -114,7 +114,7 @@ def _client() -> Any:
 
 
 class MaterialiseRequest(BaseModel):
-    """A normalised ontology graph, as `helios_core.ontology` defines it."""
+    """A normalised ontology graph, as `helios_cortex.ontology` defines it."""
 
     nodes: list[dict[str, Any]] = Field(default_factory=list)
     edges: list[dict[str, Any]] = Field(default_factory=list)

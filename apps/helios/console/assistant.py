@@ -19,8 +19,8 @@ from pydantic import BaseModel, Field
 
 from apps.helios.console import audit, authz
 from apps.helios.console.domain import Model, Organization
-from helios_core.index import runs as index_runs
-from helios_core.llm import LLMClient, LLMError, LLMTimeoutError, llm_from_settings
+from helios_cortex.index import runs as index_runs
+from helios_cortex.llm import LLMClient, LLMError, LLMTimeoutError, llm_from_settings
 from helios_cloudera.workbench import WorkbenchSettings as Settings
 from apps.helios.console.metadata import MetadataRepository
 from apps.helios.console.tracing import TraceRecorder, utcnow

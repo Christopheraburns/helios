@@ -13,7 +13,7 @@ os.environ.setdefault(
 import pytest  # noqa: E402
 
 from apps.helios.console import authz  # noqa: E402
-from helios_core.artifacts import ArtifactStore  # noqa: E402
+from helios_cortex.artifacts import ArtifactStore  # noqa: E402
 from apps.helios.console.domain import (  # noqa: E402
     DataSource,
     DataSourceReference,

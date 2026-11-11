@@ -9,10 +9,10 @@ import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from helios_core.artifact_storage import ArtifactStorage, LocalStorage
+from helios_cortex.artifact_storage import ArtifactStorage, LocalStorage
 
 if TYPE_CHECKING:
-    from helios_core.settings import Settings
+    from helios_cortex.settings import Settings
 
 
 STAGES = ("harvest", "profile", "propose")
@@ -199,7 +199,7 @@ class RunStore:
     def from_settings(cls, settings: Settings) -> RunStore:
         """With the artifacts when they are on object storage, else ``settings.runs_dir``."""
         if settings.artifact_storage is not None:
-            from helios_core.artifacts import ArtifactStore
+            from helios_cortex.artifacts import ArtifactStore
 
             return ArtifactStore.from_settings(settings).runs
         return cls(settings.runs_dir)

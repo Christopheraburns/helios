@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 
-from helios_core import __version__
+from helios_cortex import __version__
 from apps.helios.console import audit
 from helios_cloudera.atlas import AtlasClient, AtlasError
 from helios_cloudera.atlas import atlas_config
@@ -242,7 +242,7 @@ def health(request: Request):
     checks.append(("Atlas", a.base_url if a else "not configured", *(_check(lambda: AtlasClient(a).ping()) if a else ("skipped", "set ATLAS_BASE, ATLAS_USER, ATLAS_PASS"))))
     i = impala_config(Settings())
     checks.append(("Impala", f"{i.host}:{i.port}" if i else "not configured", *(_check(lambda: ImpalaEngine(i).ping()) if i else ("skipped", "set IMPALA_HOST, WORKLOAD_USER, and WORKLOAD_PASSWORD"))))
-    from helios_core.llm import llm_from_settings
+    from helios_cortex.llm import llm_from_settings
     llm = llm_from_settings(Settings().llm)
     if llm:
         checks.append(("LLM", f"{llm.provider}: {llm.model}", *_check(llm.ping)))

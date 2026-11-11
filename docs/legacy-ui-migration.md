@@ -17,7 +17,7 @@ React/TypeScript Helios UI
         v
 Helios API Application
         |
-        +-- helios_core services
+        +-- helios_cortex services
         +-- metadata, artifacts, Atlas, engines, discovery jobs
 ```
 
@@ -173,7 +173,7 @@ Status meanings:
 | Bulk accept pending above confidence | `POST /runs/{run_id}/review/bulk` | `review.bulk_accept()` | `POST .../reviews/{run_id}/decisions/bulk` validates a 0–1 threshold | `model.edit` | Proposal workspace bulk action with result feedback | Dry-run preview remains optional follow-up | Models → Review queue / Canvas toolbar | Covered |
 | Reset all or one review section | `POST /runs/{run_id}/review/reset` | `review.clear()` | `POST .../reviews/{run_id}/reset` | `model.edit` | Proposal workspace confirms and resets the selected section | No | Models → Review queue | Covered |
 | Review audit (`reviewed_at`, `reviewed_by`, notes, overrides) | Review state and response data | `review.load/save()` | Graph detail and decision response expose available audit data | `model.edit` | Inspector displays returned audit metadata | Add review-summary GET for run-level audit; element audit is covered | Canvas Inspector / Review queue | Partial |
-| Metric preflight errors before publish | Review page | `helios_core.ossie.preflight()` | None | `model.edit`; publish still requires `model.publish` | None | Include preflight and validation issues in review-summary/publish-readiness API | Models → Review queue / Overview action state | API gap |
+| Metric preflight errors before publish | Review page | `helios_cortex.ossie.preflight()` | None | `model.edit`; publish still requires `model.publish` | None | Include preflight and validation issues in review-summary/publish-readiness API | Models → Review queue / Overview action state | API gap |
 | Publish reviewed Ossie model | `POST /runs/{run_id}/publish` | `review.apply()`, `ossie.build/preflight/validate`, `ArtifactStore.write_published_ossie()` | `POST /api/v1/models/{model_id}/reviews/{run_id}/publish` returns manifest or structured validation failure | `model.publish` | Overview and proposal workspace publish through the API with feedback | Version/audit enrichment and idempotency semantics remain follow-ups | Overview and Models → Review queue | Covered |
 | Optional Git commit during publish | Checkbox on review page | `subprocess.run(git add/git commit)` | None | No suitable end-user action | None | Do not migrate as a browser checkbox. Version/publish through an audited backend workflow; CI or operators own Git commits | No general UI destination | Retire behavior |
 | Last-published timestamp and publish result | Review page | Published artifact mtime and redirect query messages | Overview has publication state, not publication event detail | `model.read`; publish result requires `model.publish` | Overview shows current state | Add publication/version metadata to overview or versions endpoint | Overview / Models → Versions | Partial |

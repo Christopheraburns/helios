@@ -12,8 +12,8 @@ from typing import Any
 import requests
 from pydantic import BaseModel, ConfigDict, SecretStr
 
-from helios_core.catalog import CatalogError, ColumnLineage
-from helios_core.settings import CatalogSettings, Settings
+from helios_cortex.catalog import CatalogError, ColumnLineage
+from helios_cortex.settings import CatalogSettings, Settings
 
 COLUMN_TYPES = ("hive_column", "iceberg_column")
 

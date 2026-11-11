@@ -23,8 +23,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from helios_core._pending.crawler.settings import CrawlerSettings, LabelRule, PatternRule
-from helios_core.index.records import AssetRecord, MentionRecord
+from helios_cortex._pending.crawler.settings import CrawlerSettings, LabelRule, PatternRule
+from helios_cortex.index.records import AssetRecord, MentionRecord
 
 from .gazetteer import Gazetteer, normalise
 

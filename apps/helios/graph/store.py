@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from helios_core.ontology import OntologyGraph
+from helios_cortex.ontology import OntologyGraph
 
 _ACTIVE_POINTER = "active.json"
 

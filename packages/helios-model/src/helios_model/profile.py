@@ -5,6 +5,9 @@ Everything here is deterministic. It produces the evidence the LLM stage reasons
 and on a conventionally named warehouse it finds most relationships on its own.
 Statements are built with SQLGlot and written in the engine's dialect, so profiling
 runs on any engine, approximating distinct counts where the database can.
+
+``TableProfiler`` is the worker; ``helios_model.Profiler`` (``discovery``) is the facade a host
+calls, which profiles a harvest kept in a run and keeps the result beside it.
 """
 from __future__ import annotations
 
@@ -14,7 +17,8 @@ from datetime import datetime, timezone
 
 from sqlglot import exp
 
-from ..engines.base import Engine
+from helios_cortex.caller import Caller
+from helios_cortex.engines.base import Engine
 
 LOGGER = logging.getLogger(__name__)
 
@@ -48,7 +52,7 @@ def _tokens(name: str) -> list[str]:
     return [x for x in re.split(r"[_\W]+", name.lower()) if x]
 
 
-class Profiler:
+class TableProfiler:
     def __init__(self, engine: Engine, overlap_threshold: float = 0.95, max_pairs: int = 400):
         self.engine = engine
         self.dialect = engine.dialect
@@ -56,10 +60,10 @@ class Profiler:
         self.max_pairs = max_pairs
 
     # ------------------------------------------------------------ column stats
-    def _query(self, select: exp.Expression) -> list[tuple]:
-        return self.engine.query(self.dialect.render(select)).rows
+    def _query(self, select: exp.Expression, caller: Caller | None) -> list[tuple]:
+        return self.engine.query(self.dialect.render(select), caller).rows
 
-    def column_stats(self, db: str, table: str, columns: list[dict]) -> dict:
+    def column_stats(self, db: str, table: str, columns: list[dict], *, caller: Caller | None = None) -> dict:
         """One aggregate query per table: count, non-null count, approximate distinct count,
         min and max for every column. Values are read by position: some databases change
         the case of unquoted aliases."""
@@ -73,7 +77,7 @@ class Profiler:
                 keys += [f"{n}__min", f"{n}__max"]
                 parts += [exp.Min(this=d.column(n)), exp.Max(this=d.column(n))]
         select = exp.select(*(e.as_(f"c{i}") for i, e in enumerate(parts))).from_(d.table(f"{db}.{table}"))
-        row = dict(zip(keys, self._query(select)[0]))
+        row = dict(zip(keys, self._query(select, caller)[0]))
         n_rows = int(row["n_rows"])
         stats = {}
         for c in columns:
@@ -85,7 +89,7 @@ class Profiler:
         return {"row_count": n_rows, "columns": stats}
 
     # ------------------------------------------------------------ keys
-    def primary_key_candidates(self, db: str, table: str, stats: dict) -> list[dict]:
+    def primary_key_candidates(self, db: str, table: str, stats: dict, *, caller: Caller | None = None) -> list[dict]:
         """Shortlist by name and approximate NDV, then verify with an exact COUNT(DISTINCT)."""
         n = stats["row_count"]
         out = []
@@ -93,7 +97,8 @@ class Profiler:
             if not (n and s["non_null"] == n and s["ndv"] >= n * 0.85 and name.lower().endswith(KEY_SUFFIXES)):
                 continue
             d = self.dialect
-            exact = int(self._query(exp.select(d.count_distinct(d.column(name))).from_(d.table(f"{db}.{table}")))[0][0])
+            exact = int(self._query(exp.select(d.count_distinct(d.column(name))).from_(d.table(f"{db}.{table}")),
+                                    caller)[0][0])
             s["ndv_exact"] = exact
             if exact == n:
                 out.append({"column": name, "confidence": 0.95 if name.lower().endswith(("_sk", "_id")) else 0.8})
@@ -176,7 +181,7 @@ class Profiler:
                                           "name_score": 0.0, "to_rows": prows})
         return cands[: self.max_pairs]
 
-    def measure_overlap(self, c: dict) -> dict:
+    def measure_overlap(self, c: dict, *, caller: Caller | None = None) -> dict:
         """Fraction of distinct non-null FK values that exist in the PK column."""
         d = self.dialect
         fk = d.column(c["from_column"])
@@ -189,20 +194,23 @@ class Profiler:
                   .from_(values.subquery("a"))
                   .join(d.table(c["to"]).as_("b"), on=exp.EQ(this=exp.column("k", table="a"), expression=pk),
                         join_type="left"))
-        total, unmatched = self._query(select)[0]
+        total, unmatched = self._query(select, caller)[0]
         total, unmatched = int(total or 0), int(unmatched or 0)
         return {**c, "distinct_values": total, "unmatched": unmatched,
                 "match_ratio": round((total - unmatched) / total, 4) if total else 0.0}
 
     # ------------------------------------------------------------ all together
-    def run(self, harvest: dict) -> dict:
+    def run(self, harvest: dict, *, caller: Caller | None = None) -> dict:
+        """Statistics, keys and relationships for every harvested table, computed as ``caller``
+        (so masked or hidden columns stay that way), or as the service identity without one."""
         profiles = {}
         for t in harvest["tables"]:
             key = f"{t['database']}.{t['table']}"
             LOGGER.info("profiling %s", key)
-            stats = self.column_stats(t["database"], t["table"], t["columns"])
-            profiles[key] = {"stats": stats, "primary_keys": self.primary_key_candidates(t["database"], t["table"], stats)}
-        measured = [self.measure_overlap(c) for c in self.relationship_candidates(profiles)]
+            stats = self.column_stats(t["database"], t["table"], t["columns"], caller=caller)
+            profiles[key] = {"stats": stats,
+                             "primary_keys": self.primary_key_candidates(t["database"], t["table"], stats, caller=caller)}
+        measured = [self.measure_overlap(c, caller=caller) for c in self.relationship_candidates(profiles)]
         # keep the best target per FK column
         best: dict[tuple, dict] = {}
         for m in measured:

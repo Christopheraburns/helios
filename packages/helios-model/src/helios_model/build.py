@@ -1,5 +1,6 @@
 """
 Build an Apache Ossie semantic model document from a reviewed helios proposal.
+Validating and writing the document is the format's (helios_cortex.ossie.format).
 
 Mapping (Ossie core spec 0.2.0.dev0, schema vendored as ossie-schema.json):
 
@@ -19,15 +20,10 @@ Nothing in here talks to Atlas or the warehouse; proposed glossary terms are pub
 from __future__ import annotations
 
 import json
-import os
 import re
 
-import jsonschema
+from helios_cortex.ossie.format import DIALECT, SPEC_VERSION, VENDOR
 
-SPEC_VERSION = "0.2.0.dev0"
-VENDOR = "HELIOS"
-DIALECT = "ANSI_SQL"
-SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "ossie-schema.json")
 _SQL_WORDS = {"group_concat", "date_trunc", "date_part", "date_add", "date_sub", "current_date", "current_timestamp",
               "is_null", "not_null", "if_null", "if_not"}
 
@@ -200,30 +196,3 @@ def preflight(proposal: dict) -> dict:
     """Problems build() would report for the proposal as it stands, keyed by metric name, for the review page."""
     _, problems = build_metrics(proposal.get("metrics", []), proposal["datasets"])
     return {p.split(":", 1)[0]: p.split(":", 1)[1].strip() for p in problems}
-
-
-def validate(doc: dict) -> list[str]:
-    """Validate against the vendored Ossie schema plus referential checks the schema cannot express."""
-    with open(SCHEMA_PATH) as f:
-        schema = json.load(f)
-    errors = [f"schema: {e.json_path}: {e.message}" for e in jsonschema.Draft202012Validator(schema).iter_errors(doc)]
-    names = {d["name"] for d in doc["datasets"]}
-    cols = {d["name"]: {f["name"] for f in d.get("fields", [])} for d in doc["datasets"]}
-    for r in doc.get("relationships", []):
-        for side in ("from", "to"):
-            if r[side] not in names:
-                errors.append(f"relationship {r['name']}: unknown dataset {r[side]}")
-            else:
-                for c in r[f"{side}_columns"]:
-                    if c not in cols[r[side]]:
-                        errors.append(f"relationship {r['name']}: {r[side]} has no column {c}")
-    for m in doc.get("metrics", []):
-        for ds, col in re.findall(r"\b([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)\b", m["expression"]["dialects"][0]["expression"]):
-            if ds not in cols or col not in cols[ds]:
-                errors.append(f"metric {m['name']}: unknown reference {ds}.{col}")
-    return errors
-
-
-def dump_yaml(doc: dict) -> str:
-    import yaml
-    return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, width=120)

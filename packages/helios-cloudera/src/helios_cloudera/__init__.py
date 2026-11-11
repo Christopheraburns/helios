@@ -1,7 +1,7 @@
 """Helios plugins for Cloudera: the Impala engine and the Atlas catalog.
 
 Installing this package registers ``engine = "impala"`` (helios_cloudera.impala)
-and ``catalog = "atlas"`` (helios_cloudera.atlas) with helios-core's plugin loader.
+and ``catalog = "atlas"`` (helios_cloudera.atlas) with helios-cortex's plugin loader.
 """
 
 

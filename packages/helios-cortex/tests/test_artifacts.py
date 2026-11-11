@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from helios_core.artifacts import ArtifactStore, model_id_for_run
-from helios_core.domain import DataSourceReference, Model
-from helios_core.ossie import SemanticModel
+from helios_cortex.artifacts import ArtifactStore, model_id_for_run
+from helios_cortex.domain import DataSourceReference, Model
+from helios_cortex.ossie import SemanticModel
 
 
 def model(model_id: str) -> Model:

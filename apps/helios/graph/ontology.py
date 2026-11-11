@@ -6,7 +6,7 @@ the blue/green swap is a pointer change, not a reload.
 
 Labels and relationship types are interpolated into the Cypher because the
 protocol has no way to parameterise them. That is safe only because each one is
-checked against the whitelists in `helios_core.ontology` first; every other
+checked against the whitelists in `helios_cortex.ontology` first; every other
 value is a bound parameter.
 """
 
@@ -15,7 +15,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from helios_core.ontology import EDGE_TYPES, NODE_LABELS, OntologyGraph, OntologyGraphError
+from helios_cortex.ontology import EDGE_TYPES, NODE_LABELS, OntologyGraph, OntologyGraphError
 
 from .bolt import BoltClient
 

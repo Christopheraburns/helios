@@ -4,12 +4,12 @@ from importlib.metadata import EntryPoint
 import pytest
 from pydantic import ValidationError
 
-from helios_core import Caller, plugins
-from helios_core.compiler import Compiler, SemanticRequest
-from helios_core.engines import Engine, engine_for
-from helios_core.engines.duckdb_engine import DuckDBEngine
-from helios_core.ossie import SemanticModel
-from helios_core.settings import Settings
+from helios_cortex import Caller, plugins
+from helios_cortex.compiler import Compiler, SemanticRequest
+from helios_cortex.engines import Engine, engine_for
+from helios_cortex.engines.duckdb_engine import DuckDBEngine
+from helios_cortex.ossie import SemanticModel
+from helios_cortex.settings import Settings
 
 
 
@@ -49,7 +49,7 @@ def sales(tmp_path):
 
 
 def test_sqlalchemy_runs_sql_on_any_dialect_it_knows(sales):
-    from helios_core.engines.sqlalchemy_engine import SqlAlchemyEngine
+    from helios_cortex.engines.sqlalchemy_engine import SqlAlchemyEngine
 
     assert isinstance(sales, SqlAlchemyEngine)
     assert (sales.backend, sales.sqlglot_dialect) == ("sqlite", "sqlite")
@@ -72,7 +72,7 @@ def test_sqlalchemy_introspects_through_the_inspector(sales):
 
 
 def test_sqlalchemy_is_service_only_and_never_shows_its_url():
-    from helios_core.engines.sqlalchemy_engine import SqlAlchemyEngine
+    from helios_cortex.engines.sqlalchemy_engine import SqlAlchemyEngine
 
     with pytest.raises(ValueError, match="does not support identity mode 'token'"):
         engine_for(connection(engine="sqlalchemy", url="sqlite://", identity="token"))
@@ -101,7 +101,7 @@ def test_the_compiler_targets_the_engines_dialect(sales):
 
 
 def test_engine_for_needs_an_engine_class(monkeypatch):
-    entries = [EntryPoint("broken", "helios_core.settings:Settings", plugins.ENGINES)]
+    entries = [EntryPoint("broken", "helios_cortex.settings:Settings", plugins.ENGINES)]
     monkeypatch.setattr(plugins, "_entry_points", lambda group: tuple(e for e in entries if e.group == group))
     with pytest.raises(plugins.PluginError, match="not an Engine subclass"):
         engine_for(connection(engine="broken"))

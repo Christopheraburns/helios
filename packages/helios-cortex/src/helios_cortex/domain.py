@@ -2,7 +2,7 @@
 
 These classes describe resource identity only. They prescribe no database, API
 representation or connection-secret store, and no ownership: who may see a model
-is the host's decision (``helios_core.visibility``).
+is the host's decision (``helios_cortex.visibility``).
 
 A :class:`DataSource` is the reusable physical connection and owns references to
 its harvested/profiled snapshots. A :class:`Model` is a semantic interpretation
@@ -42,7 +42,7 @@ class DataSource:
     connection_ref: str
     snapshot_ids: tuple[str, ...] = ()
     # Crawling (DS-2): what to crawl (validated per connector type by
-    # helios_core._pending.crawler.sources) and how. Empty for warehouse sources.
+    # helios_cortex._pending.crawler.sources) and how. Empty for warehouse sources.
     description: str = ""
     scope: dict = field(default_factory=dict, hash=False)
     crawl: dict = field(default_factory=dict, hash=False)

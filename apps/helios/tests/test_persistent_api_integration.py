@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from apps.helios.console.main import app
 from apps.helios.console import health as system_health
-from helios_core.runs import RunStore
+from helios_cortex.runs import RunStore
 from apps.helios import runtime
 from apps.helios.console.graph import ArtifactGraphRepository
 from apps.helios.console.metadata import SemanticRevision, TraceRun, TraceSpan

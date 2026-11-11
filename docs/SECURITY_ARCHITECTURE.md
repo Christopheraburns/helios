@@ -52,7 +52,7 @@ to invoke that Helios operation. It does not grant access to the underlying data
 
 ## 3. Data authorization: what lakehouse data may it access?
 
-`helios_core.data_authorization.DataPolicy` is a distinct policy port for physical
+`helios_cortex.data_authorization.DataPolicy` is a distinct policy port for physical
 data addressed through a DataSource. A grant to view, consume, or execute queries
 through a Helios Model does **not** grant permission to query the tables
 represented by that model.
@@ -107,7 +107,7 @@ initiating user's physical-data permissions.
 
 Helios's own users, organizations, roles and grants belong to the old console
 (`apps.helios.console`, deleted in Phase 8); the libraries take a host-supplied
-`helios_core.Caller` instead. Within the console, `apps.helios.console.authz` is the
+`helios_cortex.Caller` instead. Within the console, `apps.helios.console.authz` is the
 interface. A component loads persisted
 grants once, constructs a policy, and asks about domain actions and resources:
 

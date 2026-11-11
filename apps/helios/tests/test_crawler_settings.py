@@ -5,12 +5,12 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helios_core._pending.crawler.settings import CrawlerSettings, ontology_problems
-from helios_core._pending import crawler_settings as versions
-from helios_core.index import ontology_versions, runs
-from helios_core.index.store import duckdb_index_store
-from helios_core.ontology.mapping import load_mappings
-from helios_core.ontology.parser import parse
+from helios_cortex._pending.crawler.settings import CrawlerSettings, ontology_problems
+from helios_cortex._pending import crawler_settings as versions
+from helios_cortex.index import ontology_versions, runs
+from helios_cortex.index.store import duckdb_index_store
+from helios_cortex.ontology.mapping import load_mappings
+from helios_cortex.ontology.parser import parse
 from pydantic import ValidationError
 from crawler_samples import RETAIL_SETTINGS
 
@@ -242,7 +242,7 @@ def test_api_warns_when_no_ontology_is_active(client):
 
 
 def test_api_lists_runs_and_shows_one_with_its_assets(client, index):
-    from helios_core.index.records import AssetRecord
+    from helios_cortex.index.records import AssetRecord
 
     run = runs.start(
         index,

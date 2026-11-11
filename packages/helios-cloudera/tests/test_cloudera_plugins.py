@@ -1,11 +1,12 @@
 """helios-cloudera registers its plugins under the names Settings use (burndown 3.3)."""
-from helios_core import plugins
-from helios_core.catalog import GLOSSARY, LINEAGE, CatalogError, Harvester, capabilities, catalog_for
-from helios_core.engines import engine_for
-from helios_core.settings import Settings
+from helios_cortex import plugins
+from helios_cortex.catalog import GLOSSARY, LINEAGE, CatalogError, capabilities, catalog_for
+from helios_cortex.engines import engine_for
+from helios_cortex.settings import Settings
 
 from helios_cloudera.atlas import AtlasClient, AtlasError
 from helios_cloudera.impala import ImpalaEngine
+from helios_model.harvest import TableHarvester
 
 
 def test_the_engine_and_catalog_load_by_their_settings_names():
@@ -14,7 +15,7 @@ def test_the_engine_and_catalog_load_by_their_settings_names():
     registered = {(info.group, info.name): info.distribution for info in plugins.installed()}
     assert registered[(plugins.ENGINES, "impala")] == "helios-cloudera"
     assert registered[(plugins.CATALOGS, "atlas")] == "helios-cloudera"
-    assert registered[(plugins.ENGINES, "duckdb")] == "helios-core"
+    assert registered[(plugins.ENGINES, "duckdb")] == "helios-cortex"
 
 
 def test_a_workbench_configuration_finds_every_plugin():
@@ -37,7 +38,7 @@ def test_atlas_errors_are_catalog_errors_so_the_harvester_tolerates_them():
         def assigned_entities(self, term_guid):
             raise AtlasError(403, "forbidden")
 
-    [term] = Harvester(engine=None, catalog=Atlas()).harvest_glossary()
+    [term] = TableHarvester(engine=None, catalog=Atlas()).harvest_glossary()
     assert (term["glossary"], term["name"], term["columns"]) == ("Sales", "Revenue", [])
 
 

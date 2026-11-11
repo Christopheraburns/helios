@@ -2,7 +2,7 @@
 connection in config.attributes; there is no offline (SQL script) mode."""
 from alembic import context
 
-from helios_core.registry.sql import VERSION_TABLE, metadata
+from helios_cortex.registry.sql import VERSION_TABLE, metadata
 
 connection = context.config.attributes.get("connection")
 if connection is None:

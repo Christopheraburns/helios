@@ -1,6 +1,6 @@
 import pytest
 
-from helios_core.index.store import duckdb_index_store
+from helios_cortex.index.store import duckdb_index_store
 
 
 @pytest.fixture

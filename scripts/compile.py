@@ -6,8 +6,8 @@
 import argparse
 import json
 import os
-from helios_core.ossie import SemanticModel
-from helios_core.compiler import Compiler, SemanticRequest
+from helios_cortex.ossie import SemanticModel
+from helios_cortex.compiler import Compiler, SemanticRequest
 from helios_cloudera.impala import IMPALA
 from helios_cloudera.workbench import WorkbenchSettings as Settings
 

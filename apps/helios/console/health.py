@@ -6,7 +6,7 @@ from typing import Callable, Literal
 
 from helios_cloudera.atlas import AtlasClient, atlas_config
 from helios_cloudera.impala import ImpalaEngine, impala_config
-from helios_core.llm import llm_from_settings
+from helios_cortex.llm import llm_from_settings
 from apps.helios.console.metadata import MetadataRepository
 from helios_cloudera.workbench import WorkbenchSettings as Settings
 

@@ -1,4 +1,4 @@
-"""helios_core.Caller replaces Principal in library signatures (burndown 2.1)."""
+"""helios_cortex.Caller replaces Principal in library signatures (burndown 2.1)."""
 import ast
 import importlib.util
 import logging
@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from helios_core import Caller, IdentityMode
-from helios_core.data_authorization import (
+from helios_cortex import Caller, IdentityMode
+from helios_cortex.data_authorization import (
     DataAction,
     DataAuthorizationDenied,
     DataPolicy,
     DataResource,
 )
 
-SOURCE = Path(__file__).resolve().parents[1] / "src" / "helios_core"
+SOURCE = Path(__file__).resolve().parents[1] / "src" / "helios_cortex"
 # Helios's own identity code, moved to apps/helios/console in 2.6.
 IDENTITY_MODULES = ("authz", "authorization", "rbac", "identity", "delegation", "metadata", "tracing", "audit")
 
@@ -70,11 +70,11 @@ def test_data_policy_takes_a_caller():
     assert "s3cr3t-jwt" not in str(raised.value)
 
 
-def test_helios_core_has_no_identity_code():
-    """Phase 2 gate: no users, organizations, roles or grants in helios_core."""
-    present = [name for name in IDENTITY_MODULES if importlib.util.find_spec(f"helios_core.{name}") is not None]
+def test_helios_cortex_has_no_identity_code():
+    """Phase 2 gate: no users, organizations, roles or grants in helios_cortex."""
+    present = [name for name in IDENTITY_MODULES if importlib.util.find_spec(f"helios_cortex.{name}") is not None]
     assert not present, present
-    from helios_core import domain
+    from helios_cortex import domain
 
     assert not hasattr(domain, "Organization")
     assert "organization_id" not in domain.Model.__dataclass_fields__

@@ -1,7 +1,7 @@
 """Registry records carry no ownership: who may see a model is the host's decision (burndown 2.6)."""
 import pytest
 
-from helios_core.domain import DataSource, DataSourceReference, Model
+from helios_cortex.domain import DataSource, DataSourceReference, Model
 
 
 def warehouse(source_id="warehouse"):

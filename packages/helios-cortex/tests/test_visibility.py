@@ -1,8 +1,8 @@
 """ModelVisibility: the host decides which models a caller may list and use (burndown 2.4)."""
 import pytest
 
-from helios_core import Caller
-from helios_core.visibility import (
+from helios_cortex import Caller
+from helios_cortex.visibility import (
     AllModels,
     ModelNotVisible,
     require_visible,

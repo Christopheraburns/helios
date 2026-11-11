@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
-from helios_core.domain import DataSource, DataSourceReference, Model
-from helios_core.registry import RegistryNotReady, SqlRegistry
-from helios_core.registry.__main__ import main
-from helios_core.registry.sql import VERSION_TABLE, metadata
-from helios_core.settings import Settings
+from helios_cortex.domain import DataSource, DataSourceReference, Model
+from helios_cortex.registry import RegistryNotReady, SqlRegistry
+from helios_cortex.registry.__main__ import main
+from helios_cortex.registry.sql import VERSION_TABLE, metadata
+from helios_cortex.settings import Settings
 
 POSTGRES = os.environ.get("HELIOS_TEST_POSTGRES")
 
@@ -35,7 +35,7 @@ def clean_postgres():
 def test_a_database_must_be_upgraded_before_use(tmp_path):
     registry = SqlRegistry(f"sqlite:///{tmp_path / 'registry.db'}")
     assert registry.current_revision() is None
-    with pytest.raises(RegistryNotReady, match="python -m helios_core.registry upgrade"):
+    with pytest.raises(RegistryNotReady, match="python -m helios_cortex.registry upgrade"):
         registry.models()
     registry.upgrade()
     assert registry.current_revision() == registry.head_revision() == "0001_registry"
@@ -83,7 +83,7 @@ def test_urls_and_settings_never_show_the_password():
     try:
         registry = SqlRegistry(url)
     except ModuleNotFoundError as exc:  # a base install: no Postgres driver
-        assert "pip install 'helios-core[postgres]'" in str(exc)
+        assert "pip install 'helios-cortex[postgres]'" in str(exc)
         assert "hunter2" not in str(exc)
     else:
         assert "hunter2" not in repr(registry)
@@ -92,7 +92,7 @@ def test_urls_and_settings_never_show_the_password():
 def test_the_command_upgrades_and_reports_the_schema(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("HELIOS_REGISTRY_URL", f"sqlite:///{tmp_path / 'cli.db'}")
     assert main(["current"]) == 0
-    assert "schema empty (this helios-core: 0001_registry)" in capsys.readouterr().out
+    assert "schema empty (this helios-cortex: 0001_registry)" in capsys.readouterr().out
     assert main(["upgrade"]) == 0
     assert "schema 0001_registry" in capsys.readouterr().out
     assert main([]) == 2

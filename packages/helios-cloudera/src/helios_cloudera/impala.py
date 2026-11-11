@@ -12,10 +12,10 @@ from urllib.parse import parse_qsl, urlencode
 from pydantic import BaseModel, ConfigDict, SecretStr, ValidationInfo, model_validator
 from sqlglot import exp
 
-from helios_core.caller import Caller, IdentityError, IdentityMode
-from helios_core.engines.base import Engine, QueryResult
-from helios_core.engines.dialect import SqlDialect
-from helios_core.settings import ConnectionSettings, Settings
+from helios_cortex.caller import Caller, IdentityError, IdentityMode
+from helios_cortex.engines.base import Engine, QueryResult
+from helios_cortex.engines.dialect import SqlDialect
+from helios_cortex.settings import ConnectionSettings, Settings
 
 LOGGER = logging.getLogger(__name__)
 
@@ -234,20 +234,20 @@ class ImpalaEngine(Engine):
     def dialect(self) -> ImpalaDialect:
         return IMPALA
 
-    def databases(self) -> list[str]:
-        return [r[0] for r in self.query("SHOW DATABASES", limit=None).rows]
+    def databases(self, *, caller: Caller | None = None) -> list[str]:
+        return [r[0] for r in self.query("SHOW DATABASES", caller, limit=None).rows]
 
-    def tables(self, database: str) -> list[str]:
-        return [r[0] for r in self.query(f"SHOW TABLES IN {database}", limit=None).rows]
+    def tables(self, database: str, *, caller: Caller | None = None) -> list[str]:
+        return [r[0] for r in self.query(f"SHOW TABLES IN {database}", caller, limit=None).rows]
 
-    def columns(self, database: str, table: str) -> list[dict]:
-        res = self.query(f"DESCRIBE {database}.{table}", limit=None)
+    def columns(self, database: str, table: str, *, caller: Caller | None = None) -> list[dict]:
+        res = self.query(f"DESCRIBE {database}.{table}", caller, limit=None)
         return [{"name": r[0], "type": r[1], "comment": r[2] if len(r) > 2 else ""} for r in res.rows]
 
-    def row_count(self, database: str, table: str) -> int:
+    def row_count(self, database: str, table: str, *, caller: Caller | None = None) -> int:
         """Table stats when they are computed (cheap); COUNT(*) when they are missing (-1)."""
         try:
-            res = self.query(f"SHOW TABLE STATS {database}.{table}", limit=None)
+            res = self.query(f"SHOW TABLE STATS {database}.{table}", caller, limit=None)
             if "#Rows" in res.columns:
                 rows = [r[res.columns.index("#Rows")] for r in res.rows]
                 total = sum(int(x) for x in rows if x is not None and int(x) >= 0)
@@ -255,10 +255,10 @@ class ImpalaEngine(Engine):
                     return total
         except Exception:  # noqa: BLE001 - stats are optional
             LOGGER.debug("no table stats for %s.%s; counting", database, table)
-        return super().row_count(database, table)
+        return super().row_count(database, table, caller=caller)
 
-    def recent_queries(self, limit: int) -> tuple[str, list[str]]:
+    def recent_queries(self, limit: int, *, caller: Caller | None = None) -> tuple[str, list[str]]:
         res = self.query(
             f"SELECT sql FROM sys.impala_query_log WHERE query_type = 'QUERY' "
-            f"ORDER BY start_time_utc DESC LIMIT {limit}", limit=limit)
+            f"ORDER BY start_time_utc DESC LIMIT {limit}", caller, limit=limit)
         return "sys.impala_query_log", [r[0] for r in res.rows if r[0]]

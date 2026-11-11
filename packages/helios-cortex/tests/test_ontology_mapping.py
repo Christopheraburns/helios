@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helios_core.ontology.mapping import load_mappings, resolution_config, template_columns
-pytest.importorskip("linkml_runtime", reason="needs helios-core[ontology]")
+from helios_cortex.ontology.mapping import load_mappings, resolution_config, template_columns
+pytest.importorskip("linkml_runtime", reason="needs helios-cortex[ontology]")
 
-from helios_core.ontology.parser import parse  # noqa: E402
+from helios_cortex.ontology.parser import parse  # noqa: E402
 from linkml_runtime.utils.schemaview import SchemaView  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[3]

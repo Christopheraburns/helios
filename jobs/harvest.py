@@ -1,9 +1,11 @@
 """
 Job: harvest
-Snapshots the catalog, glossary and query history into runs/<run_id>/harvest.json.
+Runs `helios --profile workbench harvest`: snapshots the catalog, glossary and query
+history of a registered data source into a new run.
 
 Environment:
-  HELIOS_DATABASES   comma-separated databases to harvest (default: tpcds)
+  HELIOS_SOURCE_ID   the registered data source to harvest (`helios source add`)
+  HELIOS_DATABASES   comma-separated databases to harvest (default: tpcds; 5.7 removes the default)
   HELIOS_GLOSSARIES  comma-separated Atlas glossaries to include (default: all)
   HELIOS_QUERY_DIR   optional folder of .sql files to treat as query history
   HELIOS_RUN_ID      optional; default is a new timestamp run id
@@ -13,24 +15,20 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.environ.get("HELIOS_ROOT") or os.path.join(os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios"), "jobs"))
-from _common import audit_job, atlas, engine, new_run_id, run_path, write_json  # noqa: E402
+from _common import env_list, helios  # noqa: E402
 
-from helios_core.catalog import Harvester  # noqa: E402
-from helios_core.artifacts import model_id_for_run  # noqa: E402
+from helios_model.discovery import new_run_id  # noqa: E402
 
-databases = [d.strip() for d in os.environ.get("HELIOS_DATABASES", "tpcds").split(",") if d.strip()]
-glossaries = [g.strip() for g in os.environ.get("HELIOS_GLOSSARIES", "").split(",") if g.strip()] or None
+source = os.environ.get("HELIOS_SOURCE_ID")
+if not source:
+    raise SystemExit("set HELIOS_SOURCE_ID to a registered data source (helios source add ID --connection default)")
+databases = env_list("HELIOS_DATABASES") or ["tpcds"]
 run_id = os.environ.get("HELIOS_RUN_ID") or new_run_id()
-model_id = model_id_for_run(
-    explicit=os.environ.get("HELIOS_MODEL_ID"),
-    legacy_default=databases[0] if databases else "helios",
-)
+model_id = os.environ.get("HELIOS_MODEL_ID") or databases[0]
 
-with audit_job("harvest", run_id, model_id):
-    print(f"harvest run {run_id}: model={model_id} databases={databases} glossaries={glossaries or 'all'}")
-    snapshot = Harvester(engine(), atlas()).run(databases, glossaries, os.environ.get("HELIOS_QUERY_DIR"))
-    snapshot["model_id"] = model_id
-    print(f"tables={len(snapshot['tables'])} glossary_terms={len(snapshot['glossary_terms'])} "
-          f"queries={len(snapshot['queries']['statements'])} kept, {snapshot['queries']['stats']} "
-          f"({'; '.join(snapshot['queries']['sources'])})")
-    write_json(run_path(run_id, "harvest.json"), snapshot)
+arguments = ["--source", source, "--model", model_id, "--run-id", run_id]
+arguments += [a for d in databases for a in ("--database", d)]
+arguments += [a for g in env_list("HELIOS_GLOSSARIES") for a in ("--glossary", g)]
+if os.environ.get("HELIOS_QUERY_DIR"):
+    arguments += ["--query-dir", os.environ["HELIOS_QUERY_DIR"]]
+helios("harvest", arguments, run_id, model_id)

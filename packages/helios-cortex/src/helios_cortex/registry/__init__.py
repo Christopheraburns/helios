@@ -23,7 +23,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Protocol
 
-from helios_core.domain import DataSource, Model
+from helios_cortex.domain import DataSource, Model
 
 DRAFT = "draft"
 PUBLISHED = "published"
@@ -210,5 +210,5 @@ class InMemoryRegistry:
         return revisions[0] if revisions else None
 
 
-from helios_core.registry.sql import RegistryNotReady as RegistryNotReady  # noqa: E402 - needs the records above
-from helios_core.registry.sql import SqlRegistry as SqlRegistry  # noqa: E402
+from helios_cortex.registry.sql import RegistryNotReady as RegistryNotReady  # noqa: E402 - needs the records above
+from helios_cortex.registry.sql import SqlRegistry as SqlRegistry  # noqa: E402

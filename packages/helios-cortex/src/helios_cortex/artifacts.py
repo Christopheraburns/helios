@@ -1,5 +1,5 @@
 """Model-aware storage for generated and published artifacts, on a local directory or
-object storage (``helios_core.artifact_storage``).
+object storage (``helios_cortex.artifact_storage``).
 
 Layout, under the storage root:
 
@@ -31,10 +31,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from helios_core.artifact_storage import ArtifactStorage, LocalStorage, storage_for
+from helios_cortex.artifact_storage import ArtifactStorage, LocalStorage, storage_for
 
 if TYPE_CHECKING:
-    from helios_core.settings import Settings
+    from helios_cortex.settings import Settings
 
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 STAGES = ("proposed", "published")
@@ -71,8 +71,8 @@ class ArtifactStore:
 
     @property
     def runs(self):
-        """The discovery runs kept with these artifacts, under ``runs/`` (helios_core.runs.RunStore)."""
-        from helios_core.runs import RunStore
+        """The discovery runs kept with these artifacts, under ``runs/`` (helios_cortex.runs.RunStore)."""
+        from helios_cortex.runs import RunStore
 
         return RunStore(self.storage, prefix="runs")
 

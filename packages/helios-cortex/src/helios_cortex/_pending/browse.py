@@ -11,9 +11,9 @@ from __future__ import annotations
 import posixpath
 from typing import Any
 
-from helios_core._pending import evidence
-from helios_core.index.records import AssetRecord, EntityRecord, MentionRecord, RelationshipRecord, SegmentRecord
-from helios_core.index.store import IndexStore
+from helios_cortex._pending import evidence
+from helios_cortex.index.records import AssetRecord, EntityRecord, MentionRecord, RelationshipRecord, SegmentRecord
+from helios_cortex.index.store import IndexStore
 
 ASSETS = "helios_index.assets"
 SEGMENTS = "helios_index.segments"

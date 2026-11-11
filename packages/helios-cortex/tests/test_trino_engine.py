@@ -4,11 +4,11 @@ test_trino_live.py runs the same engine against a real Trino server."""
 import pytest
 from pydantic import ValidationError
 
-from helios_core import Caller, IdentityError, IdentityMode
-from helios_core.engines import QueryResult, engine_for
-from helios_core.settings import Settings
+from helios_cortex import Caller, IdentityError, IdentityMode
+from helios_cortex.engines import QueryResult, engine_for
+from helios_cortex.settings import Settings
 
-trino_engine = pytest.importorskip("helios_core.engines.trino_engine", reason="needs helios-core[trino]")
+trino_engine = pytest.importorskip("helios_cortex.engines.trino_engine", reason="needs helios-cortex[trino]")
 trino = pytest.importorskip("trino")
 TrinoEngine, TrinoIdentityError = trino_engine.TrinoEngine, trino_engine.TrinoIdentityError
 
@@ -103,6 +103,21 @@ def test_helios_own_work_in_impersonate_mode_runs_as_the_service_user(server):
     engine("impersonate").query("SELECT 7")
     assert server["connects"][0]["user"] == "helios"
     assert server["executed"] == ["SELECT 7"]
+
+
+def test_catalog_reads_run_as_the_caller(server):
+    """Harvesting as a caller (burndown 5.4): every catalog read and statistic runs the
+    session as the caller and checks it; without one, as the service user."""
+    lake, alice = engine("impersonate"), Caller("alice")
+    server["answers"]["SELECT table_name"] = [("table_name",), [("orders",)]]
+    assert lake.tables("sales", caller=alice) == ["orders"]
+    lake.row_count("sales", "orders", caller=alice)
+    lake.recent_queries(5, caller=alice)
+    assert {c["user"] for c in server["connects"]} == {"alice"}
+    assert server["executed"].count("SELECT current_user") == len(server["connects"])
+    server["connects"].clear()
+    lake.tables("sales")
+    assert [c["user"] for c in server["connects"]] == ["helios"]
 
 
 def test_token_mode_authenticates_with_the_callers_jwt(server):

@@ -33,9 +33,10 @@ SYSTEM_SCHEMAS = frozenset({"information_schema", "pg_catalog", "sys"})
 
 class Engine(ABC):
     """A SQL engine. ``query(sql)`` with no caller runs as the connection's own
-    (service) identity, for Helios's own work: harvesting, profiling, its index.
-    ``query(sql, caller)`` runs a caller's query under ``identity_mode``, which the
-    host picks per connection from the modes the engine supports."""
+    (service) identity, for Helios's own work: its index, and harvesting or profiling
+    when the host passes no caller. ``query(sql, caller)`` runs a caller's query under
+    ``identity_mode``, which the host picks per connection from the modes the engine
+    supports."""
 
     name: str = "engine"
     sqlglot_dialect: str = ""
@@ -74,32 +75,34 @@ class Engine(ABC):
         """How SQL is written for this engine. A plugin overrides it for rules SQLGlot lacks."""
         return SqlDialect(self.sqlglot_dialect)
 
-    # Catalog lookups and statistics for Helios's own work (harvesting), as the service
-    # identity. The defaults read information_schema, which most SQL databases have; an
-    # engine with another catalog overrides them (Impala's SHOW statements, SQLAlchemy's
-    # inspector).
-    def databases(self) -> list[str]:
+    # Catalog lookups and statistics for harvesting. With no caller they run as the
+    # service identity; with one, as the caller under ``identity_mode`` (as ``query``
+    # does), so a harvest sees only what the caller may see. The defaults read
+    # information_schema, which most SQL databases have; an engine with another catalog
+    # overrides them (Impala's SHOW statements, SQLAlchemy's inspector) and must accept
+    # and honour ``caller``.
+    def databases(self, *, caller: Caller | None = None) -> list[str]:
         q = exp.select("schema_name").distinct().from_("information_schema.schemata").order_by("schema_name")
-        return [r[0] for r in self.query(self.dialect.render(q), limit=None).rows if r[0].lower() not in SYSTEM_SCHEMAS]
+        return [r[0] for r in self.query(self.dialect.render(q), caller, limit=None).rows if r[0].lower() not in SYSTEM_SCHEMAS]
 
-    def tables(self, database: str) -> list[str]:
+    def tables(self, database: str, *, caller: Caller | None = None) -> list[str]:
         q = (exp.select("table_name").from_("information_schema.tables")
              .where(exp.column("table_schema").eq(exp.Literal.string(database))).order_by("table_name"))
-        return [r[0] for r in self.query(self.dialect.render(q), limit=None).rows]
+        return [r[0] for r in self.query(self.dialect.render(q), caller, limit=None).rows]
 
-    def columns(self, database: str, table: str) -> list[dict]:
+    def columns(self, database: str, table: str, *, caller: Caller | None = None) -> list[dict]:
         q = (exp.select("column_name", "data_type").from_("information_schema.columns")
              .where(exp.and_(exp.column("table_schema").eq(exp.Literal.string(database)),
                              exp.column("table_name").eq(exp.Literal.string(table))))
              .order_by("ordinal_position"))
-        return [{"name": r[0], "type": r[1], "comment": ""} for r in self.query(self.dialect.render(q), limit=None).rows]
+        return [{"name": r[0], "type": r[1], "comment": ""} for r in self.query(self.dialect.render(q), caller, limit=None).rows]
 
-    def row_count(self, database: str, table: str) -> int:
+    def row_count(self, database: str, table: str, *, caller: Caller | None = None) -> int:
         """Rows in the table. An engine with cheap table statistics overrides this."""
         q = exp.select(exp.Count(this=exp.Star())).from_(self.dialect.table(f"{database}.{table}"))
-        return int(self.query(self.dialect.render(q)).rows[0][0])
+        return int(self.query(self.dialect.render(q), caller).rows[0][0])
 
-    def recent_queries(self, limit: int) -> tuple[str, list[str]] | None:
+    def recent_queries(self, limit: int, *, caller: Caller | None = None) -> tuple[str, list[str]] | None:
         """Recent statements from the engine's query log, newest first, with the log's
         name; None when the engine keeps no log Helios can read."""
         return None

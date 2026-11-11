@@ -1,7 +1,7 @@
 """Impala connections for the Workbench lakehouse path.
 
 Uses the same settings as the rest of Helios (the ``default`` connection in
-``helios_core.settings``): IMPALA_HOST (hostname or CDW JDBC URL), WORKLOAD_USER,
+``helios_cortex.settings``): IMPALA_HOST (hostname or CDW JDBC URL), WORKLOAD_USER,
 WORKLOAD_PASSWORD, and optionally IMPALA_PORT / IMPALA_HTTP_PATH. Connects to the Cloudera Data
 Warehouse Impala Virtual Warehouse over HTTPS with LDAP, as ImpalaEngine does.
 """

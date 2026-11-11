@@ -14,8 +14,8 @@ import duckdb
 import pytest
 import second_domain as clinic
 import shapes
-from helios_core._pending.crawler.settings import EMPTY_SETTINGS
-from helios_core.index.store import duckdb_index_store
+from helios_cortex._pending.crawler.settings import EMPTY_SETTINGS
+from helios_cortex.index.store import duckdb_index_store
 
 from apps.helios.crawler import evaluate as harness
 from apps.helios.crawler.connectors import HeliosDsConnector, object_reader

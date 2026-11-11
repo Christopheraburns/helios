@@ -37,9 +37,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from helios_core._pending.crawler.settings import CrawlerSettings
-from helios_core.index import ids
-from helios_core.index.records import (
+from helios_cortex._pending.crawler.settings import CrawlerSettings
+from helios_cortex.index import ids
+from helios_cortex.index.records import (
     AssetRecord,
     ClaimEvidenceRecord,
     ClaimRecord,
@@ -48,7 +48,7 @@ from helios_core.index.records import (
     MentionRecord,
     SegmentRecord,
 )
-from helios_core.ontology.mapping import ResolutionConfig
+from helios_cortex.ontology.mapping import ResolutionConfig
 
 from .cases import Rules
 from .claims import Unit, evidence_locator
@@ -228,7 +228,7 @@ class LlmExtractor:
 
     def extract(self, run: CrawlRunRecord, segments: Sequence[SegmentRecord]) -> AssetExtraction:
         """One document's grounded mentions and claims."""
-        from helios_core.llm.client import _parse_json
+        from helios_cortex.llm.client import _parse_json
 
         segments = sorted(segments, key=lambda s: s.ordinal)
         result = AssetExtraction()

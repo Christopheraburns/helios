@@ -1,6 +1,6 @@
 """The old console's audit log: redacted events persisted in its metadata database.
 
-Library code emits through ``helios_core.audit_sink`` instead; this module goes with
+Library code emits through ``helios_cortex.audit_sink`` instead; this module goes with
 the console's tables (Phase 8)."""
 from __future__ import annotations
 
@@ -16,9 +16,9 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from helios_core.audit_sink import sql_fingerprint  # noqa: F401 - re-exported for the console
+from helios_cortex.audit_sink import sql_fingerprint  # noqa: F401 - re-exported for the console
 from apps.helios.console.metadata import AuditEvent, MetadataRepository
-from helios_core.settings import environment_secret_values
+from helios_cortex.settings import environment_secret_values
 
 LOGGER = logging.getLogger(__name__)
 MAX_DETAIL_BYTES = 8_192

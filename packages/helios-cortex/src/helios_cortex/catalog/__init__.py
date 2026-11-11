@@ -8,7 +8,6 @@ from .base import (
     capabilities,
     catalog_for,
 )
-from .harvest import Harvester
 
 __all__ = [
     "GLOSSARY",
@@ -16,7 +15,6 @@ __all__ = [
     "CatalogError",
     "ColumnLineage",
     "GlossaryCatalog",
-    "Harvester",
     "LineageCatalog",
     "capabilities",
     "catalog_for",

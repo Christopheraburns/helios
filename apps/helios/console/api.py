@@ -22,8 +22,8 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from apps.helios.console import audit, authz
 from apps.helios.console import health as system_health
-from helios_core._pending import publication
-from helios_core._pending import review as review_store
+from helios_model import publication
+from helios_model import review as review_store
 from apps.helios import runtime
 from helios_cloudera.atlas import AtlasClient, AtlasError
 from helios_cloudera.atlas import atlas_config
@@ -46,7 +46,7 @@ from apps.helios.console.metadata import (
     StoredConversation,
     EvaluationRun,
 )
-from helios_core.llm import llm_from_settings
+from helios_cortex.llm import llm_from_settings
 from helios_cloudera.workbench import WorkbenchSettings as Settings
 from apps.helios.console.conversation import (
     MCPClientConfig,

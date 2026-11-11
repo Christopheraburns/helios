@@ -1,18 +1,18 @@
-"""Library code reads the environment only through helios_core.settings, and the
+"""Library code reads the environment only through helios_cortex.settings, and the
 Workbench profile in helios_cloudera.workbench (burndowns 1.7 and 3.4).
 
 Every package under packages/ is scanned, so new libraries inherit the rule. The
-crawl code in helios_core/_pending moves out with helios-crawl and is exempt until then.
+crawl code in helios_cortex/_pending moves out with helios-crawl and is exempt until then.
 """
 import ast
 from pathlib import Path
 
 PACKAGES = Path(__file__).resolve().parents[2]
 ALLOWED = {
-    Path("helios-core/src/helios_core/settings.py"),
+    Path("helios-cortex/src/helios_cortex/settings.py"),
     Path("helios-cloudera/src/helios_cloudera/workbench.py"),
 }
-EXEMPT_DIRS = {Path("helios-core/src/helios_core/_pending")}
+EXEMPT_DIRS = {Path("helios-cortex/src/helios_cortex/_pending")}
 ENV_NAMES = {"environ", "environb", "getenv", "getenvb", "putenv", "unsetenv"}
 
 
@@ -53,14 +53,14 @@ def test_only_settings_reads_the_environment():
         for line in environment_reads(path.read_text())
     ]
     assert not offenders, (
-        "Read configuration through helios_core.settings.Settings, not the environment: "
+        "Read configuration through helios_cortex.settings.Settings, not the environment: "
         + ", ".join(offenders)
     )
 
 
 def test_the_scan_sees_libraries_and_catches_every_spelling():
     scanned = {relative for relative, _ in _library_sources()}
-    assert Path("helios-core/src/helios_core/runs.py") in scanned
+    assert Path("helios-cortex/src/helios_cortex/runs.py") in scanned
     assert not any(EXEMPT_DIRS & set(relative.parents) for relative in scanned)
 
     assert environment_reads("import os\nos.environ.get('X')\n") == [2]

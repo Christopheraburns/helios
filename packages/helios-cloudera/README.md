@@ -1,6 +1,6 @@
 # helios-cloudera
 
-Helios plugins for Cloudera Data Platform. Install it next to helios-core and
+Helios plugins for Cloudera Data Platform. Install it next to helios-cortex and
 name the plugins in your settings:
 
 ```toml
@@ -22,9 +22,10 @@ password = "<workload password>"
 |---|---|
 | `helios_cloudera.impala` | `ImpalaEngine` (the `impala` engine plugin), `ImpalaOptions`, `impala_config` |
 | `helios_cloudera.atlas` | `AtlasClient` (the `atlas` catalog plugin), `AtlasOptions`, `atlas_config` |
-| `helios_cloudera.index` | `impala_index_store`; `python -m helios_cloudera.index init-tables` |
+| `helios_cloudera.index` | `impala_index_store`; `helios --profile workbench impala init-index` (or `python -m helios_cloudera.index init-tables`) |
 | `helios_cloudera.workbench` | `WorkbenchSettings`: Settings that also read the Workbench variables (`CDSW_*`, `IMPALA_*`, `WORKLOAD_*`, `ATLAS_*`, `INFERENCE_*`) |
-| `helios_cloudera.impala_diagnose` | `python -m helios_cloudera.impala_diagnose`: checks workload and proxy authentication |
+| `helios_cloudera.impala_diagnose` | `helios --profile workbench impala diagnose [--delegated-user USER]` (or `python -m helios_cloudera.impala_diagnose`): checks workload and proxy authentication |
+| `helios_cloudera.commands` | the `helios impala` command; and `--profile workbench` (`WorkbenchSettings`, registered under `helios.profiles`) |
 
 On Cloudera AI Workbench, build `WorkbenchSettings()` instead of `Settings()`. It reads the
 variables Workbench projects already set: `IMPALA_HOST` with `WORKLOAD_USER` and

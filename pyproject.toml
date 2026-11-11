@@ -16,7 +16,8 @@ classifiers = ["Private :: Do Not Upload"]
 # Mirrors apps/helios/console/requirements.txt, which Workbench still installs from.
 dependencies = [
     "helios-cloudera",
-    "helios-core[azure,gcs,llm,ontology,ozone,postgres,s3,trino]",
+    "helios-model",
+    "helios-cortex[azure,gcs,llm,ontology,ozone,postgres,s3,trino]",
     "fastapi>=0.115.0",
     "httpx>=0.27.0",
     "httpx2>=2.13.1",
@@ -29,7 +30,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-evidence = ["helios-core[evidence]"]
+evidence = ["helios-cortex[evidence]"]
 
 [dependency-groups]
 dev = [
@@ -47,23 +48,29 @@ default-groups = ["dev"]
 members = ["packages/*"]
 
 [tool.uv.sources]
-helios-core = { workspace = true }
+helios-cortex = { workspace = true }
 helios-cloudera = { workspace = true }
+helios-model = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["apps"]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/helios-core/tests", "packages/helios-cloudera/tests", "apps/helios/tests"]
+testpaths = [
+    "packages/helios-cortex/tests",
+    "packages/helios-cloudera/tests",
+    "packages/helios-model/tests",
+    "apps/helios/tests",
+]
 
 [tool.importlinter]
-root_packages = ["helios_core", "helios_cloudera"]
+root_packages = ["helios_cortex", "helios_cloudera", "helios_model"]
 include_external_packages = true  # so apps.* and sibling packages can be named
 
 [[tool.importlinter.contracts]]
-name = "helios-core imports no app code and no sibling package"
+name = "helios-cortex imports no app code and no sibling package"
 type = "forbidden"
-source_modules = ["helios_core"]
+source_modules = ["helios_cortex"]
 forbidden_modules = [
     "apps",
     "helios_model",
@@ -74,7 +81,7 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "helios-cloudera imports no app code and no sibling package but helios-core"
+name = "helios-cloudera imports no app code and no sibling package but helios-cortex"
 type = "forbidden"
 source_modules = ["helios_cloudera"]
 forbidden_modules = [
@@ -83,18 +90,32 @@ forbidden_modules = [
     "helios_serve",
     "helios_mcp",
     "helios_crawl",
-    "helios_core._pending",
+    "helios_cortex._pending",
 ]
 
 [[tool.importlinter.contracts]]
-# Feature code waiting for its package (see helios_core/_pending/__init__.py).
-# The source is core's children, not helios_core itself: import-linter skips a
-# forbidden module that sits inside the source package.
-name = "only _pending imports helios_core._pending"
+# Engines and catalogs reach helios-model through plugins, never by import.
+name = "helios-model imports no app code and no sibling package but helios-cortex"
 type = "forbidden"
-source_modules = ["helios_core.*"]
-forbidden_modules = ["helios_core._pending"]
-ignore_imports = ["helios_core._pending.** -> helios_core._pending.**"]
+source_modules = ["helios_model"]
+forbidden_modules = [
+    "apps",
+    "helios_cloudera",
+    "helios_serve",
+    "helios_mcp",
+    "helios_crawl",
+    "helios_cortex._pending",
+]
+
+[[tool.importlinter.contracts]]
+# Feature code waiting for its package (see helios_cortex/_pending/__init__.py).
+# The source is core's children, not helios_cortex itself: import-linter skips a
+# forbidden module that sits inside the source package.
+name = "only _pending imports helios_cortex._pending"
+type = "forbidden"
+source_modules = ["helios_cortex.*"]
+forbidden_modules = ["helios_cortex._pending"]
+ignore_imports = ["helios_cortex._pending.** -> helios_cortex._pending.**"]
 
 [tool.mypy]
 python_version = "3.11"

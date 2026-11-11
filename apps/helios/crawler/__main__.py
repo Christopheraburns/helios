@@ -78,7 +78,7 @@ def embed_hook(development_index: bool, strategy: str = "deterministic") -> Any:
     if missing:
         print(f"embeddings: off ({', '.join(missing)} not installed)")
         return None
-    from helios_core._pending.evidence import embed_run, location
+    from helios_cortex._pending.evidence import embed_run, location
 
     print(f"embeddings: on ({location()})")
     return embed_run
@@ -87,7 +87,7 @@ def embed_hook(development_index: bool, strategy: str = "deterministic") -> Any:
 def llm_extractor(settings: Any, classes: list[str]) -> Any:
     """The LLM crawler's extractor on the project's default model, or None with
     the reason printed."""
-    from helios_core.llm import llm_from_settings
+    from helios_cortex.llm import llm_from_settings
 
     from .llm_arm import LlmExtractor, claim_shapes, load_vocabulary
 
@@ -161,13 +161,13 @@ def main(argv: list[str] | None = None) -> int:
         return baseline_main(args)
 
     from helios_cloudera.impala import impala_config
-    from helios_core._pending.crawler.sources import is_crawlable
+    from helios_cortex._pending.crawler.sources import is_crawlable
     from apps.helios.console.domain import DataSource
     from helios_cloudera.impala import ImpalaEngine
     from helios_cloudera.index import impala_index_store
-    from helios_core.index import ontology_versions
-    from helios_core._pending import crawler_settings
-    from helios_core.index.store import duckdb_index_store
+    from helios_cortex.index import ontology_versions
+    from helios_cortex._pending import crawler_settings
+    from helios_cortex.index.store import duckdb_index_store
 
     from .connector import s3_client_from_connection
     from .connectors import build
@@ -280,8 +280,8 @@ def resolution_for(ontology_version: str, catalog: Any) -> tuple[Any, dict[str, 
     record about it on the run), from ``helios_index`` (CG-6). The repository's
     mapping files are not read here: they are shipped examples, imported once
     through the API."""
-    from helios_core.index import mappings as stored
-    from helios_core.ontology.mapping import resolution_config
+    from helios_cortex.index import mappings as stored
+    from helios_cortex.ontology.mapping import resolution_config
 
     if not stored.active(catalog):
         print(
@@ -335,7 +335,7 @@ def evaluate_main(args: Any) -> int:
     from helios_cloudera.impala import impala_config
     from helios_cloudera.impala import ImpalaEngine
     from helios_cloudera.index import impala_index_store
-    from helios_core.index.store import duckdb_index_store
+    from helios_cortex.index.store import duckdb_index_store
 
     from . import evaluate as harness
 
@@ -377,7 +377,7 @@ def baseline_main(args: Any) -> int:
     from helios_cloudera.impala import impala_config
     from helios_cloudera.impala import ImpalaEngine
     from helios_cloudera.index import impala_index_store
-    from helios_core.index import runs
+    from helios_cortex.index import runs
 
     from . import baseline
 

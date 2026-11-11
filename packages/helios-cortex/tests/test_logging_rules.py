@@ -1,18 +1,20 @@
 """Library code logs through named loggers and leaves handlers to the host (burndown 1.11).
 
 Every file under packages/*/src is parsed. ``print`` is allowed only in the command-line
-tools, whose output is their job; 5.5 turns them into ``helios`` subcommands.
+tools, whose output is their job. The ``helios`` command (``helios_cortex.cli``, 5.5) is
+the one program among them: it may also configure logging, since a program decides where
+the libraries' records go. Its subcommands write through ``CommandContext.echo``.
 """
 import ast
 from pathlib import Path
 
 PACKAGES = Path(__file__).resolve().parents[2]
 COMMANDS = {
-    Path("helios-core/src/helios_core/index/__main__.py"),
-    Path("helios-core/src/helios_core/registry/__main__.py"),
+    Path("helios-cortex/src/helios_cortex/index/__main__.py"),
     Path("helios-cloudera/src/helios_cloudera/impala_diagnose.py"),
     Path("helios-cloudera/src/helios_cloudera/index.py"),
 }
+PROGRAM = Path("helios-cortex/src/helios_cortex/cli.py")
 CONFIGURES_LOGGING = {"basicConfig", "dictConfig", "fileConfig", "addHandler", "setLevel"}
 HANDLERS = {"StreamHandler", "FileHandler", "RotatingFileHandler", "TimedRotatingFileHandler"}
 
@@ -38,8 +40,10 @@ def test_library_code_follows_the_logging_rules():
     offenders = [
         f"packages/{path.relative_to(PACKAGES)}:{problem}"
         for path in sorted(PACKAGES.glob("*/src/**/*.py"))
+        if path.relative_to(PACKAGES) != PROGRAM
         for problem in problems(path.read_text(), may_print=path.relative_to(PACKAGES) in COMMANDS)
     ]
+    assert (PACKAGES / PROGRAM).is_file()        # the exemption names a file that exists
     assert not offenders, "\n".join(offenders)
 
 

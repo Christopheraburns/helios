@@ -15,12 +15,12 @@ import httpx2
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
-from helios_core import __version__
+from helios_cortex import __version__
 from apps.helios.console import audit
-from helios_core.artifacts import ArtifactStore
+from helios_cortex.artifacts import ArtifactStore
 from apps.helios.console.authz import Principal
 from apps.helios.console.delegation import issue_assertion
-from helios_core.llm import (
+from helios_cortex.llm import (
     LLMClient,
     LLMError,
     LLMTimeoutError,

@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol
 
-from helios_core.caller import Caller, IdentityMode
+from helios_cortex.caller import Caller, IdentityMode
 
 
 class DataAction(str, Enum):

@@ -18,8 +18,8 @@ from pathlib import Path
 import pytest
 from apps.helios.crawler import baseline
 from apps.helios.crawler.crawl import crawl
-from helios_core.index.records import MentionRecord
-from helios_core.index.store import duckdb_index_store
+from helios_cortex.index.records import MentionRecord
+from helios_cortex.index.store import duckdb_index_store
 from test_crawler_llm import _connector, extractor
 from test_crawler_resolution import CONFIG, gazetteer, warehouse  # noqa: F401 - fixtures
 from crawler_samples import RETAIL_SETTINGS

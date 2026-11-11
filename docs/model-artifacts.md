@@ -44,7 +44,7 @@ To migrate an existing model:
 3. Publish once; new artifacts will be written under that Model ID.
 4. Keep or remove the legacy flat files after all consumers use the stable ID.
 
-All code should use `helios_core.artifacts.ArtifactStore` or
+All code should use `helios_cortex.artifacts.ArtifactStore` or
 `SemanticModel.load_published(model_id)` rather than constructing paths or
 deriving artifact names from a DataSource.
 

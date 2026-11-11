@@ -13,7 +13,8 @@ resolution-markers = [
 members = [
     "helios-apps",
     "helios-cloudera",
-    "helios-core",
+    "helios-cortex",
+    "helios-model",
 ]
 
 [[package]]
@@ -1673,7 +1674,8 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "helios-cloudera" },
-    { name = "helios-core", extra = ["azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"] },
+    { name = "helios-cortex", extra = ["azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"] },
+    { name = "helios-model" },
     { name = "httpx" },
     { name = "httpx2" },
     { name = "jinja2" },
@@ -1686,7 +1688,7 @@ dependencies = [
 
 [package.optional-dependencies]
 evidence = [
-    { name = "helios-core", extra = ["evidence"] },
+    { name = "helios-cortex", extra = ["evidence"] },
 ]
 
 [package.dev-dependencies]
@@ -1702,8 +1704,9 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "helios-cloudera", editable = "packages/helios-cloudera" },
-    { name = "helios-core", extras = ["azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"], editable = "packages/helios-core" },
-    { name = "helios-core", extras = ["evidence"], marker = "extra == 'evidence'", editable = "packages/helios-core" },
+    { name = "helios-cortex", extras = ["azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"], editable = "packages/helios-cortex" },
+    { name = "helios-cortex", extras = ["evidence"], marker = "extra == 'evidence'", editable = "packages/helios-cortex" },
+    { name = "helios-model", editable = "packages/helios-model" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "httpx2", specifier = ">=2.13.1" },
     { name = "jinja2", specifier = ">=3.1.0" },
@@ -1729,7 +1732,7 @@ name = "helios-cloudera"
 version = "0.1.0"
 source = { editable = "packages/helios-cloudera" }
 dependencies = [
-    { name = "helios-core" },
+    { name = "helios-cortex" },
     { name = "impyla" },
     { name = "pydantic-settings" },
     { name = "requests" },
@@ -1737,16 +1740,16 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "helios-core", editable = "packages/helios-core" },
+    { name = "helios-cortex", editable = "packages/helios-cortex" },
     { name = "impyla", specifier = ">=0.20.0" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "requests", specifier = ">=2.32.0" },
 ]
 
 [[package]]
-name = "helios-core"
+name = "helios-cortex"
 version = "0.1.0"
-source = { editable = "packages/helios-core" }
+source = { editable = "packages/helios-cortex" }
 dependencies = [
     { name = "alembic" },
     { name = "duckdb" },
@@ -1818,6 +1821,17 @@ requires-dist = [
     { name = "trino", marker = "extra == 'trino'", specifier = ">=0.330" },
 ]
 provides-extras = ["llm", "ontology", "postgres", "trino", "s3", "azure", "gcs", "ozone", "testing", "evidence"]
+
+[[package]]
+name = "helios-model"
+version = "0.1.0"
+source = { editable = "packages/helios-model" }
+dependencies = [
+    { name = "helios-cortex" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "helios-cortex", editable = "packages/helios-cortex" }]
 
 [[package]]
 name = "hf-xet"

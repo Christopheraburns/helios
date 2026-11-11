@@ -1,56 +1,58 @@
-"""Shared bootstrap for Workbench Jobs (which run in a Jupyter kernel: no __file__)."""
-import json
-import logging
+"""Shared bootstrap for Workbench Jobs (which run in a Jupyter kernel: no __file__).
+
+Each Job is a thin host: it maps its environment variables to arguments of the
+``helios`` command (burndown 5.5) and runs it with the Workbench settings profile,
+inside the console's audit record. Configuration (connections, the registry, where
+runs and artifacts live) is the command's, read by ``WorkbenchSettings``.
+"""
 import os
+import shlex
 import sys
 import time
 from contextlib import contextmanager
-from datetime import datetime, timezone
 
 ROOT = os.environ.get("HELIOS_ROOT") or os.path.join(os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios")
 # Workbench Jobs run from the checkout, not an install: put the repo (for apps.*)
-# and the helios-core and helios-cloudera sources on the path until the runtime installs wheels.
+# and the helios-cortex, helios-cloudera and helios-model sources on the path until the runtime installs wheels.
 for path in (
     ROOT,
-    os.path.join(ROOT, "packages", "helios-core", "src"),
+    os.path.join(ROOT, "packages", "helios-cortex", "src"),
     os.path.join(ROOT, "packages", "helios-cloudera", "src"),
+    os.path.join(ROOT, "packages", "helios-model", "src"),
 ):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-# The libraries log through named loggers and configure no handlers; a Job is the
-# host, so it decides where their progress goes (the Job's output, as before).
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-logging.getLogger("httpx").setLevel(logging.WARNING)
 
-RUNS_DIR = os.environ.get("HELIOS_RUNS_DIR") or os.path.join(ROOT, "runs")
-
-
-def new_run_id() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+def env_list(name: str) -> list[str]:
+    """A comma-separated variable as a list (empty when unset)."""
+    return [v.strip() for v in os.environ.get(name, "").split(",") if v.strip()]
 
 
 def latest_run_id() -> str | None:
-    if not os.path.isdir(RUNS_DIR):
-        return None
-    runs = sorted(d for d in os.listdir(RUNS_DIR) if os.path.isdir(os.path.join(RUNS_DIR, d)))
-    return runs[-1] if runs else None
+    from helios_cloudera.workbench import WorkbenchSettings
+    from helios_cortex.runs import RunStore
+
+    return RunStore.from_settings(WorkbenchSettings()).latest_run_id()
 
 
-def run_path(run_id: str, name: str) -> str:
-    os.makedirs(os.path.join(RUNS_DIR, run_id), exist_ok=True)
-    return os.path.join(RUNS_DIR, run_id, name)
+def run_model_id(run_id: str) -> str | None:
+    from helios_cloudera.workbench import WorkbenchSettings
+    from helios_cortex.runs import RunStore
+
+    return (RunStore.from_settings(WorkbenchSettings()).load(run_id, "harvest") or {}).get("model_id")
 
 
-def write_json(path: str, data) -> None:
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2, default=str)
-    print(f"wrote {path} ({os.path.getsize(path):,} bytes)")
+def helios(stage: str, arguments: list[str], run_id: str, model_id: str | None = None) -> None:
+    """Run ``helios --profile workbench <stage> <arguments>`` as this Job, audited."""
+    from helios_cortex.cli import main
 
-
-def read_json(path: str):
-    with open(path) as f:
-        return json.load(f)
+    argv = ["--profile", "workbench", stage, *arguments]
+    print("helios " + shlex.join(argv), flush=True)
+    with audit_job(stage, run_id, model_id):
+        status = main(argv)
+        if status:
+            raise SystemExit(status)
 
 
 @contextmanager
@@ -129,19 +131,3 @@ def audit_job(stage: str, run_id: str, model_id: str | None = None):
         )
     finally:
         audit.reset_context(token)
-
-
-def engine():
-    from helios_cloudera.impala import ImpalaEngine, impala_config
-    from helios_cloudera.workbench import WorkbenchSettings as Settings
-    cfg = impala_config(Settings())
-    if cfg is None:
-        raise SystemExit("IMPALA_HOST / credentials are not set in the project environment")
-    return ImpalaEngine(cfg)
-
-
-def atlas():
-    from helios_cloudera.atlas import AtlasClient, atlas_config
-    from helios_cloudera.workbench import WorkbenchSettings as Settings
-    cfg = atlas_config(Settings())
-    return AtlasClient(cfg) if cfg else None

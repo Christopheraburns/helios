@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from dataclasses import replace
 
-from helios_core.caller import Caller, IdentityMode
+from helios_cortex.caller import Caller, IdentityMode
+from helios_cortex.settings import Settings
 
 from helios_cloudera.impala import (
     ImpalaAuthenticationError,
@@ -15,7 +17,47 @@ from helios_cloudera.impala import (
 from helios_cloudera.workbench import WorkbenchSettings
 
 
+class DiagnosisFailed(Exception):
+    """A check failed; the message says which and why, without credentials or SQL."""
+
+
+def diagnose(settings: Settings, delegated_user: str | None = None, echo: Callable[[str], None] = print) -> None:
+    """Check the ``default`` Impala connection's workload credential, then, with
+    ``delegated_user``, that Impala runs a query as that user through doAs. ``echo``
+    reports each check that passes; the first that fails raises DiagnosisFailed."""
+    configuration = impala_config(settings)
+    if configuration is None:
+        raise DiagnosisFailed("configuration: failed (set IMPALA_HOST, WORKLOAD_USER, and WORKLOAD_PASSWORD)")
+    engine = ImpalaEngine(configuration)
+    try:
+        if not engine.ping():
+            raise DiagnosisFailed("service-account authentication: unexpected result")
+    except ImpalaAuthenticationError as exc:
+        raise DiagnosisFailed(f"service-account authentication: failed ({exc})") from exc
+    except DiagnosisFailed:
+        raise
+    except Exception as exc:
+        raise DiagnosisFailed(f"service-account connectivity: failed ({type(exc).__name__}: {exc})") from exc
+    echo("service-account authentication: ok")
+
+    if not delegated_user:
+        return
+    try:
+        # Impersonation is what is being diagnosed, whatever mode the connection is set to.
+        ImpalaEngine(replace(configuration, identity=IdentityMode.IMPERSONATE)).query(
+            "SELECT 1", Caller(delegated_user), limit=1)
+    except ImpalaAuthenticationError as exc:
+        raise DiagnosisFailed(f"proxy delegation: rejected by CDW ({exc})") from exc
+    except ImpalaProxyDelegationError as exc:
+        raise DiagnosisFailed(f"proxy delegation: identity check failed ({exc})") from exc
+    except Exception as exc:
+        raise DiagnosisFailed(f"proxy delegation: failed ({type(exc).__name__}: {exc})") from exc
+    echo(f"proxy delegation: ok for {delegated_user}")
+
+
 def main() -> None:
+    """``python -m helios_cloudera.impala_diagnose``; the same as
+    ``helios --profile workbench impala diagnose``."""
     parser = argparse.ArgumentParser(
         description=(
             "Test the configured workload credential first, then an optional "
@@ -27,44 +69,10 @@ def main() -> None:
         help="authenticated Cloudera SSO subject to verify through doAs",
     )
     args = parser.parse_args()
-
-    configuration = impala_config(WorkbenchSettings())
-    if configuration is None:
-        raise SystemExit(
-            "configuration: failed (set IMPALA_HOST, WORKLOAD_USER, and "
-            "WORKLOAD_PASSWORD)"
-        )
-    engine = ImpalaEngine(configuration)
     try:
-        if not engine.ping():
-            raise SystemExit("service-account authentication: unexpected result")
-    except ImpalaAuthenticationError as exc:
-        raise SystemExit(f"service-account authentication: failed ({exc})")
-    except Exception as exc:
-        raise SystemExit(
-            "service-account connectivity: failed "
-            f"({type(exc).__name__}: {exc})"
-        )
-    print("service-account authentication: ok")
-
-    if not args.delegated_user:
-        return
-    try:
-        # Impersonation is what is being diagnosed, whatever mode the connection is set to.
-        ImpalaEngine(replace(configuration, identity=IdentityMode.IMPERSONATE)).query(
-            "SELECT 1",
-            Caller(args.delegated_user),
-            limit=1,
-        )
-    except ImpalaAuthenticationError as exc:
-        raise SystemExit(f"proxy delegation: rejected by CDW ({exc})")
-    except ImpalaProxyDelegationError as exc:
-        raise SystemExit(f"proxy delegation: identity check failed ({exc})")
-    except Exception as exc:
-        raise SystemExit(
-            f"proxy delegation: failed ({type(exc).__name__}: {exc})"
-        )
-    print(f"proxy delegation: ok for {args.delegated_user}")
+        diagnose(WorkbenchSettings(), args.delegated_user)
+    except DiagnosisFailed as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 if __name__ == "__main__":

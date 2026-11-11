@@ -23,8 +23,8 @@ from apps.helios.crawler.connectors import SourceAsset
 from apps.helios.crawler.crawl import segment_rows
 from apps.helios.crawler.mentions import extract_mentions
 from apps.helios.crawler.resolution import resolve
-from helios_core.index import ids
-from helios_core.index.records import SegmentRecord
+from helios_cortex.index import ids
+from helios_cortex.index.records import SegmentRecord
 from crawler_samples import RETAIL_SETTINGS, found
 
 CONFIG = resolution_fixtures.CONFIG
@@ -389,7 +389,7 @@ def test_a_generic_word_counts_when_the_unit_names_the_subject(warehouse, gazett
 def test_crawl_writes_claims_and_evidence(warehouse, gazetteer, tmp_path):
     from apps.helios.crawler.connectors import HeliosDsConnector, object_reader
     from apps.helios.crawler.crawl import CRAWLER_VERSION, crawl
-    from helios_core.index.store import duckdb_index_store
+    from helios_cortex.index.store import duckdb_index_store
 
     assert CRAWLER_VERSION == "0.7.0"
     root = tmp_path / "objects"
@@ -465,7 +465,7 @@ def test_crawl_writes_claims_and_evidence(warehouse, gazetteer, tmp_path):
 
 
 def test_default_cue_lexicons_name_only_retail_predicates():
-    from helios_core._pending.crawler.settings import ontology_problems
+    from helios_cortex._pending.crawler.settings import ontology_problems
 
     classes = {"Customer", "Item", "Brand", "Store", "Reason", "Sale", "Return"}
     classes |= {"Contains", "HasReason", "PartyTo"}  # relationship types the claim rules follow

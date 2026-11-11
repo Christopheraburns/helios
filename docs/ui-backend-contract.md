@@ -9,7 +9,7 @@ API design.
 The future frontend must use the Helios HTTP API as its only data and
 authorization contract. It must not:
 
-- import `helios_core` Python modules;
+- import `helios_cortex` Python modules;
 - read model YAML or JSON artifacts directly;
 - query `helios_meta` or the SQLite metadata database directly;
 - call Impala or Atlas directly; or

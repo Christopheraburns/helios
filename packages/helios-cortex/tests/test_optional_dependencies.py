@@ -1,6 +1,6 @@
 """The base install is the compiler, semantic model, DuckDB and SQLite (burndown 3.2).
 
-Every optional package is blocked in a fresh interpreter; ``import helios_core``,
+Every optional package is blocked in a fresh interpreter; ``import helios_cortex``,
 every base module and the quickstart path (a DuckDB connection found through the
 plugin registry, a published model, a compiled metric query) must still work, and
 each module that needs an extra must say which one to install.
@@ -38,11 +38,11 @@ CLOUDERA_MODULES = ["helios_cloudera", "impala", "requests"]
 
 # Modules that are an optional feature: importing them without the extra names it.
 FEATURES = {
-    "helios_core.conformance": "testing",
-    "helios_core.engines.trino_engine": "trino",
-    "helios_core.llm": "llm",
-    "helios_core.llm.client": "llm",
-    "helios_core.ontology.parser": "ontology",
+    "helios_cortex.conformance": "testing",
+    "helios_cortex.engines.trino_engine": "trino",
+    "helios_cortex.llm": "llm",
+    "helios_cortex.llm.client": "llm",
+    "helios_cortex.ontology.parser": "ontology",
 }
 
 
@@ -79,10 +79,10 @@ class Block(importlib.abc.MetaPathFinder):
 sys.meta_path.insert(0, Block())
 report = {"broken": [], "features": {}}
 
-import helios_core
+import helios_cortex
 # walk_packages cannot descend into a package that fails to import, so the
 # feature modules are named as well.
-names = {m.name for m in pkgutil.walk_packages(helios_core.__path__, "helios_core.")} | set(FEATURES)
+names = {m.name for m in pkgutil.walk_packages(helios_cortex.__path__, "helios_cortex.")} | set(FEATURES)
 for name in sorted(names):
     if "._pending" in name or name.endswith("__main__"):
         continue
@@ -97,10 +97,10 @@ for name in sorted(names):
         if name in FEATURES:
             report["features"][name] = None
 
-from helios_core import plugins
-from helios_core.compiler import Compiler, SemanticRequest
-from helios_core.ossie import SemanticModel
-from helios_core.settings import Settings
+from helios_cortex import plugins
+from helios_cortex.compiler import Compiler, SemanticRequest
+from helios_cortex.ossie import SemanticModel
+from helios_cortex.settings import Settings
 
 settings = Settings(connections={"default": {"engine": "duckdb"}})
 plugins.require_configured(settings)
@@ -117,7 +117,7 @@ print(json.dumps(report))
 '''
 
 
-def test_helios_core_and_the_quickstart_work_without_any_extra(tmp_path):
+def test_helios_cortex_and_the_quickstart_work_without_any_extra(tmp_path):
     result = subprocess.run(
         [sys.executable, "-c", ISOLATED, ",".join([*OPTIONAL_MODULES.values(), *CLOUDERA_MODULES]), json.dumps(FEATURES), str(ROOT)],
         capture_output=True, text=True, cwd=tmp_path, timeout=120,
@@ -129,5 +129,5 @@ def test_helios_core_and_the_quickstart_work_without_any_extra(tmp_path):
     assert report["loaded"] == []
     for module, extra in FEATURES.items():
         assert report["features"][module] is not None, f"{module} imported without its extra"
-        assert f"pip install 'helios-core[{extra}]'" in report["features"][module]
+        assert f"pip install 'helios-cortex[{extra}]'" in report["features"][module]
     assert report["quickstart"] == [[2001.0, 9.5]]

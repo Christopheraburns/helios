@@ -1,9 +1,9 @@
 """Browsing from an ontology class to entities, documents and passages (CR-9)."""
 
 import pytest
-from helios_core.index import runs
-from helios_core._pending import browse, evidence
-from helios_core.index.records import (
+from helios_cortex.index import runs
+from helios_cortex._pending import browse, evidence
+from helios_cortex.index.records import (
     AssetRecord,
     EntityLinkRecord,
     EntityRecord,
@@ -11,7 +11,7 @@ from helios_core.index.records import (
     RelationshipRecord,
     SegmentRecord,
 )
-from helios_core.index.store import duckdb_index_store
+from helios_cortex.index.store import duckdb_index_store
 
 
 @pytest.fixture

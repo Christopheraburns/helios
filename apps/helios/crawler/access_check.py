@@ -145,8 +145,8 @@ def run(
 def _mapped_table() -> str | None:
     """database.table of the first class in an active mapping, if there is one."""
     from helios_cloudera.index import impala_index_store
-    from helios_core.index import mappings as stored
-    from helios_core.ontology.mapping import resolution_config
+    from helios_cortex.index import mappings as stored
+    from helios_cortex.ontology.mapping import resolution_config
 
     try:
         index = impala_index_store(HeliosSettings())

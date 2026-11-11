@@ -1,4 +1,4 @@
-"""Helios's artifact storage backends pass the conformance suite (helios_core.conformance).
+"""Helios's artifact storage backends pass the conformance suite (helios_cortex.conformance).
 
 The suite runs on a local directory and on S3 (an in-process moto server, or the
 S3-compatible endpoint HELIOS_TEST_S3 names, with HELIOS_TEST_S3_KEY and
@@ -15,8 +15,8 @@ import uuid
 
 import pytest
 
-from helios_core.artifact_storage import LocalStorage, storage_for
-from helios_core.conformance import ArtifactStorageConformance
+from helios_cortex.artifact_storage import LocalStorage, storage_for
+from helios_cortex.conformance import ArtifactStorageConformance
 
 AZURITE_KEY = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
 
@@ -105,8 +105,8 @@ def test_storage_urls_pick_the_backend_and_name_missing_extras(tmp_path):
 
 
 def test_settings_put_runs_with_object_storage_artifacts(tmp_path):
-    from helios_core.runs import RunStore
-    from helios_core.settings import Settings
+    from helios_cortex.runs import RunStore
+    from helios_cortex.settings import Settings
 
     local = RunStore.from_settings(Settings(data_dir=tmp_path / "d"))
     assert local.runs_dir == str(tmp_path / "d" / "runs")                # the local default is unchanged

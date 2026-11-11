@@ -15,12 +15,12 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from helios_core import __version__
-from helios_core._pending import publication
-from helios_core._pending import review as rv
+from helios_cortex import __version__
+from helios_model import publication
+from helios_model import review as rv
 from apps.helios import runtime
-from helios_core.artifacts import model_id_for_run
-from helios_core.ossie import preflight
+from helios_cortex.artifacts import model_id_for_run
+from helios_model.build import preflight
 
 HERE = Path(__file__).parent
 tpl = Jinja2Templates(directory=HERE / "templates")

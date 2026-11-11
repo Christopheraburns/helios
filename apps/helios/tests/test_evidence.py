@@ -2,16 +2,16 @@
 
 import pytest
 from apps.helios.crawler.crawl import crawl
-from helios_core.index import runs
-from helios_core._pending import evidence
-from helios_core.index.records import (
+from helios_cortex.index import runs
+from helios_cortex._pending import evidence
+from helios_cortex.index.records import (
     ClaimEvidenceRecord,
     ClaimRecord,
     EntityRecord,
     RelationshipRecord,
     SegmentRecord,
 )
-from helios_core.index.store import duckdb_index_store
+from helios_cortex.index.store import duckdb_index_store
 from test_crawler_connector import DATASET, corpus  # noqa: F401 - fixture
 from crawler_samples import RETAIL_SETTINGS
 

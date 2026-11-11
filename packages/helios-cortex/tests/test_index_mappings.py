@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helios_core.index import mappings as stored
-from helios_core.ontology.mapping import (
+from helios_cortex.index import mappings as stored
+from helios_cortex.ontology.mapping import (
     SourceMapping,
     load_mapping,
     mapping_problems,
@@ -141,7 +141,7 @@ def test_a_bare_on_key_is_rejected_because_yaml_reads_it_as_true():
 
     document = yaml_module.safe_load("class: Sale\non: [[a, b]]\nedge: ReturnOf\n")
     assert True in document  # what YAML made of "on"
-    from helios_core.ontology.mapping import RelatedRecord
+    from helios_cortex.ontology.mapping import RelatedRecord
 
     with pytest.raises(ValidationError):
         RelatedRecord.model_validate(document)

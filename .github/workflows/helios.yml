@@ -9,7 +9,7 @@ on:
       - "docs/**"
   push:
     branches: [main]
-    tags: ["helios-core/v*"]
+    tags: ["helios-cortex/v*"]
 
 jobs:
   test:
@@ -25,7 +25,7 @@ jobs:
       - run: uv run lint-imports
       - run: uv run pytest -q
 
-  # The base install (burndown 3.2): helios-core's wheel with no extras. Tests that
+  # The base install (burndown 3.2): helios-cortex's wheel with no extras. Tests that
   # need an extra skip and say which.
   base-install:
     runs-on: ubuntu-latest
@@ -34,11 +34,11 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
-      - run: uv build --package helios-core --wheel --out-dir dist
+      - run: uv build --package helios-cortex --wheel --out-dir dist
       - run: uv venv "$RUNNER_TEMP/base" && uv pip install --python "$RUNNER_TEMP/base/bin/python" dist/*.whl pytest
       - run: |
           cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/base/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-core/tests"
+          "$RUNNER_TEMP/base/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-cortex/tests"
 
   # The Trino engine against a real coordinator (burndown 3.8): harvest, profile,
   # a compiled metric, and impersonation on an open cluster's memory catalog.
@@ -62,7 +62,7 @@ jobs:
             sleep 3
           done
           echo "Trino did not start"; exit 1
-      - run: uv run pytest -q -rs packages/helios-core/tests/test_trino_live.py
+      - run: uv run pytest -q -rs packages/helios-cortex/tests/test_trino_live.py packages/helios-model/tests/test_trino_discovery.py
         env:
           HELIOS_TEST_TRINO: localhost:8080
 
@@ -94,18 +94,19 @@ jobs:
       - run: uv sync --locked
       - run: >-
           uv run pytest -q -rs
-          packages/helios-core/tests/test_registry.py
-          packages/helios-core/tests/test_registry_sql.py
-          packages/helios-core/tests/test_artifact_storage.py
-          packages/helios-core/tests/test_conformance.py
+          packages/helios-cortex/tests/test_registry.py
+          packages/helios-cortex/tests/test_registry_sql.py
+          packages/helios-cortex/tests/test_artifact_storage.py
+          packages/helios-cortex/tests/test_conformance.py
         env:
           HELIOS_TEST_POSTGRES: postgresql+psycopg://postgres:helios@localhost:5432/postgres
           HELIOS_TEST_S3: http://localhost:5000
           HELIOS_TEST_S3_KEY: helios
           HELIOS_TEST_S3_SECRET: helios-secret
 
-  # helios-cloudera installed from wheels beside a base helios-core (burndown 3.3):
-  # its entry points register and its tests pass without the workspace.
+  # helios-cloudera installed from wheels beside a base helios-cortex (burndown 3.3):
+  # its entry points register and its tests pass without the workspace. helios-model
+  # is installed for the tests only: two of them harvest and profile through Atlas and Impala.
   cloudera-install:
     runs-on: ubuntu-latest
     steps:
@@ -113,18 +114,34 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
-      - run: uv build --package helios-core --wheel --out-dir dist
+      - run: uv build --package helios-cortex --wheel --out-dir dist
       - run: uv build --package helios-cloudera --wheel --out-dir dist
+      - run: uv build --package helios-model --wheel --out-dir dist
       - run: uv venv "$RUNNER_TEMP/cloudera" && uv pip install --python "$RUNNER_TEMP/cloudera/bin/python" dist/*.whl pytest
       - run: |
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/cloudera/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-cloudera/tests"
 
-  # Wheels go to the internal index on a package tag (helios-core/v0.1.0).
+  # helios-model installed from wheels beside a base helios-cortex (burndown 5.1).
+  model-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv build --package helios-cortex --wheel --out-dir dist
+      - run: uv build --package helios-model --wheel --out-dir dist
+      - run: uv venv "$RUNNER_TEMP/model" && uv pip install --python "$RUNNER_TEMP/model/bin/python" dist/*.whl pytest
+      - run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/model/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-model/tests"
+
+  # Wheels go to the internal index on a package tag (helios-cortex/v0.1.0).
   # Nothing installs them yet; host projects switch over in Phase 8.
   # Needs repository secrets HELIOS_INDEX_URL and HELIOS_INDEX_TOKEN.
   publish:
-    if: startsWith(github.ref, 'refs/tags/helios-core/v')
+    if: startsWith(github.ref, 'refs/tags/helios-cortex/v')
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -134,10 +151,10 @@ jobs:
           python-version: "3.12"
       - name: Check tag matches package version
         run: |
-          tag="${GITHUB_REF_NAME#helios-core/v}"
-          version="$(python3 -c 'import tomllib; print(tomllib.load(open("packages/helios-core/pyproject.toml", "rb"))["project"]["version"])')"
-          test "$tag" = "$version" || { echo "tag $tag != helios-core $version"; exit 1; }
-      - run: uv build --package helios-core --out-dir dist
+          tag="${GITHUB_REF_NAME#helios-cortex/v}"
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("packages/helios-cortex/pyproject.toml", "rb"))["project"]["version"])')"
+          test "$tag" = "$version" || { echo "tag $tag != helios-cortex $version"; exit 1; }
+      - run: uv build --package helios-cortex --out-dir dist
       - run: uv publish --publish-url "$HELIOS_INDEX_URL" --token "$HELIOS_INDEX_TOKEN" dist/*
         env:
           HELIOS_INDEX_URL: ${{ secrets.HELIOS_INDEX_URL }}

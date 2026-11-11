@@ -77,7 +77,7 @@ that has the same project environment:
 
 ```bash
 cd "$CDSW_PROJECT_DIR/helios"
-PYTHONPATH=packages/helios-core/src:packages/helios-cloudera/src \
+PYTHONPATH=packages/helios-cortex/src:packages/helios-cloudera/src \
   python -m helios_cloudera.impala_diagnose \
   --delegated-user '<Cloudera SSO subject>'
 ```

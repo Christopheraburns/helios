@@ -5,7 +5,7 @@ A backend's tests subclass a suite and provide one fixture that returns a fresh,
 backend; pytest collects the inherited tests:
 
     import pytest
-    from helios_core.conformance import ArtifactStorageConformance, RegistryConformance
+    from helios_cortex.conformance import ArtifactStorageConformance, RegistryConformance
 
     class TestMyRegistry(RegistryConformance):
         @pytest.fixture
@@ -17,37 +17,37 @@ backend; pytest collects the inherited tests:
         def storage(self, tmp_path):
             return MyStorage(...)             # an ArtifactStorage with no keys
 
-``RegistryConformance`` checks the ModelRegistry rules (helios_core.registry).
+``RegistryConformance`` checks the ModelRegistry rules (helios_cortex.registry).
 ``ArtifactStorageConformance`` checks the storage operations, above all that ``create``
 is atomic under racing writers, and then runs the ArtifactStore (immutable revisions,
 the activation log) and RunStore on the backend, since those are built on it.
 
-Needs pytest (``pip install 'helios-core[testing]'``).
+Needs pytest (``pip install 'helios-cortex[testing]'``).
 """
 from __future__ import annotations
 
 import threading
 from datetime import datetime, timedelta, timezone
 
-from helios_core._optional import missing_extra
+from helios_cortex._optional import missing_extra
 
 try:
     import pytest
 except ImportError as exc:
     raise missing_extra("the conformance suite", "testing", exc) from exc
 
-from helios_core.artifacts import ActivationConflict, ArtifactError, ArtifactStore
-from helios_core.caller import Caller
-from helios_core.domain import DataSource, DataSourceReference, Model
-from helios_core.ossie import SemanticModel
-from helios_core.registry import (
+from helios_cortex.artifacts import ActivationConflict, ArtifactError, ArtifactStore
+from helios_cortex.caller import Caller
+from helios_cortex.domain import DataSource, DataSourceReference, Model
+from helios_cortex.ossie import SemanticModel
+from helios_cortex.registry import (
     DRAFT,
     PUBLISHED,
     RegistryError,
     RevisionConflict,
     SemanticRevision,
 )
-from helios_core.visibility import visible_models
+from helios_cortex.visibility import visible_models
 
 __all__ = ["ArtifactStorageConformance", "RegistryConformance"]
 

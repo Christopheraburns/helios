@@ -2,7 +2,7 @@
 projects have always set, read into Helios Settings.
 
 A host on Workbench builds ``WorkbenchSettings()`` where it would build
-``Settings()``. On top of helios-core's sources it reads:
+``Settings()``. On top of helios-cortex's sources it reads:
 
 * ``CDSW_PROJECT_DIR`` (data directory ``<project>/helios``); on Workbench without
   it (``CDSW_PROJECT_ID``, ``CDSW_ENGINE_ID`` or ``CDSW_DOMAIN`` set),
@@ -26,7 +26,7 @@ from typing import Any
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
-from helios_core.settings import DEFAULT, Settings, conventional_llm_provider
+from helios_cortex.settings import DEFAULT, Settings, conventional_llm_provider
 
 WORKBENCH_MARKERS = ("CDSW_PROJECT_ID", "CDSW_ENGINE_ID", "CDSW_DOMAIN")
 WORKBENCH_HOME = "/home/cdsw/helios"  # Workbench's project directory when CDSW_PROJECT_DIR is unset

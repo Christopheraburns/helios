@@ -9,9 +9,9 @@ BROKEN = textwrap.dedent('''
 
     import pytest
 
-    from helios_core.artifact_storage import LocalStorage
-    from helios_core.conformance import ArtifactStorageConformance, RegistryConformance
-    from helios_core.registry import InMemoryRegistry
+    from helios_cortex.artifact_storage import LocalStorage
+    from helios_cortex.conformance import ArtifactStorageConformance, RegistryConformance
+    from helios_cortex.registry import InMemoryRegistry
 
 
     class CheckThenWrite(LocalStorage):

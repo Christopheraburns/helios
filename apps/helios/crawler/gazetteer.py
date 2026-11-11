@@ -30,9 +30,9 @@ from typing import Any
 
 from functools import lru_cache
 
-from helios_core._pending.crawler.settings import Dictionary
-from helios_core.index import ids
-from helios_core.ontology.mapping import ClassIdentifiers, ResolutionConfig, template_columns
+from helios_cortex._pending.crawler.settings import Dictionary
+from helios_cortex.index import ids
+from helios_cortex.ontology.mapping import ClassIdentifiers, ResolutionConfig, template_columns
 
 KINDS = ("key", "display", "alias", "template")
 KIND_RANK = {kind: rank for rank, kind in enumerate(KINDS)}

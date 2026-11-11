@@ -17,20 +17,24 @@ from importlib.metadata import EntryPoint, entry_points
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from helios_core.settings import Settings
+    from helios_cortex.settings import Settings
 
 ENGINES = "helios.engines"
 CATALOGS = "helios.catalogs"
 STORES = "helios.stores"
 TOOLS = "helios.tools"
 COMMANDS = "helios.commands"
-GROUPS = (ENGINES, CATALOGS, STORES, TOOLS, COMMANDS)
+PROFILES = "helios.profiles"
+GROUPS = (ENGINES, CATALOGS, STORES, TOOLS, COMMANDS, PROFILES)
 
 # The package that provides each plugin Helios itself publishes, so a missing one
 # says what to install.
 PROVIDERS = {
     (ENGINES, "impala"): "helios-cloudera",
     (CATALOGS, "atlas"): "helios-cloudera",
+    (PROFILES, "workbench"): "helios-cloudera",
+    (COMMANDS, "impala"): "helios-cloudera",
+    **{(COMMANDS, name): "helios-model" for name in ("harvest", "profile", "propose", "publish")},
 }
 
 

@@ -1,4 +1,4 @@
-"""Helios's registry backends pass the conformance suite (helios_core.conformance):
+"""Helios's registry backends pass the conformance suite (helios_cortex.conformance):
 in memory, SqlRegistry on a SQLite file, and SqlRegistry on Postgres when
 HELIOS_TEST_POSTGRES names a database URL.
 
@@ -9,9 +9,9 @@ import os
 
 import pytest
 
-from helios_core.conformance import RegistryConformance
-from helios_core.registry import InMemoryRegistry, ModelRegistry, SqlRegistry
-from helios_core.registry.sql import VERSION_TABLE, metadata
+from helios_cortex.conformance import RegistryConformance
+from helios_cortex.registry import InMemoryRegistry, ModelRegistry, SqlRegistry
+from helios_cortex.registry.sql import VERSION_TABLE, metadata
 
 POSTGRES = os.environ.get("HELIOS_TEST_POSTGRES")
 

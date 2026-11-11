@@ -8,8 +8,8 @@ import json
 import duckdb
 import pytest
 from apps.helios.crawler import evaluate as harness
-from helios_core.index import ids, runs
-from helios_core.index.records import (
+from helios_cortex.index import ids, runs
+from helios_cortex.index.records import (
     AssetRecord,
     ClaimEvidenceRecord,
     ClaimRecord,
@@ -19,7 +19,7 @@ from helios_core.index.records import (
     RelationshipRecord,
     SegmentRecord,
 )
-from helios_core.index.store import duckdb_index_store
+from helios_cortex.index.store import duckdb_index_store
 from crawler_samples import RETAIL_SETTINGS
 
 # What the harness is told about this data: the mapping's database, and the

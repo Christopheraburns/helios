@@ -5,7 +5,7 @@ BigQuery, Trino, Databricks, MySQL, SQLite, ...), named by a SQLAlchemy URL.
     engine = "sqlalchemy"
     url = "postgresql+psycopg://helios@db.example.com/sales"
 
-Install the database's own driver (``helios-core[postgres]`` brings Postgres's). The URL's
+Install the database's own driver (``helios-cortex[postgres]`` brings Postgres's). The URL's
 credentials are the connection's service identity, so ``service`` is the only
 identity mode. Catalog introspection goes through the SQLAlchemy inspector.
 """
@@ -103,18 +103,19 @@ class SqlAlchemyEngine(Engine):
     def ping(self) -> bool:
         return self.query("SELECT 1").rows == [(1,)]
 
-    def _inspector(self) -> sqlalchemy.Inspector:
+    def _inspector(self, caller: Caller | None) -> sqlalchemy.Inspector:
+        self.check_caller(caller)  # service mode only, so the inspector's connection is the caller's view
         return sqlalchemy.inspect(self._engine)  # a new one each time: the inspector caches
 
-    def databases(self) -> list[str]:
-        return self._inspector().get_schema_names()
+    def databases(self, *, caller: Caller | None = None) -> list[str]:
+        return self._inspector(caller).get_schema_names()
 
-    def tables(self, database: str) -> list[str]:
-        inspector = self._inspector()
+    def tables(self, database: str, *, caller: Caller | None = None) -> list[str]:
+        inspector = self._inspector(caller)
         return sorted(inspector.get_table_names(schema=database) + inspector.get_view_names(schema=database))
 
-    def columns(self, database: str, table: str) -> list[dict]:
+    def columns(self, database: str, table: str, *, caller: Caller | None = None) -> list[dict]:
         return [
             {"name": column["name"], "type": str(column["type"]), "comment": column.get("comment") or ""}
-            for column in self._inspector().get_columns(table, schema=database)
+            for column in self._inspector(caller).get_columns(table, schema=database)
         ]

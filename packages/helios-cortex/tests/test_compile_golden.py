@@ -2,7 +2,7 @@
 
 The engine supplies the dialect; nothing defaults to Hive. Each file must also parse
 back in its own dialect. Regenerate after an intended change with
-HELIOS_UPDATE_GOLDEN=1 uv run pytest packages/helios-core/tests/test_compile_golden.py
+HELIOS_UPDATE_GOLDEN=1 uv run pytest packages/helios-cortex/tests/test_compile_golden.py
 and review the diff. Impala's golden files live in helios-cloudera.
 """
 import json
@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 import sqlglot
 
-from helios_core.compiler import Compiler, SemanticRequest
-from helios_core.ossie import SemanticModel
+from helios_cortex.compiler import Compiler, SemanticRequest
+from helios_cortex.ossie import SemanticModel
 
 HERE = Path(__file__).parent
 ROOT = HERE.parents[2]

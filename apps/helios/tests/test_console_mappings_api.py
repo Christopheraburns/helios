@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helios_core.index import mappings as stored
-from helios_core.index import ontology_versions
-from helios_core.index.store import duckdb_index_store
-from helios_core.ontology.graph import GraphNode, OntologyGraph
-from helios_core.ontology.mapping import (
+from helios_cortex.index import mappings as stored
+from helios_cortex.index import ontology_versions
+from helios_cortex.index.store import duckdb_index_store
+from helios_cortex.ontology.graph import GraphNode, OntologyGraph
+from helios_cortex.ontology.mapping import (
     SourceMapping,
     load_mapping,
     resolution_config,
@@ -138,7 +138,7 @@ def test_the_crawler_reads_the_active_stored_mapping_not_the_file(index, capsys,
     stored.save(index, stricter, ALICE)
     stored.activate(index, 2, ALICE)
     monkeypatch.setattr(  # reading the repository file at crawl time would be a regression
-        "helios_core.ontology.mapping.load_mapping", lambda path: pytest.fail("read the mapping file")
+        "helios_cortex.ontology.mapping.load_mapping", lambda path: pytest.fail("read the mapping file")
     )
     config, used = crawler_main.resolution_for("0.2.0", index)
     # What the run records about the mapping it resolved against.

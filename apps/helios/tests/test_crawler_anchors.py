@@ -22,7 +22,7 @@ from apps.helios.crawler.anchors import (
     resolve_cluster,
     row_match,
 )
-from helios_core.ontology.mapping import SourceMapping, resolution_config
+from helios_cortex.ontology.mapping import SourceMapping, resolution_config
 from test_crawler_resolution import CONFIG as RETAIL
 
 CLINIC = {

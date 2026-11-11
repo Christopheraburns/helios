@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "helios-core"
+name = "helios-cortex"
 version = "0.1.0"
 description = "Helios core: shared semantic query and data governance layer"
 authors = [{name = "Helios Team"}]
@@ -25,11 +25,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# LLM providers (helios_core.llm), used to propose models.
+# LLM providers (helios_cortex.llm), used to propose models.
 llm = [
     "httpx>=0.27.0",
 ]
-# LinkML ontology parsing (helios_core.ontology.parser).
+# LinkML ontology parsing (helios_cortex.ontology.parser).
 ontology = [
     "linkml-runtime>=1.8.0",
 ]
@@ -42,7 +42,7 @@ postgres = [
 trino = [
     "trino>=0.330",
 ]
-# Object storage for the ArtifactStore (helios_core.artifact_storage), by URL scheme.
+# Object storage for the ArtifactStore (helios_cortex.artifact_storage), by URL scheme.
 s3 = [
     "s3fs>=2024.6",       # s3:// (AWS S3, MinIO, Ozone's S3 gateway)
 ]
@@ -56,7 +56,7 @@ ozone = [
     "fsspec>=2024.6",     # ofs://, through Ozone's HttpFS (WebHDFS) gateway
     "requests>=2.32",
 ]
-# The backend conformance suite (helios_core.conformance), for testing a registry or
+# The backend conformance suite (helios_cortex.conformance), for testing a registry or
 # storage backend.
 testing = [
     "pytest>=8.0",
@@ -69,11 +69,23 @@ evidence = [
 ]
 
 # The built-in engine plugins. Impala and Atlas come with helios-cloudera
-# (see helios_core.plugins). trino needs its extra; sqlalchemy needs the database's driver.
+# (see helios_cortex.plugins). trino needs its extra; sqlalchemy needs the database's driver.
 [project.entry-points."helios.engines"]
-duckdb = "helios_core.engines.duckdb_engine:DuckDBEngine"
-sqlalchemy = "helios_core.engines.sqlalchemy_engine:SqlAlchemyEngine"
-trino = "helios_core.engines.trino_engine:TrinoEngine"
+duckdb = "helios_cortex.engines.duckdb_engine:DuckDBEngine"
+sqlalchemy = "helios_cortex.engines.sqlalchemy_engine:SqlAlchemyEngine"
+trino = "helios_cortex.engines.trino_engine:TrinoEngine"
+
+# The helios command; its subcommands come from helios.commands, so each installed
+# package adds its own (helios-model: harvest, profile, propose, publish).
+[project.scripts]
+helios = "helios_cortex.cli:main"
+
+[project.entry-points."helios.commands"]
+init = "helios_cortex.commands:InitCommand"
+registry = "helios_cortex.commands:RegistryCommand"
+index = "helios_cortex.commands:IndexCommand"
+source = "helios_cortex.commands:SourceCommand"
+model = "helios_cortex.commands:ModelCommand"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/helios_core"]
+packages = ["src/helios_cortex"]

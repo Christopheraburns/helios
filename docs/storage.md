@@ -38,18 +38,19 @@ Settings resolve in this order: arguments to `Settings(...)`, `HELIOS_*` environ
 registry_url = "postgresql+psycopg://helios@db.internal:5432/helios"
 ```
 
-or `HELIOS_REGISTRY_URL=postgresql+psycopg://…`. Postgres needs `pip install 'helios-core[postgres]'` (psycopg 3); another database needs its SQLAlchemy driver.
+or `HELIOS_REGISTRY_URL=postgresql+psycopg://…`. Postgres needs `pip install 'helios-cortex[postgres]'` (psycopg 3); another database needs its SQLAlchemy driver.
 
 Tables are prefixed `helios_` (`helios_models`, `helios_data_sources`, `helios_model_data_sources`, `helios_semantic_revisions`, and the migration table `helios_registry_version`), so the registry can share a database with other applications.
 
-The schema is managed by Alembic migrations that ship in helios-core:
+The schema is managed by Alembic migrations that ship in helios-cortex:
 
 ```sh
-python -m helios_core.registry current    # the schema version the database is at
-python -m helios_core.registry upgrade    # bring it to this helios-core's version
+helios registry current    # the schema version the database is at
+helios registry upgrade    # bring it to this helios-cortex's version
+# (python -m helios_cortex.registry current|upgrade does the same)
 ```
 
-The local SQLite default is created and upgraded automatically. **A shared database is never upgraded automatically**: until an operator runs `upgrade`, every registry call raises `RegistryNotReady`, naming the command. Run it once, with credentials that can create tables, before you roll out a new helios-core version.
+The local SQLite default is created and upgraded automatically. **A shared database is never upgraded automatically**: until an operator runs `upgrade`, every registry call raises `RegistryNotReady`, naming the command. Run it once, with credentials that can create tables, before you roll out a new helios-cortex version.
 
 ### The artifact store
 
@@ -150,11 +151,11 @@ A local directory uses the same layout, so moving to object storage is a copy of
 
 ## Testing a backend
 
-`helios_core.conformance` holds the tests every backend must pass (`pip install 'helios-core[testing]'`). Subclass a suite and provide a fixture that returns an empty backend:
+`helios_cortex.conformance` holds the tests every backend must pass (`pip install 'helios-cortex[testing]'`). Subclass a suite and provide a fixture that returns an empty backend:
 
 ```python
 import pytest
-from helios_core.conformance import ArtifactStorageConformance, RegistryConformance
+from helios_cortex.conformance import ArtifactStorageConformance, RegistryConformance
 
 class TestMyRegistry(RegistryConformance):
     @pytest.fixture
@@ -191,7 +192,7 @@ docker run -d --name helios-fakegcs -p 127.0.0.1:24443:4443 fsouza/fake-gcs-serv
 export HELIOS_TEST_GCS=http://127.0.0.1:24443
 
 # Ozone: one node plus HttpFS on 127.0.0.1:14000, then volume vol1 and bucket bucket1.
-docker compose -p helios-ozone -f packages/helios-core/tests/ozone/docker-compose.yaml up -d
+docker compose -p helios-ozone -f packages/helios-cortex/tests/ozone/docker-compose.yaml up -d
 # The OM can take several minutes to accept clients, and until then `ozone sh` may
 # block indefinitely, so each attempt is cut off after 20 seconds:
 until perl -e 'alarm 20; exec @ARGV' docker exec helios-ozone-om-1 ozone sh volume create /vol1; do sleep 5; done
@@ -199,8 +200,8 @@ until perl -e 'alarm 20; exec @ARGV' docker exec helios-ozone-om-1 \
   ozone sh bucket create /vol1/bucket1 --layout FILE_SYSTEM_OPTIMIZED; do sleep 5; done
 export HELIOS_TEST_OZONE=http://127.0.0.1:14000
 
-uv run pytest packages/helios-core/tests/test_registry.py packages/helios-core/tests/test_registry_sql.py \
-  packages/helios-core/tests/test_artifact_storage.py packages/helios-core/tests/test_conformance.py
+uv run pytest packages/helios-cortex/tests/test_registry.py packages/helios-cortex/tests/test_registry_sql.py \
+  packages/helios-cortex/tests/test_artifact_storage.py packages/helios-cortex/tests/test_conformance.py
 ```
 
-Clean up with `docker rm -f helios-pg helios-moto helios-azurite helios-fakegcs` and `docker compose -p helios-ozone -f packages/helios-core/tests/ozone/docker-compose.yaml down -v`.
+Clean up with `docker rm -f helios-pg helios-moto helios-azurite helios-fakegcs` and `docker compose -p helios-ozone -f packages/helios-cortex/tests/ozone/docker-compose.yaml down -v`.

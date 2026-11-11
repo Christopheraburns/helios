@@ -10,7 +10,7 @@ authors = [{name = "Helios Team"}]
 license = "Apache-2.0"
 requires-python = ">=3.11"
 dependencies = [
-    "helios-core",
+    "helios-cortex",
     "impyla>=0.20.0",
     "pydantic-settings>=2.6",
     "requests>=2.32.0",
@@ -21,6 +21,13 @@ impala = "helios_cloudera.impala:ImpalaEngine"
 
 [project.entry-points."helios.catalogs"]
 atlas = "helios_cloudera.atlas:AtlasClient"
+
+[project.entry-points."helios.commands"]
+impala = "helios_cloudera.commands:ImpalaCommand"
+
+# helios --profile workbench: the Workbench environment variables, read into Settings.
+[project.entry-points."helios.profiles"]
+workbench = "helios_cloudera.workbench:WorkbenchSettings"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/helios_cloudera"]

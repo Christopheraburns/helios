@@ -2,8 +2,8 @@
 import pytest
 from sqlglot import exp
 
-from helios_core.engines import SqlDialect, dialect_for
-from helios_core.engines.duckdb_engine import DuckDBEngine
+from helios_cortex.engines import SqlDialect, dialect_for
+from helios_cortex.engines.duckdb_engine import DuckDBEngine
 
 
 def rendered(dialect, expression):

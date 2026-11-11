@@ -8,8 +8,8 @@ import pytest
 from apps.helios.crawler.connectors import HeliosDsConnector, object_reader
 from apps.helios.crawler.crawl import crawl
 from crawler_samples import RETAIL_SETTINGS, chat_bytes, email_bytes, found, pdf_bytes
-from helios_core.index import runs
-from helios_core.index.store import duckdb_index_store
+from helios_cortex.index import runs
+from helios_cortex.index.store import duckdb_index_store
 
 DATASET = "ds-1"
 
@@ -134,7 +134,7 @@ def test_second_crawl_carries_assets_and_segments_forward(corpus, index):
 
 
 def test_changed_settings_reanalyze_unchanged_assets(corpus, index):
-    from helios_core._pending.crawler.settings import CrawlerSettings
+    from helios_cortex._pending.crawler.settings import CrawlerSettings
 
     connector, _ = corpus
     _crawl(index, connector)

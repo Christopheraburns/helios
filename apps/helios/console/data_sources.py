@@ -25,9 +25,9 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from apps.helios.console import authz
-from helios_core._pending.crawler.sources import CrawlConfig, catalog, is_crawlable, validate_scope
+from helios_cortex._pending.crawler.sources import CrawlConfig, catalog, is_crawlable, validate_scope
 from apps.helios.console.domain import DataSource
-from helios_core.index import runs
+from helios_cortex.index import runs
 from pydantic import BaseModel, Field, ValidationError
 
 from . import ontology

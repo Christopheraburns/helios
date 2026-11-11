@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 PACKAGE = Path(__file__).resolve().parents[1]
-ROW = re.compile(r"^\| `(helios_core[\w.]*)` \| (.+?) \| (Stable|Provisional|Planned) \|")
+ROW = re.compile(r"^\| `(helios_cortex[\w.]*)` \| (.+?) \| (Stable|Provisional|Planned) \|")
 
 
 def contract_rows():
@@ -16,11 +16,11 @@ def contract_rows():
 
 
 def _import_unless_extra_missing(module):
-    """The module, or None when it needs a helios-core extra that is not installed."""
+    """The module, or None when it needs a helios-cortex extra that is not installed."""
     try:
         return importlib.import_module(module)
     except ModuleNotFoundError as exc:
-        if "pip install 'helios-core[" in str(exc):
+        if "pip install 'helios-cortex[" in str(exc):
             return None
         raise
 
@@ -39,4 +39,4 @@ def test_every_contract_name_imports_from_its_module():
 
 
 def test_package_ships_py_typed():
-    assert (PACKAGE / "src" / "helios_core" / "py.typed").is_file()
+    assert (PACKAGE / "src" / "helios_cortex" / "py.typed").is_file()

@@ -9,7 +9,7 @@ description = "Helios-DS: evaluation harness for synthetic enterprise data"
 authors = [{name = "Helios Team"}]
 requires-python = ">=3.11"
 dependencies = [
-    "helios-core @ {path=../../packages/helios-core}",
+    "helios-cortex @ {path=../../packages/helios-cortex}",
     "helios-ds @ {path=../helios-ds-generation}",
     "fastapi>=0.100",
     "uvicorn>=0.23",
@@ -29,7 +29,7 @@ packages = ["src/helios_ds_eval"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src", "../../packages/helios-core/src"]
+pythonpath = ["src", "../../packages/helios-cortex/src"]
 
 [tool.ruff]
 line-length = 100

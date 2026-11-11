@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "helios-model"
+version = "0.1.0"
+description = "Helios model discovery: harvest, profile, propose and publish semantic models"
+authors = [{name = "Helios Team"}]
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "helios-cortex",
+]
+
+[project.entry-points."helios.commands"]
+harvest = "helios_model.commands:HarvestCommand"
+profile = "helios_model.commands:ProfileCommand"
+propose = "helios_model.commands:ProposeCommand"
+publish = "helios_model.commands:PublishCommand"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/helios_model"]

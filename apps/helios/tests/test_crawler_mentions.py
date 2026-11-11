@@ -13,8 +13,8 @@ from apps.helios.crawler.crawl import MENTIONS, segment_rows
 from apps.helios.crawler.gazetteer import Gazetteer, has_names, is_low_specificity, tokens
 from apps.helios.crawler.mentions import extract_mentions
 from crawler_samples import RETAIL_SETTINGS, chat_bytes, pdf_bytes
-from helios_core.index.records import CrawlRunRecord
-from helios_core.ontology.mapping import load_mapping, resolution_config
+from helios_cortex.index.records import CrawlRunRecord
+from helios_cortex.ontology.mapping import load_mapping, resolution_config
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CONFIG = resolution_config(load_mapping(REPO_ROOT / "ontology/mappings/ossie/tpcds.yaml"))
@@ -560,7 +560,7 @@ def test_crawl_writes_mentions_and_carries_them_forward(gazetteer, tmp_path):
     import duckdb
     from apps.helios.crawler.connectors import HeliosDsConnector, object_reader
     from apps.helios.crawler.crawl import crawl
-    from helios_core.index.store import duckdb_index_store
+    from helios_cortex.index.store import duckdb_index_store
 
     root = tmp_path / "objects"
     con = duckdb.connect()

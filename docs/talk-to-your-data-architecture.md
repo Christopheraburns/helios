@@ -3,7 +3,7 @@
 ## Contract and trust boundaries
 
 The Helios UI is an MCP-backed client. It does not query semantic artifacts,
-Atlas, Impala, Iceberg, or `helios_core` directly. The authenticated API
+Atlas, Impala, Iceberg, or `helios_cortex` directly. The authenticated API
 Application contains a small conversation backend-for-frontend (BFF), but that
 BFF only runs the LLM reasoning loop and invokes tools discovered from the
 Helios MCP server.
@@ -212,9 +212,9 @@ Current tools are:
   `datasource.read`.
 
 Semantic tools read published Apache Ossie artifacts through
-`helios_core.ossie.SemanticModel`; unpublished proposal fallback artifacts are
+`helios_cortex.ossie.SemanticModel`; unpublished proposal fallback artifacts are
 converted to the same in-memory representation. Query compilation uses the
-shared `helios_core.compiler.Compiler`, not a separate MCP-only SQL path.
+shared `helios_cortex.compiler.Compiler`, not a separate MCP-only SQL path.
 Fields resolve by `dataset.field`, physical `database.table.field`, or an
 unambiguous physical name, label, or synonym. Filters accept either `column` or
 `field` with `op` and `value`.

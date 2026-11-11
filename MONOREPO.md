@@ -1,9 +1,9 @@
 # Helios Monorepo Structure
 
 This repository is a uv workspace. Helios is being split into libraries that a host project
-installs like any other package (`helios-core`, `helios-model`, `helios-serve`, and later
+installs like any other package (`helios-cortex`, `helios-model`, `helios-serve`, and later
 `helios-crawl`); Daedalus serves the tools over MCP. See
-`docs/helios-decomposition-burndown.md` for progress. Today `helios-core` is a real
+`docs/helios-decomposition-burndown.md` for progress. Today `helios-cortex` is a real
 package and the console, crawler, graph gateway and MCP server still live under
 `apps/helios/`, installed by the root project.
 
@@ -14,7 +14,7 @@ helios/
 ├── pyproject.toml            # workspace root; also installs apps/ (until Phase 8)
 ├── uv.lock                   # pins the whole tree
 ├── packages/
-│   └── helios-core/          # pyproject.toml, src/helios_core/
+│   └── helios-cortex/          # pyproject.toml, src/helios_cortex/
 │
 ├── apps/
 │   ├── helios/               # Query runtime (console, crawler, graph, mcp_server, ui, tests)
@@ -30,10 +30,10 @@ helios/
 
 ## Development Setup
 
-### Query runtime and helios-core
+### Query runtime and helios-cortex
 
 ```bash
-uv sync                      # creates .venv, installs helios-core and apps/ editable
+uv sync                      # creates .venv, installs helios-cortex and apps/ editable
 uv sync --extra evidence     # also lancedb + sentence-transformers (pulls PyTorch)
 
 uv run pytest                # apps/helios/tests
@@ -48,7 +48,7 @@ These apps are not workspace members yet and keep their own setup:
 
 ```bash
 cd apps/helios-ds-generation
-PYTHONPATH=src:../../packages/helios-core/src pytest -q
+PYTHONPATH=src:../../packages/helios-cortex/src pytest -q
 ```
 
 ## Cloudera AI Project Deployment
@@ -65,7 +65,7 @@ Each Cloudera AI project pulls from this single Git repo:
 
 ### Deployment Notes
 
-- **helios-core** (`packages/helios-core/src/helios_core/`): used by all 3 projects
+- **helios-cortex** (`packages/helios-cortex/src/helios_cortex/`): used by all 3 projects
 - **`apps/helios` is scaffolding, not a deployment target.** Its tests protect the logic while
   it moves into the packages; it is deleted in burndown Phase 8. Helios reaches Workbench through
   a separate host application that pip-installs the libraries.
@@ -77,30 +77,30 @@ Each Cloudera AI project pulls from this single Git repo:
 
 Located in `.github/workflows/`:
 
-- `helios.yml`: `uv sync`, ruff and pytest for helios-core and `apps/helios/`
+- `helios.yml`: `uv sync`, ruff and pytest for helios-cortex and `apps/helios/`
 - `helios-ds-gen.yml`: Tests only `apps/helios-ds-generation/`
 
 ## Python Imports
 
-All code imports from `helios_core` directly:
+All code imports from `helios_cortex` directly:
 
 ```python
-from helios_core import __version__
-from helios_core.compiler import compile_query
-from helios_core.metadata import SQLiteMetadataRepository
+from helios_cortex import __version__
+from helios_cortex.compiler import compile_query
+from helios_cortex.metadata import SQLiteMetadataRepository
 ```
 
-Workspace members depend on `helios-core` by name; the root `pyproject.toml` resolves it
+Workspace members depend on `helios-cortex` by name; the root `pyproject.toml` resolves it
 to the workspace copy:
 
 ```toml
 [tool.uv.sources]
-helios-core = { workspace = true }
+helios-cortex = { workspace = true }
 ```
 
 ## Dependency Management
 
-- **`packages/helios-core/pyproject.toml`**: Core dependencies; `evidence` extra for document search
+- **`packages/helios-cortex/pyproject.toml`**: Core dependencies; `evidence` extra for document search
 - **`pyproject.toml`** (root): console, crawler, graph and MCP server dependencies + core
 - **`apps/helios/console/requirements.txt` / `.lock`**: what Workbench installs into `.helios-python`;
   keep in step with the root `pyproject.toml`

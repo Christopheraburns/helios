@@ -8,7 +8,7 @@ from typing import Any, Protocol
 
 from apps.helios.console import authz
 from apps.helios.console.domain import DataSource, Model, Organization
-from helios_core.registry import SemanticRevision  # one record for the console and the libraries
+from helios_cortex.registry import SemanticRevision  # one record for the console and the libraries
 
 
 @dataclass(frozen=True)

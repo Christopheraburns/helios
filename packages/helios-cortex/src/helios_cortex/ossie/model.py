@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 import yaml
 
-from helios_core.artifacts import ArtifactStore
+from helios_cortex.artifacts import ArtifactStore
 
 VENDOR = "HELIOS"
 

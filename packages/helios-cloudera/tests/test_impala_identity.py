@@ -3,8 +3,8 @@ import impala.dbapi as impala_dbapi
 import pytest
 from pydantic import ValidationError
 
-from helios_core import Caller, IdentityError, IdentityMode
-from helios_core.settings import Settings
+from helios_cortex import Caller, IdentityError, IdentityMode
+from helios_cortex.settings import Settings
 
 from helios_cloudera.impala import (
     ImpalaAuthenticationError,
@@ -33,6 +33,9 @@ class Cursor:
 
     def fetchmany(self, _limit):
         return [(7,)]
+
+    def fetchall(self):                    # unlimited reads: SHOW and DESCRIBE
+        return [("orders", "int", "")]
 
 
 class Connection:
@@ -81,6 +84,22 @@ def test_impersonate_mode_adds_doas_and_checks_the_effective_user(warehouse):
     [connect] = warehouse["connects"]
     assert (connect["auth_mechanism"], connect["user"], connect["http_path"]) == ("LDAP", "svc-helios", "cliservice?doAs=alice")
     assert warehouse["cursor"].executed == ["SELECT EFFECTIVE_USER()", "SELECT 7"]
+
+
+def test_catalog_reads_run_as_the_caller(warehouse):
+    """Harvesting as a caller (burndown 5.4): SHOW, DESCRIBE, the table stats and the
+    query log run with doAs and the effective-user check; without one, as the workload user."""
+    engine, alice = impala(IdentityMode.IMPERSONATE), Caller("alice")
+    engine.databases(caller=alice)
+    engine.tables("sales", caller=alice)
+    engine.columns("sales", "orders", caller=alice)
+    engine.row_count("sales", "orders", caller=alice)
+    engine.recent_queries(5, caller=alice)
+    assert len(warehouse["connects"]) >= 5
+    assert {c["http_path"] for c in warehouse["connects"]} == {"cliservice?doAs=alice"}
+    warehouse["connects"].clear()
+    engine.tables("sales")
+    assert [c["http_path"] for c in warehouse["connects"]] == ["cliservice"]
 
 
 def test_impersonate_mode_stops_when_impala_runs_as_someone_else(warehouse):

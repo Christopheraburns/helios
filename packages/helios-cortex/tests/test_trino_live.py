@@ -4,9 +4,10 @@ Runs when HELIOS_TEST_TRINO names an open (unauthenticated, http) Trino coordina
 with the memory catalog, e.g. the official image:
 
     docker run -d -p 127.0.0.1:28080:8080 trinodb/trino:484
-    HELIOS_TEST_TRINO=127.0.0.1:28080 uv run pytest packages/helios-core/tests/test_trino_live.py
+    HELIOS_TEST_TRINO=127.0.0.1:28080 uv run pytest packages/helios-cortex/tests/test_trino_live.py
 
-CI starts that container (the trino job in .github/workflows/helios.yml). Token mode
+CI starts that container (the trino job in .github/workflows/helios.yml); harvesting and
+profiling on it are helios-model's (test_trino_discovery.py). Token mode
 needs a cluster configured for JWT and is covered by test_trino_engine.py.
 """
 import os
@@ -14,13 +15,11 @@ import uuid
 
 import pytest
 
-from helios_core import Caller
-from helios_core.catalog import Harvester
-from helios_core.compiler import Compiler, SemanticRequest
-from helios_core.engines import engine_for
-from helios_core.ossie import SemanticModel
-from helios_core.profiler import Profiler
-from helios_core.settings import Settings
+from helios_cortex import Caller
+from helios_cortex.compiler import Compiler, SemanticRequest
+from helios_cortex.engines import engine_for
+from helios_cortex.ossie import SemanticModel
+from helios_cortex.settings import Settings
 
 SERVER = os.environ.get("HELIOS_TEST_TRINO")
 pytestmark = pytest.mark.skipif(not SERVER, reason="set HELIOS_TEST_TRINO=host:port to run against Trino")
@@ -47,24 +46,6 @@ def schema():
     for table in ("orders", "customers"):
         engine.query(f"DROP TABLE memory.{name}.{table}")
     engine.query(f"DROP SCHEMA memory.{name}")
-
-
-def test_harvest_and_profile_run_on_trino(schema):
-    engine = lake()
-    assert schema in engine.databases()
-    harvest = Harvester(engine).run([schema])
-    tables = {t["table"]: t for t in harvest["tables"]}
-    assert {name: t["row_count"] for name, t in tables.items()} == {"customers": 20, "orders": 60}
-    assert [c["name"] for c in tables["orders"]["columns"]] == ["o_order_sk", "o_customer_sk", "o_amount", "order"]
-    assert harvest["queries"]["sources"] == ["system.runtime.queries"]
-
-    profile = Profiler(engine).run(harvest)
-    orders = profile["tables"][f"{schema}.orders"]
-    assert orders["primary_keys"] == [{"column": "o_order_sk", "confidence": 0.95}]
-    assert orders["stats"]["columns"]["order"]["max"] == 2
-    [join] = profile["relationships"]
-    assert (join["from_column"], join["to"], join["to_column"], join["match_ratio"]) == (
-        "o_customer_sk", f"{schema}.customers", "c_customer_sk", 1.0)
 
 
 def test_a_compiled_metric_runs_on_trino_as_the_impersonated_caller(schema):

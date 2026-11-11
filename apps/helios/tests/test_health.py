@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from apps.helios.console import health
-from helios_core.settings import Settings
+from helios_cortex.settings import Settings
 
 
 class Metadata:

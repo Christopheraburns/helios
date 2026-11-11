@@ -2,7 +2,7 @@
 
 A library reports what it did for a caller (a tool call, a publish) as an
 AuditRecord and hands it to the host's AuditSink. The default sink,
-LoggingAuditSink, writes one log line per record to the ``helios_core.audit_sink``
+LoggingAuditSink, writes one log line per record to the ``helios_cortex.audit_sink``
 logger, with the whole record in ``extra["helios_audit"]`` for structured handlers.
 A host with its own audit store implements ``record``. A record never holds a
 token, SQL text or result rows: the caller is a username and SQL is a fingerprint.

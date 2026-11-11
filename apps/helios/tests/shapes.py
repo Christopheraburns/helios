@@ -19,12 +19,12 @@ from collections import Counter
 from pathlib import Path
 
 import yaml
-from helios_core.ontology.mapping import load_mapping, template_columns
+from helios_cortex.ontology.mapping import load_mapping, template_columns
 from crawler_samples import RETAIL_SETTINGS
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 # The crawler's code: the package itself and the shared settings model.
-SCANNED = ("apps/helios/crawler", "packages/helios-core/src/helios_core/_pending/crawler")
+SCANNED = ("apps/helios/crawler", "packages/helios-cortex/src/helios_cortex/_pending/crawler")
 
 # Ordinary words that are also retail class names or vocabulary. They are a
 # shape only where they are unmistakably the retail thing: a string constant

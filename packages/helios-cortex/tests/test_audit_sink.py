@@ -3,7 +3,7 @@ import logging
 
 import pytest
 
-from helios_core.audit_sink import (
+from helios_cortex.audit_sink import (
     AuditRecord,
     LoggingAuditSink,
     record_safely,
@@ -22,10 +22,10 @@ QUERY = AuditRecord(
 
 
 def test_the_logging_sink_writes_one_structured_line(caplog):
-    with caplog.at_level(logging.INFO, logger="helios_core.audit_sink"):
+    with caplog.at_level(logging.INFO, logger="helios_cortex.audit_sink"):
         LoggingAuditSink().record(QUERY)
     [line] = caplog.records
-    assert line.name == "helios_core.audit_sink"
+    assert line.name == "helios_cortex.audit_sink"
     assert line.levelno == logging.INFO
     assert line.getMessage().startswith("run_query success model=sales caller=alice rows=12 sql=")
     assert line.helios_audit == QUERY.as_dict()
@@ -34,7 +34,7 @@ def test_the_logging_sink_writes_one_structured_line(caplog):
 
 @pytest.mark.parametrize("outcome", ["denied", "error"])
 def test_denials_and_errors_are_warnings(caplog, outcome):
-    with caplog.at_level(logging.INFO, logger="helios_core.audit_sink"):
+    with caplog.at_level(logging.INFO, logger="helios_cortex.audit_sink"):
         LoggingAuditSink().record(AuditRecord("run_query", outcome, error_code="query_denied"))
     assert [r.levelno for r in caplog.records] == [logging.WARNING]
     assert "error=query_denied" in caplog.text

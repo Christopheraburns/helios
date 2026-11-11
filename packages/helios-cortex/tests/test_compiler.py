@@ -5,8 +5,8 @@ import random
 import duckdb
 import pytest
 
-from helios_core.ossie import SemanticModel
-from helios_core.compiler import Compiler, SemanticRequest, Filter, Measure, CompileError
+from helios_cortex.ossie import SemanticModel
+from helios_cortex.compiler import Compiler, SemanticRequest, Filter, Measure, CompileError
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))  # repo root
 TYPES = {"bigint": "BIGINT", "int": "INTEGER", "string": "VARCHAR", "date": "DATE"}

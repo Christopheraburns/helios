@@ -8,7 +8,7 @@ from apps.helios.console.evaluation import (
     save_suite,
 )
 from apps.helios.console.metadata import EvaluationResult
-from helios_core.ossie import SemanticModel
+from helios_cortex.ossie import SemanticModel
 
 
 def result(

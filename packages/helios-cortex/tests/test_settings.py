@@ -1,4 +1,4 @@
-"""helios_core.settings: resolution order and defaults.
+"""helios_cortex.settings: resolution order and defaults.
 
 The Impala and Atlas options, and parity with the code Settings replaced on
 Workbench, are tested in helios-cloudera (test_cloudera_settings.py).
@@ -12,7 +12,7 @@ import pytest
 from pydantic import ValidationError
 from pydantic_settings import PydanticBaseSettingsSource
 
-from helios_core.settings import Settings
+from helios_cortex.settings import Settings
 
 PREFIXES = ("HELIOS_", "IMPALA_", "WORKLOAD_", "ATLAS_", "INFERENCE_", "ANTHROPIC_", "MISTRAL_", "CDSW_")
 

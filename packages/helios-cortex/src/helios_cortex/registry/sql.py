@@ -8,7 +8,7 @@ The schema is managed by Alembic migrations shipped in this package (version tab
 database with an application). ``upgrade()`` brings a database to the current schema;
 until then every call raises RegistryNotReady. ``from_settings`` upgrades the local
 SQLite default by itself and leaves shared databases to the operator
-(``python -m helios_core.registry upgrade``).
+(``python -m helios_cortex.registry upgrade``).
 """
 from __future__ import annotations
 
@@ -19,13 +19,13 @@ from typing import TYPE_CHECKING, Any
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
-from helios_core._optional import missing_extra
-from helios_core.domain import DataSource, DataSourceReference, Model
+from helios_cortex._optional import missing_extra
+from helios_cortex.domain import DataSource, DataSourceReference, Model
 
 from . import DRAFT, RegisteredModel, RegistryError, RevisionConflict, SemanticRevision
 
 if TYPE_CHECKING:
-    from helios_core.settings import Settings
+    from helios_cortex.settings import Settings
 
 MIGRATIONS = Path(__file__).with_name("migrations")
 VERSION_TABLE = "helios_registry_version"
@@ -87,7 +87,7 @@ semantic_revisions = sa.Table(
 
 
 class RegistryNotReady(RegistryError):
-    """The database's registry schema is missing or older than this helios-core."""
+    """The database's registry schema is missing or older than this helios-cortex."""
 
 
 def _utc(value: datetime) -> datetime:
@@ -167,7 +167,7 @@ class SqlRegistry:
         if current != head:
             raise RegistryNotReady(
                 f"the registry schema is at {current or 'nothing'}, not {head}; "
-                "run `python -m helios_core.registry upgrade` (or SqlRegistry.upgrade())")
+                "run `python -m helios_cortex.registry upgrade` (or SqlRegistry.upgrade())")
         self._ready = True
 
     def _begin(self):

@@ -21,9 +21,9 @@ from apps.helios.crawler.mentions import extract_mentions
 from apps.helios.crawler.anchors import plans
 from apps.helios.crawler.resolution import build_query, gather_constraints, resolve
 from crawler_samples import RETAIL_SETTINGS, chat_bytes, pdf_bytes
-from helios_core.index import ids
-from helios_core.index.records import AssetRecord, CrawlRunRecord
-from helios_core.ontology.mapping import load_mapping, resolution_config
+from helios_cortex.index import ids
+from helios_cortex.index.records import AssetRecord, CrawlRunRecord
+from helios_cortex.ontology.mapping import load_mapping, resolution_config
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CONFIG = resolution_config(load_mapping(REPO_ROOT / "ontology/mappings/ossie/tpcds.yaml"))
@@ -611,7 +611,7 @@ def test_ids_are_stable_across_runs(warehouse, gazetteer, world):
 def test_crawl_writes_entities_links_and_relationships(warehouse, gazetteer, tmp_path):
     from apps.helios.crawler.connectors import HeliosDsConnector, object_reader
     from apps.helios.crawler.crawl import CRAWLER_VERSION, crawl
-    from helios_core.index.store import duckdb_index_store
+    from helios_cortex.index.store import duckdb_index_store
 
     assert CRAWLER_VERSION == "0.7.0"
     root = tmp_path / "objects"

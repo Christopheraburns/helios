@@ -37,18 +37,18 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from helios_core import __version__
+from helios_cortex import __version__
 from apps.helios.console import audit, authz
 from apps.helios import runtime
 from helios_cloudera.atlas import atlas_config
-from helios_core.compiler import (
+from helios_cortex.compiler import (
     CompileError,
     Compiler,
     Filter,
     FilterValueTypeError,
     SemanticRequest,
 )
-from helios_core.data_authorization import (
+from helios_cortex.data_authorization import (
     DataAction,
     DataPolicy,
     DataResource,
@@ -59,14 +59,15 @@ from apps.helios.console.delegation import (
     verify_assertion,
 )
 from apps.helios.audit_sink import RepositoryAuditSink
-from helios_core import Caller, IdentityMode
-from helios_core.audit_sink import AuditRecord, AuditSink, record_safely, sql_fingerprint
-from helios_core.visibility import AllModels, ModelNotVisible, ModelVisibility, require_visible
+from helios_cortex import Caller, IdentityMode
+from helios_cortex.audit_sink import AuditRecord, AuditSink, record_safely, sql_fingerprint
+from helios_cortex.visibility import AllModels, ModelNotVisible, ModelVisibility, require_visible
 from apps.helios.console.identity import Principal, PrincipalKind
 from helios_cloudera.impala import IMPALA, impala_config
-from helios_core.engines.dialect import SqlDialect
+from helios_cortex.engines.dialect import SqlDialect
 from apps.helios.console.metadata import SQLiteMetadataRepository, TraceSpan
-from helios_core.ossie import SemanticModel, build as build_ossie
+from helios_cortex.ossie import SemanticModel
+from helios_model.build import build as build_ossie
 from helios_cloudera.workbench import WorkbenchSettings as Settings
 from apps.helios.console.tracing import sanitized, utcnow
 
@@ -1079,7 +1080,7 @@ _mcp_app = server.streamable_http_app(transport_security=_security, stateless_ht
 
 # Set by the Application launcher (app.py), so importing this module elsewhere loads nothing.
 if os.environ.get("HELIOS_MCP_WARM_EMBEDDINGS") == "1":
-    from helios_core._pending import evidence as _evidence
+    from helios_cortex._pending import evidence as _evidence
 
     _evidence.warm_up()
 
@@ -1143,7 +1144,7 @@ def search_evidence(query: str, limit: int = 8, model: str | None = None) -> dic
     _, _, denied = _authorized_tool(authz.Action.QUERY_EXECUTE, model)
     if denied:
         return denied
-    from helios_core._pending import evidence
+    from helios_cortex._pending import evidence
 
     try:
         found = evidence.search(query, min(max(limit, 1), 20))
@@ -1170,7 +1171,7 @@ def entity_claims(entity: str, predicate: str | None = None, model: str | None =
     if denied:
         return denied
     from helios_cloudera.index import impala_index_store
-    from helios_core._pending import evidence
+    from helios_cortex._pending import evidence
 
     index = impala_index_store(Settings())
     if index is None:

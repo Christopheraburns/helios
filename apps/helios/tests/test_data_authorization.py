@@ -1,8 +1,8 @@
-from helios_core import Caller
+from helios_cortex import Caller
 from apps.helios.console import authz
 from helios_cloudera.workbench import WorkbenchSettings as Settings
 from helios_cloudera.impala import impala_config
-from helios_core.data_authorization import (
+from helios_cortex.data_authorization import (
     DataAction,
     DataPolicy,
     DataResource,

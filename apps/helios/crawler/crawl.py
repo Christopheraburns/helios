@@ -31,9 +31,9 @@ from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
-from helios_core._pending.crawler.settings import CrawlerSettings
-from helios_core.index import IndexStore, ids, runs
-from helios_core.index.records import (
+from helios_cortex._pending.crawler.settings import CrawlerSettings
+from helios_cortex.index import IndexStore, ids, runs
+from helios_cortex.index.records import (
     AssetRecord,
     CrawlerSettingsRecord,
     CrawlRunRecord,
@@ -43,7 +43,7 @@ from helios_core.index.records import (
     RelationshipRecord,
     SegmentRecord,
 )
-from helios_core.ontology.mapping import ResolutionConfig
+from helios_cortex.ontology.mapping import ResolutionConfig
 
 from . import coverage
 from .analyzers import Segment, analyze_asset

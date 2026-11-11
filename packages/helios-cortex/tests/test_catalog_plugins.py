@@ -1,21 +1,20 @@
-"""Catalog plugins and their optional capabilities, glossary and lineage (burndown 3.7)."""
+"""Catalog plugins and their optional capabilities, glossary and lineage (burndown 3.7).
+Harvesting with them is helios-model's (its test_harvest_catalog.py)."""
 import sys
 import types
 from importlib.metadata import EntryPoint
 
 import pytest
 
-from helios_core import plugins
-from helios_core.catalog import (
+from helios_cortex import plugins
+from helios_cortex.catalog import (
     GLOSSARY,
     LINEAGE,
     ColumnLineage,
-    Harvester,
     capabilities,
     catalog_for,
 )
-from helios_core.engines.duckdb_engine import DuckDBEngine
-from helios_core.settings import Settings
+from helios_cortex.settings import Settings
 
 
 class Lineage:
@@ -100,19 +99,3 @@ def test_catalog_for_refuses_a_plugin_that_is_not_a_catalog(registered):
         catalog_for(catalog("nothing"))
     with pytest.raises(plugins.PluginNotFound, match="no plugin 'atlas'"):
         catalog_for(catalog("atlas"))
-
-
-def test_the_harvest_takes_the_glossary_only_from_a_catalog_that_has_one():
-    engine = DuckDBEngine()
-    engine.query("CREATE SCHEMA sales")
-    engine.query("CREATE TABLE sales.orders (amount DOUBLE)")
-
-    without = Harvester(engine).run(["sales"])
-    lineage_only = Harvester(engine, Lineage()).run(["sales"])
-    with_glossary = Harvester(engine, Glossary()).run(["sales"])
-
-    assert [t["table"] for t in without["tables"]] == ["orders"]           # tables come from the engine
-    assert (without["catalog_capabilities"], without["glossary_terms"]) == ([], [])
-    assert (lineage_only["catalog_capabilities"], lineage_only["glossary_terms"]) == (["lineage"], [])
-    assert with_glossary["catalog_capabilities"] == ["glossary"]
-    assert [(t["name"], t["columns"]) for t in with_glossary["glossary_terms"]] == [("Revenue", ["sales.orders.amount"])]

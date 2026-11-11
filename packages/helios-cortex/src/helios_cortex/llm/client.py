@@ -5,7 +5,7 @@ LLM client with interchangeable backends, chosen by ``Settings.llm.provider``:
   openai      any OpenAI-compatible endpoint, e.g. Cloudera AI Inference
   mistral     Mistral's OpenAI-compatible API
 
-``llm_from_settings`` builds the client; helios_core.settings lists the environment
+``llm_from_settings`` builds the client; helios_cortex.settings lists the environment
 variables that configure it.
 
 Both expose complete_json(): ask for a JSON object, parse it, retry once on malformed output.
@@ -21,15 +21,15 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
-from helios_core._optional import missing_extra
+from helios_cortex._optional import missing_extra
 
 try:
     import httpx
 except ModuleNotFoundError as exc:
-    raise missing_extra("helios_core.llm", "llm", exc) from exc
+    raise missing_extra("helios_cortex.llm", "llm", exc) from exc
 
 if TYPE_CHECKING:
-    from helios_core.settings import LLMSettings
+    from helios_cortex.settings import LLMSettings
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
 

@@ -38,11 +38,11 @@ class DuckDBEngine(Engine):
         options = DuckDBOptions.model_validate(connection.options)
         return cls(options.path, connection.identity)
 
-    def databases(self) -> list[str]:
+    def databases(self, *, caller: Caller | None = None) -> list[str]:
         # information_schema lists every attached catalog's schemas (system, temp); keep this database's.
         rows = self.query(
             "SELECT DISTINCT schema_name FROM information_schema.schemata "
-            "WHERE catalog_name = current_database() ORDER BY 1", limit=None).rows
+            "WHERE catalog_name = current_database() ORDER BY 1", caller, limit=None).rows
         return [r[0] for r in rows if r[0] not in ("information_schema", "pg_catalog")]
 
     def query(self, sql: str, caller: Caller | None = None, *, limit: int | None = 1000) -> QueryResult:

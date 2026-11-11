@@ -1,8 +1,8 @@
 """DataPolicy: the warehouse decides, through the caller's identity; the host may only deny more (burndown 2.3)."""
 import pytest
 
-from helios_core import Caller, IdentityMode
-from helios_core.data_authorization import (
+from helios_cortex import Caller, IdentityMode
+from helios_cortex.data_authorization import (
     DataAction,
     DataAuthorizationDenied,
     DataPolicy,

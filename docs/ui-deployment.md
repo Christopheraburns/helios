@@ -59,7 +59,7 @@ A custom Cloudera AI Runtime is **not required** for either Application.
   SASL/GSSAPI/Kerberos support and are not used by the current LDAP/HTTPS
   Impala connection.
 - The cloned `/opt/ossie` tree in that image is not read by the current
-  Application code; the required schema is in `helios_core/ossie`.
+  Application code; the required schema is in `helios_cortex/ossie`.
 
 The existing custom runtime can still be selected for discovery jobs or an
 environment that has standardized on it. It becomes justified for these

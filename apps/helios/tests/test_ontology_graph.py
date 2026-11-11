@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from apps.helios.graph import ontology, store
-from helios_core.ontology import GraphEdge, GraphNode, OntologyGraph, OntologyGraphError
+from helios_cortex.ontology import GraphEdge, GraphNode, OntologyGraph, OntologyGraphError
 
 
 class FakeBolt:

@@ -36,7 +36,7 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-from helios_core.caller import IdentityMode
+from helios_cortex.caller import IdentityMode
 
 LOGGER = logging.getLogger(__name__)
 
@@ -108,7 +108,7 @@ class CatalogSettings(_PluginSection):
 
 
 class ArtifactStorageSettings(_PluginSection):
-    """Object storage for artifacts (``helios_core.artifact_storage``): ``location`` is a
+    """Object storage for artifacts (``helios_cortex.artifact_storage``): ``location`` is a
     URL (``s3://bucket/helios``, ``abfss://…``, ``gs://…``, ``ofs://…``); every other key
     goes to the storage's filesystem (``key``, ``secret``, ``endpoint_url``,
     ``account_key``, ``httpfs_url``, ...). Secret-looking keys stay hidden in output."""
@@ -170,7 +170,7 @@ class Settings(BaseSettings):
     artifacts_dir: Path | None = None
     runs_dir: Path | None = None
     metadata_db: Path | None = None
-    # The model registry's database (helios_core.registry.SqlRegistry), any SQLAlchemy URL.
+    # The model registry's database (helios_cortex.registry.SqlRegistry), any SQLAlchemy URL.
     # Secret because a URL may carry a password.
     registry_url: SecretStr | None = None
     sqlite_journal_mode: JournalMode = "DELETE"
@@ -353,3 +353,29 @@ def conventional_llm_provider() -> str:
     return (_env("LLM_PROVIDER") or (
         "anthropic" if _env("ANTHROPIC_API_KEY") else "mistral" if _env("MISTRAL_API_KEY") else "openai"
     )).lower()
+
+
+# ---------------------------------------------------------------- profiles and the caller
+def load_settings(profile: str | None = None, config: str | os.PathLike[str] | None = None) -> Settings:
+    """Settings as a command builds them. ``profile`` (else ``HELIOS_PROFILE``) names a
+    settings profile registered under ``helios.profiles`` (helios-cloudera's
+    ``workbench``); with none it is plain ``Settings``. A profile is never chosen from
+    the environment it describes: it is named or it is not used. ``config`` replaces
+    the config-file search (layer 4)."""
+    name = profile or _env("HELIOS_PROFILE")
+    cls: type[Settings] = Settings
+    if name:
+        from . import plugins
+
+        loaded = plugins.load(plugins.PROFILES, name)
+        if not (isinstance(loaded, type) and issubclass(loaded, Settings)):
+            raise plugins.PluginError(f"settings profile {name!r} is not a Settings subclass: {loaded!r}")
+        cls = loaded
+    return cls.from_file(config) if config is not None else cls()
+
+
+def environment_caller_token() -> str | None:
+    """``HELIOS_CALLER_TOKEN``: the token a command passes on as its caller's, for a
+    connection in ``token`` mode. Read from the environment only, so it never appears in
+    a command line or a config file."""
+    return _env("HELIOS_CALLER_TOKEN")

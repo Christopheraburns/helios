@@ -30,17 +30,17 @@ from apps.helios.console.model_provider import (
     provider_availability,
 )
 from apps.helios.mcp_server import server as mcp_server
-from helios_core import Caller, IdentityMode
+from helios_cortex import Caller, IdentityMode
 from apps.helios.console import audit, authz
 from helios_cloudera.impala import ImpalaConfig
-from helios_core.compiler import (
+from helios_cortex.compiler import (
     Compiler,
     Filter,
     FilterValueTypeError,
     SemanticRequest,
 )
 from apps.helios.console.metadata.migrations import MIGRATIONS
-from helios_core.data_authorization import (
+from helios_cortex.data_authorization import (
     DataPolicy,
     PlatformDataDecision,
 )
@@ -50,17 +50,17 @@ from apps.helios.console.delegation import (
     verify_assertion,
 )
 from helios_cloudera.impala import ImpalaAuthenticationError, ImpalaEngine
-from helios_core.llm import (
+from helios_cortex.llm import (
     LLMClient,
     LLMTimeoutError,
     ToolCall,
     ToolTurn,
     llm_from_settings,
 )
-from helios_core.llm import client as llm_module
-from helios_core.artifacts import ArtifactStore
-from helios_core.runs import RunStore
-from helios_core.settings import Settings
+from helios_cortex.llm import client as llm_module
+from helios_cortex.artifacts import ArtifactStore
+from helios_cortex.runs import RunStore
+from helios_cortex.settings import Settings
 from apps.helios import runtime
 from apps.helios.console.domain import (
     DataSource,
@@ -74,7 +74,8 @@ from apps.helios.console.metadata import (
     SQLiteMetadataRepository,
     TraceRun,
 )
-from helios_core.ossie import SemanticModel, build as build_ossie
+from helios_cortex.ossie import SemanticModel
+from helios_model.build import build as build_ossie
 from apps.helios.console.tracing import TraceRecorder
 
 
@@ -408,7 +409,7 @@ def test_mistral_tool_turn_uses_openai_compatible_endpoint(monkeypatch):
         captured.update(url=url, **kwargs)
         return Response()
 
-    monkeypatch.setattr("helios_core.llm.client.httpx.post", post)
+    monkeypatch.setattr("helios_cortex.llm.client.httpx.post", post)
     client = LLMClient(
         "mistral",
         "mistral-small-latest",
@@ -445,7 +446,7 @@ def test_llm_client_reports_provider_timeout(monkeypatch):
     def post(*_args, **_kwargs):
         raise llm_module.httpx.ConnectTimeout("connection timed out")
 
-    monkeypatch.setattr("helios_core.llm.client.httpx.post", post)
+    monkeypatch.setattr("helios_cortex.llm.client.httpx.post", post)
     client = LLMClient(
         "openai",
         "slow-model",
@@ -681,7 +682,7 @@ def test_mcp_tools_lock_model_and_propagate_principal(
 
 def test_explain_lineage_returns_the_catalogs_column_lineage(persistent_auth_stack, monkeypatch):
     from helios_cloudera.atlas import AtlasClient, AtlasConfig
-    from helios_core.catalog import ColumnLineage
+    from helios_cortex.catalog import ColumnLineage
 
     monkeypatch.setattr(mcp_server, "metadata_repository", persistent_auth_stack.repository)
     monkeypatch.setattr(mcp_server, "atlas_config", lambda settings: AtlasConfig("https://dl/atlas", "a", "pw"))

@@ -212,7 +212,7 @@ class ClaimEvidenceRecord(BaseModel):
 
 
 class CrawlerSettingsRecord(BaseModel):
-    """An immutable version of the crawler settings (helios_core._pending.crawler.settings)."""
+    """An immutable version of the crawler settings (helios_cortex._pending.crawler.settings)."""
 
     version: int = Field(description="1, 2, 3, ... in order of saving")
     content_hash: str
@@ -251,7 +251,7 @@ class CoverageRecord(BaseModel):
 
 class MappingRecord(BaseModel):
     """An immutable version of a source-to-ontology mapping
-    (helios_core.ontology.mapping.SourceMapping)."""
+    (helios_cortex.ontology.mapping.SourceMapping)."""
 
     version: int = Field(description="1, 2, 3, ... in order of saving, across all models")
     model: str = Field(description="The semantic model the mapping binds, e.g. tpcds.ossie.yaml")

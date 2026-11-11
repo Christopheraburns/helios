@@ -1,6 +1,9 @@
 """
 Harvest: snapshot the warehouse catalog, a catalog's glossary (Atlas) and available query history.
 Output is a plain dict (serialised to harvest.json) that profile and propose consume.
+
+``TableHarvester`` is the worker; ``helios_model.Catalog`` (``discovery``) is the facade a host
+calls, which resolves the engine from a data source and keeps the result in a run.
 """
 from __future__ import annotations
 
@@ -10,33 +13,36 @@ import os
 import re
 from datetime import datetime, timezone
 
-from ..engines.base import Engine
-from .base import GLOSSARY, CatalogError, GlossaryCatalog, capabilities
+from helios_cortex.caller import Caller
+from helios_cortex.catalog import GLOSSARY, CatalogError, GlossaryCatalog, capabilities
+from helios_cortex.engines.base import Engine
 
 LOGGER = logging.getLogger(__name__)
 
 
-class Harvester:
+class TableHarvester:
     def __init__(self, engine: Engine, catalog: object | None = None):
         """``engine`` supplies tables and columns; ``catalog``, any catalog plugin, a glossary if it has one."""
         self.engine = engine
         self.catalog = catalog
 
     # ------------------------------------------------------------ engine side
-    def row_count(self, db: str, table: str) -> int | None:
+    def row_count(self, db: str, table: str, *, caller: Caller | None = None) -> int | None:
         """The engine's row count (table stats where it has them); None when it fails."""
         try:
-            return self.engine.row_count(db, table)
+            return self.engine.row_count(db, table, caller=caller)
         except Exception:  # noqa: BLE001 - a table that cannot be counted is still harvested
             LOGGER.warning("could not count rows in %s.%s", db, table, exc_info=True)
             return None
 
-    def harvest_tables(self, databases: list[str]) -> list[dict]:
+    def harvest_tables(self, databases: list[str], *, caller: Caller | None = None) -> list[dict]:
+        """Every table in ``databases`` that ``caller`` may see (the service identity's view without one)."""
         out = []
         for db in databases:
-            for t in self.engine.tables(db):
-                cols = self.engine.columns(db, t)
-                out.append({"database": db, "table": t, "columns": cols, "row_count": self.row_count(db, t)})
+            for t in self.engine.tables(db, caller=caller):
+                cols = self.engine.columns(db, t, caller=caller)
+                out.append({"database": db, "table": t, "columns": cols,
+                            "row_count": self.row_count(db, t, caller=caller)})
         return out
 
     # ----------------------------------------------------------- catalog side
@@ -91,7 +97,7 @@ class Harvester:
         return any(re.search(r"\b" + re.escape(t) + r"\b", low) for t in table_names)
 
     def harvest_queries(self, tables: list[dict], query_dir: str | None = None,
-                        limit: int = 500, log_window: int = 5000) -> dict:
+                        limit: int = 500, log_window: int = 5000, *, caller: Caller | None = None) -> dict:
         """Aggregation queries over the harvested tables, from the engine's query log and/or a folder of .sql files.
 
         The log is read recent-first over a wide window and then filtered, because on a quiet warehouse the most
@@ -99,7 +105,7 @@ class Harvester:
         table_names = {t["table"].lower() for t in tables}
         raw, sources, stats = [], [], {}
         try:
-            recent = self.engine.recent_queries(log_window)
+            recent = self.engine.recent_queries(log_window, caller=caller)
         except Exception as e:  # noqa: BLE001 - not every warehouse exposes its log
             sources.append(f"query log unavailable: {str(e)[:120]}")
         else:
@@ -137,10 +143,13 @@ class Harvester:
         return {"sources": sources, "stats": stats, "statements": queries, "origins": origins}
 
     # ------------------------------------------------------------ all together
-    def run(self, databases: list[str], glossaries: list[str] | None = None, query_dir: str | None = None) -> dict:
-        tables = self.harvest_tables(databases)
+    def run(self, databases: list[str], glossaries: list[str] | None = None, query_dir: str | None = None,
+            *, caller: Caller | None = None) -> dict:
+        """Tables, columns, row counts and the query log as ``caller`` (the engine's identity
+        mode decides how); the glossary is read with the catalog's own credentials."""
+        tables = self.harvest_tables(databases, caller=caller)
         glossary_terms = self.harvest_glossary(glossaries)
-        queries = self.harvest_queries(tables, query_dir)
+        queries = self.harvest_queries(tables, query_dir, caller=caller)
         LOGGER.info(
             "harvested %d tables, %d glossary terms and %d queries from %s",
             len(tables), len(glossary_terms), len(queries.get("statements", [])), ", ".join(databases),

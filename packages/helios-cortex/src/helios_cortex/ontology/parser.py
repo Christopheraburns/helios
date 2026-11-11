@@ -19,15 +19,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from helios_core._optional import missing_extra
+from helios_cortex._optional import missing_extra
 
 try:
     from linkml_runtime.utils.schemaview import SchemaView
 except ModuleNotFoundError as exc:
-    raise missing_extra("helios_core.ontology.parser", "ontology", exc) from exc
+    raise missing_extra("helios_cortex.ontology.parser", "ontology", exc) from exc
 
-from helios_core.ontology.graph import GraphEdge, GraphNode, OntologyGraph
-from helios_core.ontology.mapping import SourceMapping, ossie_elements
+from helios_cortex.ontology.graph import GraphEdge, GraphNode, OntologyGraph
+from helios_cortex.ontology.mapping import SourceMapping, ossie_elements
 
 
 @dataclass

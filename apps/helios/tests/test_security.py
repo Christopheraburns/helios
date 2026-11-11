@@ -6,7 +6,7 @@ from apps.helios.console.authorization import (
     ResourceAuthorizationError,
     require_resource_access,
 )
-from helios_core.data_authorization import (
+from helios_cortex.data_authorization import (
     DataAuthorizationDecision,
     DataResource,
 )
@@ -88,7 +88,7 @@ def test_helios_resource_grant_does_not_imply_data_access(human):
 
 def test_principal_and_authorization_modules_do_not_import_fastapi():
     import apps.helios.console.authorization as resource_module
-    import helios_core.data_authorization as data_module
+    import helios_cortex.data_authorization as data_module
     import apps.helios.console.identity as identity_module
 
     for module in (identity_module, resource_module, data_module):

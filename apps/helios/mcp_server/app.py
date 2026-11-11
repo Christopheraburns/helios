@@ -22,15 +22,16 @@ PROJECT_DIR = os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw")
 ROOT = os.environ.get("HELIOS_ROOT") or os.path.join(
     PROJECT_DIR, "helios"
 )
-if not os.path.isdir(os.path.join(ROOT, "packages", "helios-core", "src", "helios_core")):
+if not os.path.isdir(os.path.join(ROOT, "packages", "helios-cortex", "src", "helios_cortex")):
     raise SystemExit(f"helios checkout not found at {ROOT}; set HELIOS_ROOT to the repo directory")
 
 port = os.environ.get("CDSW_APP_PORT", "8081")
 cmd = [sys.executable, "-m", "uvicorn", "apps.helios.mcp_server.server:app", "--host", "127.0.0.1", "--port", port, "--log-level", "info"]
 print("starting helios mcp server:", " ".join(cmd), flush=True)
 python_paths = [
-    os.path.join(ROOT, "packages", "helios-core", "src"),  # helios-core until the runtime installs wheels
+    os.path.join(ROOT, "packages", "helios-cortex", "src"),  # helios-cortex until the runtime installs wheels
     os.path.join(ROOT, "packages", "helios-cloudera", "src"),  # helios-cloudera, likewise
+    os.path.join(ROOT, "packages", "helios-model", "src"),  # helios-model, likewise
     ROOT,  # repo root for monorepo structure (allows apps.helios imports)
 ]
 dependency_dir = os.environ.get("HELIOS_PYTHON_DEPS") or os.path.join(

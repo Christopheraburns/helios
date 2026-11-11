@@ -5,7 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 from apps.helios.console import audit
-from helios_core.audit_sink import AuditRecord
+from helios_cortex.audit_sink import AuditRecord
 from apps.helios.console.metadata import MetadataRepository
 
 

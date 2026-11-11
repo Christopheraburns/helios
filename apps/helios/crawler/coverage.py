@@ -20,8 +20,8 @@ import re
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 
-from helios_core._pending.crawler.settings import CrawlerSettings
-from helios_core.index.records import (
+from helios_cortex._pending.crawler.settings import CrawlerSettings
+from helios_cortex.index.records import (
     CoverageRecord,
     CrawlRunRecord,
     EntityLinkRecord,

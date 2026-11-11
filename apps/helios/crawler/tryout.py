@@ -13,8 +13,8 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
-from helios_core._pending.crawler.settings import CrawlerSettings
-from helios_core.index.records import SegmentRecord
+from helios_cortex._pending.crawler.settings import CrawlerSettings
+from helios_cortex.index.records import SegmentRecord
 
 from .analyzers import _pdf_fields
 from .claims import blocked, compile_cues, split_units

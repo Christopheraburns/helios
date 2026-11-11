@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 from apps.helios.console import crawl_jobs
-from helios_core.index import runs
-from helios_core.index.store import duckdb_index_store
+from helios_cortex.index import runs
+from helios_cortex.index.store import duckdb_index_store
 
 DATASET = "1ca99f86-e6a0-57fc-8311-cadcac4c8302"
 ALICE = {"x-forwarded-user": "alice"}

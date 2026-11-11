@@ -3,9 +3,9 @@ from importlib.metadata import EntryPoint
 
 import pytest
 
-from helios_core import plugins
-from helios_core.engines.duckdb_engine import DuckDBEngine
-from helios_core.settings import Settings
+from helios_cortex import plugins
+from helios_cortex.engines.duckdb_engine import DuckDBEngine
+from helios_cortex.settings import Settings
 
 
 @pytest.fixture
@@ -21,19 +21,19 @@ def registered(monkeypatch):
     return register
 
 
-def test_helios_core_registers_its_own_plugins():
+def test_helios_cortex_registers_its_own_plugins():
     assert "duckdb" in plugins.names(plugins.ENGINES)
     assert plugins.load(plugins.ENGINES, "duckdb") is DuckDBEngine
     [duckdb] = [info for info in plugins.installed(plugins.ENGINES) if info.name == "duckdb"]
-    assert duckdb.distribution == "helios-core"
-    assert duckdb.target == "helios_core.engines.duckdb_engine:DuckDBEngine"
+    assert duckdb.distribution == "helios-cortex"
+    assert duckdb.target == "helios_cortex.engines.duckdb_engine:DuckDBEngine"
 
 
 def test_installed_reports_every_group_in_order_without_importing(registered):
     registered(
         (plugins.TOOLS, "lineage", "never_imported_module:tool"),
         (plugins.ENGINES, "warehouse", "never_imported_module:Engine"),
-        (plugins.ENGINES, "duckdb", "helios_core.engines.duckdb_engine:DuckDBEngine"),
+        (plugins.ENGINES, "duckdb", "helios_cortex.engines.duckdb_engine:DuckDBEngine"),
     )
     assert [(i.group, i.name) for i in plugins.installed()] == [
         (plugins.ENGINES, "duckdb"),
@@ -44,7 +44,7 @@ def test_installed_reports_every_group_in_order_without_importing(registered):
 
 
 def test_a_missing_plugin_names_what_is_installed_and_what_to_install(registered):
-    registered((plugins.ENGINES, "duckdb", "helios_core.engines.duckdb_engine:DuckDBEngine"))
+    registered((plugins.ENGINES, "duckdb", "helios_cortex.engines.duckdb_engine:DuckDBEngine"))
     with pytest.raises(plugins.PluginNotFound) as raised:
         plugins.load(plugins.ENGINES, "impala")
     assert str(raised.value) == (
@@ -62,7 +62,7 @@ def test_a_plugin_that_fails_to_import_says_why(registered):
 
 def test_two_packages_registering_one_name_is_an_error(registered):
     registered(
-        (plugins.ENGINES, "duckdb", "helios_core.engines.duckdb_engine:DuckDBEngine"),
+        (plugins.ENGINES, "duckdb", "helios_cortex.engines.duckdb_engine:DuckDBEngine"),
         (plugins.ENGINES, "duckdb", "other_package:DuckDBEngine"),
     )
     with pytest.raises(plugins.PluginError, match="registered more than once"):
@@ -75,7 +75,7 @@ def test_an_unknown_group_is_a_typo_not_an_empty_list():
 
 
 def test_settings_load_without_their_plugins_and_the_host_can_check_them(registered):
-    registered((plugins.ENGINES, "duckdb", "helios_core.engines.duckdb_engine:DuckDBEngine"))
+    registered((plugins.ENGINES, "duckdb", "helios_cortex.engines.duckdb_engine:DuckDBEngine"))
     settings = Settings(
         connections={
             "local": {"engine": "duckdb", "path": ":memory:"},
@@ -94,5 +94,5 @@ def test_settings_load_without_their_plugins_and_the_host_can_check_them(registe
 
 
 def test_settings_whose_plugins_are_installed_pass(registered):
-    registered((plugins.ENGINES, "duckdb", "helios_core.engines.duckdb_engine:DuckDBEngine"))
+    registered((plugins.ENGINES, "duckdb", "helios_cortex.engines.duckdb_engine:DuckDBEngine"))
     plugins.require_configured(Settings(connections={"local": {"engine": "duckdb"}}))

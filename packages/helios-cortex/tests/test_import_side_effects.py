@@ -1,9 +1,9 @@
-"""Importing helios_core reads no environment variables and opens no files (burndown 1.10).
+"""Importing helios_cortex reads no environment variables and opens no files (burndown 1.10).
 
 Each check runs in a fresh interpreter. An audit hook sees every file open, and
 os.environ is swapped for a recording mapping before anything is imported. An access
-counts against helios_core when the nearest frame outside the standard library is
-helios_core's own code, so helios_core calling open(), Path.read_text() or
+counts against helios_cortex when the nearest frame outside the standard library is
+helios_cortex's own code, so helios_cortex calling open(), Path.read_text() or
 importlib.metadata counts, while Python loading module source, or pydantic and other
 dependencies reading their own settings, does not.
 """
@@ -24,8 +24,8 @@ PROBE = textwrap.dedent(
             package = frame.f_globals.get("__name__", "").partition(".")[0]
             if name.startswith("<frozen importlib"):
                 return None  # the import system reading module source
-            if package == "helios_core":
-                return f"{name.split('/helios_core/', 1)[1]}:{frame.f_lineno}"
+            if package == "helios_cortex":
+                return f"{name.split('/helios_cortex/', 1)[1]}:{frame.f_lineno}"
             if package not in sys.stdlib_module_names and package != "__main__":
                 return None  # a dependency's own behaviour
             frame = frame.f_back
@@ -34,7 +34,7 @@ PROBE = textwrap.dedent(
     def record(kind, detail):
         where = culprit()
         if where:
-            hits.append(f"{kind} {detail} at helios_core/{where}")
+            hits.append(f"{kind} {detail} at helios_cortex/{where}")
 
     class RecordingEnviron(collections.abc.MutableMapping):
         def __init__(self, data):
@@ -75,7 +75,7 @@ PROBE = textwrap.dedent(
             try:
                 module = importlib.import_module(info.name)
             except ModuleNotFoundError as exc:
-                if "pip install 'helios-core[" in str(exc):
+                if "pip install 'helios-cortex[" in str(exc):
                     continue  # needs an extra that is not installed
                 raise
             if info.ispkg:
@@ -83,8 +83,8 @@ PROBE = textwrap.dedent(
             else:
                 yield info.name
 
-    import helios_core
-    names = list(modules(helios_core))
+    import helios_cortex
+    names = list(modules(helios_cortex))
     print(json.dumps({"hits": hits, "modules": names}))
     """
 )
@@ -97,9 +97,9 @@ def probe(**kwargs) -> dict:
     return json.loads(result.stdout.splitlines()[-1])
 
 
-def test_importing_helios_core_has_no_side_effects():
+def test_importing_helios_cortex_has_no_side_effects():
     report = probe()
-    assert {"helios_core.settings", "helios_core.compiler.compiler", "helios_core.index.store"} <= set(
+    assert {"helios_cortex.settings", "helios_cortex.compiler.compiler", "helios_cortex.index.store"} <= set(
         report["modules"]
     )
     assert not any("._pending" in name for name in report["modules"])
@@ -107,7 +107,7 @@ def test_importing_helios_core_has_no_side_effects():
 
 
 def test_the_probe_catches_env_reads_and_file_opens(tmp_path):
-    package = tmp_path / "helios_core"
+    package = tmp_path / "helios_cortex"
     package.mkdir()
     (package / "__init__.py").write_text(
         "import os\nfrom pathlib import Path\nos.environ.get('HOME')\nPath(__file__).read_text()\n"

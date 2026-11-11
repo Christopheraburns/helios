@@ -38,9 +38,9 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
-from helios_core._pending.crawler.settings import About, CrawlerSettings, ResolutionRules
-from helios_core.index import ids
-from helios_core.index.records import (
+from helios_cortex._pending.crawler.settings import About, CrawlerSettings, ResolutionRules
+from helios_cortex.index import ids
+from helios_cortex.index.records import (
     AssetRecord,
     CrawlRunRecord,
     EntityLinkRecord,
@@ -49,7 +49,7 @@ from helios_core.index.records import (
     RelationshipRecord,
     SegmentRecord,
 )
-from helios_core.ontology.mapping import ResolutionConfig
+from helios_cortex.ontology.mapping import ResolutionConfig
 
 from .anchors import (
     AnchorPlan,

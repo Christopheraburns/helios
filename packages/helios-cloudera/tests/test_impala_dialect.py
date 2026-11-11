@@ -1,8 +1,8 @@
 """Impala's dialect hooks and catalog statements (burndown 3.6).
 
 The golden files are the sample requests compiled for Impala; they are what
-helios_core rendered before the hooks existed (Hive, without backticks). Regenerate
-with HELIOS_UPDATE_GOLDEN=1, as for helios-core's golden files.
+helios_cortex rendered before the hooks existed (Hive, without backticks). Regenerate
+with HELIOS_UPDATE_GOLDEN=1, as for helios-cortex's golden files.
 """
 import json
 import os
@@ -11,17 +11,17 @@ from pathlib import Path
 import pytest
 import sqlglot
 
-from helios_core.compiler import Compiler, SemanticRequest
-from helios_core.ossie import SemanticModel
-from helios_core.profiler import Profiler
-from helios_core.engines import QueryResult
+from helios_cortex.compiler import Compiler, SemanticRequest
+from helios_cortex.ossie import SemanticModel
+from helios_model.profile import TableProfiler
+from helios_cortex.engines import QueryResult
 
 from helios_cloudera.impala import IMPALA, ImpalaConfig, ImpalaEngine
 
 HERE = Path(__file__).parent
 ROOT = HERE.parents[2]
 GOLDEN = HERE / "golden" / "compile" / "impala"
-REQUESTS = json.loads((ROOT / "packages" / "helios-core" / "tests" / "fixtures" / "sample_requests.json").read_text())
+REQUESTS = json.loads((ROOT / "packages" / "helios-cortex" / "tests" / "fixtures" / "sample_requests.json").read_text())
 UPDATE = os.environ.get("HELIOS_UPDATE_GOLDEN") == "1"
 
 
@@ -34,7 +34,7 @@ def model():
 def test_compiled_impala_sql_matches_the_golden_file(model, case):
     request = SemanticRequest.from_dict(REQUESTS[case])
     sql = Compiler(model).compile(request, dialect=IMPALA).sql + "\n"
-    # What helios_core did before the hooks: render Hive, then drop the backticks.
+    # What helios_cortex did before the hooks: render Hive, then drop the backticks.
     assert sql == Compiler(model).compile(request, dialect="hive").sql.replace("`", "") + "\n"
     sqlglot.parse_one(sql, read="hive")
     path = GOLDEN / f"{case}.sql"
@@ -67,7 +67,7 @@ class Recording(ImpalaEngine):
 
 def test_the_profiler_writes_impala_sql_with_ndv_and_backticks():
     engine = Recording([("SELECT COUNT(*)", QueryResult(["c0"] * 5, [(4, 4, 3, "a", "z")]))])
-    stats = Profiler(engine).column_stats("sales", "orders", [{"name": "region", "type": "string"}])
+    stats = TableProfiler(engine).column_stats("sales", "orders", [{"name": "region", "type": "string"}])
     assert engine.sql == ["SELECT COUNT(*) AS c0, COUNT(`region`) AS c1, NDV(`region`) AS c2, "
                           "MIN(`region`) AS c3, MAX(`region`) AS c4 FROM `sales`.`orders`"]
     assert stats["columns"]["region"]["ndv"] == 3

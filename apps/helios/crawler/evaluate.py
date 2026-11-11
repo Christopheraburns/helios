@@ -17,7 +17,7 @@ What is compared (crawler conventions, docs/crawler-burndown.md "Locators"):
   locator part overlaps its character span, or, without offsets (PDF ``page``
   and email ``header`` locators), names the same surface form;
 - entity keys are ``tpcds.<table>:<key columns sorted>``, as the crawler's
-  ``external_ids`` (helios_core.index.ids.external_id); Artifact entities are
+  ``external_ids`` (helios_cortex.index.ids.external_id); Artifact entities are
   asset IDs;
 - ground-truth predicates map onto the ontology's relationship classes
   (``RELATIONSHIP_MAP``); PURCHASED_IN is reversed (Sale PartyTo Customer).
@@ -32,8 +32,8 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
-from helios_core.index import IndexStore, ids, runs
-from helios_core.index.records import (
+from helios_cortex.index import IndexStore, ids, runs
+from helios_cortex.index.records import (
     AssetRecord,
     ClaimEvidenceRecord,
     ClaimRecord,
@@ -1079,10 +1079,10 @@ def profile_for(index: IndexStore, run: CrawlRunRecord) -> ScoringProfile:
     """The scoring profile of a run: the database of the mapping it used (recorded
     on runs since CG-9; the active mapping's for older ones) and the evaluation
     and case settings of its settings version."""
-    from helios_core._pending.crawler.settings import EMPTY_SETTINGS
-    from helios_core.index import mappings
-    from helios_core._pending import crawler_settings
-    from helios_core.ontology.mapping import resolution_config
+    from helios_cortex._pending.crawler.settings import EMPTY_SETTINGS
+    from helios_cortex.index import mappings
+    from helios_cortex._pending import crawler_settings
+    from helios_cortex.ontology.mapping import resolution_config
 
     settings = EMPTY_SETTINGS
     if run.settings_version is not None:
