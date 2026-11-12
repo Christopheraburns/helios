@@ -3,7 +3,8 @@
 
 The seven structured tools (list and describe models, search their semantics, compile
 and run queries, explain lineage) are plain functions ``(caller, stores, **arguments)
--> dict`` with a registry of their names, descriptions and input schemas. helios-serve
+-> dict``, registered under the ``helios.tools`` entry point; ``load_registry()`` lists
+every installed tool with its description, input schema and effect. helios-serve
 has no MCP dependency and no HTTP server: Daedalus serves the tools to shared
 deployments and helios-mcp to one developer's local agent.
 
@@ -14,7 +15,8 @@ helios-serve depends on helios-cortex alone; engines and catalogs come from plug
 _EXPORTS = {
     "Stores": "stores", "ModelStore": "stores", "ModelNotAvailable": "stores", "model_connection": "stores",
     **{name: "tools" for name in ("list_models", "describe_model", "search_semantics", "describe",
-                                  "compile_query", "run_query", "explain_lineage", "TOOLS")},
+                                  "compile_query", "run_query", "explain_lineage", "QueryFilter")},
+    **{name: "registry" for name in ("Effect", "Registry", "Tool", "tool", "load_registry", "input_schema")},
 }
 
 __all__ = sorted(_EXPORTS)

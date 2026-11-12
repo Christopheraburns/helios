@@ -8,6 +8,10 @@
     run_query          compile and run it on the warehouse, as the caller
     explain_lineage    a column's lineage, from a catalog that has it
 
+Each is marked with ``@tool`` (its effect and the description an agent reads) and
+registered under the ``helios.tools`` entry point; ``helios_serve.load_registry()``
+lists them with input schemas built from the type hints below.
+
 ``caller`` is the host's ``helios_cortex.Caller`` (None: the connection's service
 identity); ``stores`` is a ``helios_serve.Stores``. Arguments are keywords. A tool
 never raises for something the caller can fix: it returns ``{"error": code,
@@ -25,7 +29,7 @@ import logging
 import re
 import time
 import traceback
-from typing import Any
+from typing import Annotated, Any, Required, TypedDict
 
 from helios_cortex.audit_sink import AuditRecord, record_safely, sql_fingerprint
 from helios_cortex.caller import (
@@ -41,6 +45,7 @@ from helios_cortex.engines import SqlDialect, dialect_named
 from helios_cortex.ossie import SemanticModel
 from helios_cortex.visibility import ModelNotVisible, require_visible
 
+from helios_serve.registry import Effect, tool
 from helios_serve.stores import ModelNotAvailable, Stores, model_connection
 
 LOGGER = logging.getLogger(__name__)
@@ -56,6 +61,31 @@ DENIED = frozenset({
     "proxy_delegation_denied",
     "query_denied",
 })
+
+
+# ---------------------------------------------------------------------------- arguments
+# The argument types, with the descriptions an agent reads in each tool's input schema.
+class QueryFilter(TypedDict, total=False):
+    column: Annotated[str, "A database.table.column identifier returned by search_semantics or describe."]
+    field: Annotated[str, "Another name for column."]
+    op: Required[Annotated[str, "One of =, !=, <>, <, <=, >, >=, IN, NOT IN, BETWEEN, LIKE, IS NULL, IS NOT NULL."]]
+    value: Annotated[Any, "The value, typed as the field's datatype: a JSON number (unquoted) for a numeric field, "
+                          "a boolean for a Boolean one, an ISO string for a date or timestamp; a list for IN and "
+                          "NOT IN, two values for BETWEEN, nothing for IS NULL."]
+
+
+ModelName = Annotated[str | None, "The published model to use, from list_models; omit it for the first one."]
+Metrics = Annotated[list[str], "Metric names, copied exactly from search_semantics."]
+Dimensions = Annotated[list[str] | None, "database.table.column identifiers to group by, from search_semantics or "
+                                         "describe; never invented or shortened."]
+Filters = Annotated[list[QueryFilter] | None, "Conditions on database.table.column identifiers."]
+RowLimit = Annotated[int, f"At most this many rows (1 to {MAX_ROWS})."]
+
+QUERY_GUIDANCE = (
+    "Call search_semantics first and copy metric names exactly from its results. Dimensions and filter columns "
+    "must be exact database.table.column identifiers returned by search_semantics or describe; never invent or "
+    "shorten them. Keep each field's datatype in filter values: unquoted JSON numbers for numeric fields, "
+    "booleans for Boolean fields, ISO strings for dates and timestamps.")
 
 
 # ---------------------------------------------------------------------------- errors
@@ -243,6 +273,7 @@ def _json(value: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------- the tools
+@tool(effect=Effect.READ, description="List the semantic models this server can answer from.")
 @audited("list_models")
 def list_models(caller: Caller | None, stores: Stores) -> dict[str, Any]:
     """The published models the caller may see: ``{"models": [{"name", "status"}]}``."""
@@ -250,8 +281,10 @@ def list_models(caller: Caller | None, stores: Stores) -> dict[str, Any]:
                        if stores.visibility.can_see(_hooks_caller(caller), s["name"])]}
 
 
+@tool(effect=Effect.READ,
+      description="Datasets, fields, metrics and relationships of a model. Omit model to use the default.")
 @audited("describe_model")
-def describe_model(caller: Caller | None, stores: Stores, *, model: str | None = None) -> dict[str, Any]:
+def describe_model(caller: Caller | None, stores: Stores, *, model: ModelName = None) -> dict[str, Any]:
     """Datasets, fields, metrics and relationships of a model (the first one when None)."""
     source, semantic_model, failed = _resolve(caller, stores, model)
     if failed:
@@ -265,9 +298,13 @@ def describe_model(caller: Caller | None, stores: Stores, *, model: str | None =
     return {"model": source["name"], "status": source["status"], **description}
 
 
+@tool(effect=Effect.READ,
+      description="Resolve a natural-language question to the datasets, fields and metrics it involves, best first.")
 @audited("search_semantics")
-def search_semantics(caller: Caller | None, stores: Stores, *, question: str, limit: int = 10,
-                     model: str | None = None) -> dict[str, Any]:
+def search_semantics(caller: Caller | None, stores: Stores, *,
+                     question: Annotated[str, "The question, in the user's words."],
+                     limit: Annotated[int, "At most this many matches (1 to 100)."] = 10,
+                     model: ModelName = None) -> dict[str, Any]:
     """The datasets, fields and metrics a natural-language question involves."""
     _, semantic_model, failed = _resolve(caller, stores, model)
     if failed:
@@ -275,8 +312,13 @@ def search_semantics(caller: Caller | None, stores: Stores, *, question: str, li
     return search(semantic_model, question, min(max(limit, 1), 100))
 
 
+@tool(effect=Effect.READ,
+      description="Definition and context for one thing by name: a dataset, a column (database.table.column) or "
+                  "a metric.")
 @audited("describe")
-def describe(caller: Caller | None, stores: Stores, *, name: str, model: str | None = None) -> dict[str, Any]:
+def describe(caller: Caller | None, stores: Stores, *,
+             name: Annotated[str, "A dataset name or table, a database.table.column, or a metric name."],
+             model: ModelName = None) -> dict[str, Any]:
     """Definition and context for one dataset, column (database.table.column) or metric."""
     _, semantic_model, failed = _resolve(caller, stores, model)
     if failed:
@@ -315,10 +357,14 @@ def _model_dialect(stores: Stores, model_id: str) -> SqlDialect | None:
     return engine.dialect if engine is not None else None
 
 
+@tool(effect=Effect.READ,
+      description="Compile a semantic request into SQL without running it. " + QUERY_GUIDANCE)
 @audited("compile_query")
-def compile_query(caller: Caller | None, stores: Stores, *, metrics: list[str], dimensions: list[str] | None = None,
-                  filters: list[dict] | None = None, limit: int = 100, dialect: str | None = None,
-                  model: str | None = None) -> dict[str, Any]:
+def compile_query(caller: Caller | None, stores: Stores, *, metrics: Metrics, dimensions: Dimensions = None,
+                  filters: Filters = None, limit: RowLimit = 100,
+                  dialect: Annotated[str | None, "The SQL dialect (duckdb, postgres, trino, impala, ...); omit it "
+                                                 "for the dialect of the model's own warehouse."] = None,
+                  model: ModelName = None) -> dict[str, Any]:
     """Compile a semantic request into SQL, in ``dialect`` (a SQLGlot dialect or an engine
     plugin's name) or, by default, the dialect of the model's own connection."""
     source, semantic_model, failed = _resolve(caller, stores, model)
@@ -340,9 +386,12 @@ def compile_query(caller: Caller | None, stores: Stores, *, metrics: list[str], 
     return compiled
 
 
+@tool(effect=Effect.QUERY,
+      description="Compile a semantic request and run it on the warehouse as the caller; returns the SQL, columns "
+                  "and rows. The request is validated before the warehouse sees it. " + QUERY_GUIDANCE)
 @audited("run_query")
-def run_query(caller: Caller | None, stores: Stores, *, metrics: list[str], dimensions: list[str] | None = None,
-              filters: list[dict] | None = None, limit: int = 100, model: str | None = None) -> dict[str, Any]:
+def run_query(caller: Caller | None, stores: Stores, *, metrics: Metrics, dimensions: Dimensions = None,
+              filters: Filters = None, limit: RowLimit = 100, model: ModelName = None) -> dict[str, Any]:
     """Compile a semantic request and run it on the model's connection as ``caller``:
     columns and rows. Data authorization (``stores.data_policy``) is checked for every
     table first; a refused credential or impersonation is diagnosed, not just reported."""
@@ -426,9 +475,14 @@ def _authentication_diagnosis(engine, exc: BaseException) -> dict[str, Any]:
                       stage="authentication", retryable=True)
 
 
+@tool(effect=Effect.READ, requires={LINEAGE},
+      description="Lineage for a column given as database.table.column: the processes and datasets upstream and "
+                  "downstream of it, from the data catalog.")
 @audited("explain_lineage")
-def explain_lineage(caller: Caller | None, stores: Stores, *, column: str, depth: int = 3,
-                    model: str | None = None) -> dict[str, Any]:
+def explain_lineage(caller: Caller | None, stores: Stores, *,
+                    column: Annotated[str, "database.table.column"],
+                    depth: Annotated[int, "How many hops to follow each way."] = 3,
+                    model: ModelName = None) -> dict[str, Any]:
     """A column's (database.table.column) lineage, upstream and downstream, from the
     configured catalog, when it has lineage. ``model`` is checked against the host's
     visibility; the model need not be published, since lineage is the catalog's."""
@@ -447,6 +501,3 @@ def explain_lineage(caller: Caller | None, stores: Stores, *, column: str, depth
     if lineage is None:
         return error("semantic_not_found", f"{column} was not found in the catalog")
     return lineage.as_dict()
-
-
-TOOLS = (list_models, describe_model, search_semantics, describe, compile_query, run_query, explain_lineage)

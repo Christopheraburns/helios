@@ -15,5 +15,16 @@ dependencies = [
     "helios-cortex",
 ]
 
+# The tool registry (helios_serve.load_registry) reads this group; the entry-point name
+# is the tool's name. explain_lineage is offered only beside a catalog with lineage.
+[project.entry-points."helios.tools"]
+list_models = "helios_serve.tools:list_models"
+describe_model = "helios_serve.tools:describe_model"
+search_semantics = "helios_serve.tools:search_semantics"
+describe = "helios_serve.tools:describe"
+compile_query = "helios_serve.tools:compile_query"
+run_query = "helios_serve.tools:run_query"
+explain_lineage = "helios_serve.tools:explain_lineage"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/helios_serve"]

@@ -43,5 +43,43 @@ by default only those the warehouse runs as the caller), `audit` (where a record
 each call goes, with administrator-only diagnostics for errors), `engines` and
 `catalogs` (how a connection or a catalog is built).
 
-The registry of tools with their input schemas comes in 6.3 and `health` in 6.4
-(Phase 6 of `docs/helios-decomposition-burndown.md`).
+## The tool registry
+
+A server (Daedalus, helios-mcp) offers the tools from one source, the registry:
+
+```python
+from helios_serve import load_registry
+
+registry = load_registry()
+for tool in registry.tools():
+    tool.name, tool.description, tool.input_schema, tool.effect   # what a server offers
+registry.call("run_query", alice, stores, metrics=["revenue"])     # same as tools.run_query
+```
+
+`input_schema` is JSON Schema built from the function's type hints (`Annotated[T,
+"text"]` describes a parameter; a `TypedDict` is an object). It keeps to what MCP and
+OpenAPI 3.0 share: an optional argument is left out of `required`, never typed `null`.
+`effect` is `read` (Helios metadata only) or `query` (runs SQL on the warehouse as the
+caller: `run_query` alone); no tool changes data. `registry.tools(effects={"read"})` is
+a read-only metadata server.
+
+`explain_lineage` is offered only when an installed catalog plugin has lineage (Atlas,
+in helios-cloudera), so a base install lists six tools and one with helios-cloudera
+seven.
+
+Another package adds a tool by marking a function and registering it under the tool's
+name:
+
+```python
+from helios_serve import tool
+
+@tool(effect="read", description="What an agent reads to decide when to call it.")
+def row_count(caller, stores, *, table: str) -> dict: ...
+```
+
+```toml
+[project.entry-points."helios.tools"]
+row_count = "my_package.tools:row_count"
+```
+
+`health` comes in 6.4 (Phase 6 of `docs/helios-decomposition-burndown.md`).
