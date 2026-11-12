@@ -27,6 +27,16 @@ class IdentityError(PermissionError):
     mode needs (a username or a token), or the connection has no service credentials."""
 
 
+class EngineAuthenticationError(PermissionError):
+    """The database refused the credentials: the connection's own (service) ones, or in
+    ``token`` mode the caller's token. Engine plugins raise a subclass."""
+
+
+class ImpersonationError(PermissionError):
+    """The database did not run a query as the caller it was asked to impersonate (it
+    refused, or ran it as someone else). Engine plugins raise a subclass."""
+
+
 @dataclass(frozen=True)
 class Caller:
     """Who a request runs as. The token is left out of repr so it is never logged."""

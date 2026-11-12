@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationInfo, mo
 from sqlglot import exp
 
 from .._optional import missing_extra
-from ..caller import Caller, IdentityError, IdentityMode
+from ..caller import Caller, IdentityError, IdentityMode, ImpersonationError
 from .base import Engine, QueryResult
 
 try:
@@ -58,7 +58,7 @@ class TrinoOptions(BaseModel):
         return self
 
 
-class TrinoIdentityError(PermissionError):
+class TrinoIdentityError(ImpersonationError):
     """Trino did not run the query as the impersonated caller."""
 
 

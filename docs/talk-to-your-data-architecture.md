@@ -234,7 +234,9 @@ Other stable codes include `authentication_required`, `model_not_found`,
 `semantic_not_found`, `invalid_semantic_reference`,
 `invalid_semantic_query`, `invalid_filter_value_type`,
 `data_authorization_denied`, `query_denied`,
-`query_unavailable`, `atlas_unavailable`, and `impala_unavailable`. Transport
+`query_unavailable`, `lineage_unavailable` (was `atlas_unavailable`), `connection_unavailable`
+(was `impala_unavailable`), `warehouse_authentication_failed` (was `impala_authentication_failed`),
+`dialect_required` and `connection_conflict`; the tools are helios-serve's since burndown 6.2. Transport
 authentication errors use HTTP 401; missing server authentication
 configuration uses HTTP 503.
 

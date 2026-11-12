@@ -10,8 +10,10 @@ Serves the semantic layer to agents:
   run_query          compile and execute against the warehouse
   explain_lineage    Atlas lineage for a column
 
-Model source: published Apache Ossie JSON if available, otherwise the latest
-run's proposal converted to the same canonical in-memory semantic model.
+The tools are helios-serve's (burndown 6.2); this server is the adapter that keeps the
+console's Principals, organizations and grants, the turn's pinned revision, tracing,
+the audit log and the bearer gate in front of them. Models are the published ones only:
+an unreviewed proposal is no longer served.
 
 Environment:
   HELIOS_MCP_TOKEN          required bearer token clients must send
@@ -20,10 +22,8 @@ Environment:
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
-import re
 import time
 import uuid
 from contextvars import ContextVar
@@ -41,34 +41,24 @@ from helios_cortex import __version__
 from apps.helios.console import audit, authz
 from apps.helios import runtime
 from helios_cloudera.atlas import atlas_config
-from helios_cortex.compiler import (
-    CompileError,
-    Compiler,
-    Filter,
-    FilterValueTypeError,
-    SemanticRequest,
-)
-from helios_cortex.data_authorization import (
-    DataAction,
-    DataPolicy,
-    DataResource,
-)
+from helios_cortex.data_authorization import DataPolicy
 from apps.helios.console.delegation import (
     DelegatedContext,
     DelegationError,
     verify_assertion,
 )
 from apps.helios.audit_sink import RepositoryAuditSink
-from helios_cortex import Caller, IdentityMode
+from helios_cortex import Caller
 from helios_cortex.audit_sink import AuditRecord, AuditSink, record_safely, sql_fingerprint
+from helios_cortex.engines import dialect_named
 from helios_cortex.visibility import AllModels, ModelNotVisible, ModelVisibility, require_visible
 from apps.helios.console.identity import Principal, PrincipalKind
-from helios_cloudera.impala import IMPALA, impala_config
-from helios_cortex.engines.dialect import SqlDialect
+from helios_cloudera.impala import impala_config
 from apps.helios.console.metadata import SQLiteMetadataRepository, TraceSpan
 from helios_cortex.ossie import SemanticModel
-from helios_model.build import build as build_ossie
 from helios_cloudera.workbench import WorkbenchSettings as Settings
+import helios_serve
+from helios_serve import tools
 from apps.helios.console.tracing import sanitized, utcnow
 
 LOGGER = logging.getLogger(__name__)
@@ -116,320 +106,90 @@ _caller_context: ContextVar[MCPCaller | None] = ContextVar(
     "helios_mcp_caller", default=None
 )
 
-# Dialects by engine name. "hive" kept the Impala rendering before dialect hooks existed (3.6).
-ENGINE_DIALECT = {"impala": IMPALA, "hive": IMPALA, "spark": SqlDialect("spark")}
+# The engine names compile_query takes here. "hive" kept the Impala rendering before
+# dialect hooks existed (3.6); helios-serve takes any dialect name.
+ENGINE_DIALECT = {"impala": "impala", "hive": "impala", "spark": "spark"}
+
 
 # ---------------------------------------------------------------------------- model store
 class ModelStore:
-    """Load published or proposed artifacts into one semantic model shape."""
+    """helios-serve's published models (``artifact_store``), with the turn's pinned
+    revision: a delegated caller may name the revision its conversation started on."""
 
     def __init__(self):
-        self._cache: dict[str, tuple[float, SemanticModel]] = {}
+        self._published: helios_serve.ModelStore | None = None
+
+    def _store(self) -> helios_serve.ModelStore:
+        if self._published is None or self._published.artifacts is not artifact_store:
+            self._published = helios_serve.ModelStore(artifact_store)
+        return self._published
 
     def sources(self) -> list[dict]:
-        out = [
-            {
-                "name": model_id,
-                "path": str(artifact_store.published_ossie_path(model_id, "json")),
-                "status": "published",
-            }
-            for model_id in artifact_store.published_model_ids()
-        ]
-        if not out:
-            for r in runtime.runs.list_runs():
-                if r["stages"].get("propose"):
-                    proposal_path = os.path.join(runtime.runs.runs_dir, r["id"], "propose.json")
-                    with open(proposal_path) as handle:
-                        proposal = json.load(handle)
-                    model_id = proposal.get("model_id") or f"run-{r['id']}"
-                    out.append({"name": model_id, "path": proposal_path,
-                                "status": "proposed (unreviewed)"})
-                    break
-        return out
+        return self._store().sources()
 
-    def load(
-        self, name: str | None = None
-    ) -> tuple[dict, SemanticModel]:
-        srcs = self.sources()
-        if not srcs:
-            raise ValueError("no model available: publish a model or run the propose job")
-        if name:
-            src = next((s for s in srcs if s["name"] == name), None)
-            if src is None:
-                raise ValueError(f"model {name!r} is not available")
-        else:
-            src = srcs[0]
+    def load(self, name: str | None = None) -> tuple[dict, SemanticModel]:
+        published = self._store()
+        if name is None:
+            sources = published.sources()
+            name = sources[0]["name"] if sources else None
         caller = _caller_context.get()
-        if (
-            caller
-            and caller.semantic_revision_id
-            and caller.model_id == src["name"]
-        ):
-            artifact_store.revision_ossie_path(
-                src["name"], caller.semantic_revision_id, "yaml"
-            )
-            src = {
-                "name": src["name"],
-                "path": str(
-                    artifact_store.revision_ossie_path(
-                        src["name"],
-                        caller.semantic_revision_id,
-                        "json",
-                    )
-                ),
-                "status": "published revision",
-                "revision_id": caller.semantic_revision_id,
-            }
-        mtime = os.path.getmtime(src["path"])
-        cached = self._cache.get(src["path"])
-        if not cached or cached[0] != mtime:
-            with open(src["path"]) as f:
-                document = json.load(f)
-            if any(
-                "table" in dataset
-                for dataset in document.get("datasets", [])
-            ):
-                document, _ = build_ossie(
-                    document,
-                    document.get("name") or src["name"],
-                    document.get("description") or "",
-                    model_id=src["name"],
-                )
-            self._cache[src["path"]] = (
-                mtime,
-                SemanticModel(document),
-            )
-        return src, self._cache[src["path"]][1]
+        pinned = (caller.semantic_revision_id
+                  if caller and caller.semantic_revision_id and caller.model_id == name else None)
+        return published.load(name, revision=pinned)
 
 
 store = ModelStore()
 
-
-# ---------------------------------------------------------------------------- search
-def _tokens(s: str) -> set[str]:
-    return {t for t in re.split(r"[^a-z0-9]+", (s or "").lower()) if len(t) > 2}
-
-
-def search(
-    model: SemanticModel, question: str, limit: int = 10
-) -> dict:
-    q = _tokens(question)
-    hits: list[tuple[int, dict]] = []
-    for dataset in model.datasets.values():
-        dataset_terms = (
-            _tokens(dataset.name)
-            | _tokens(dataset.source)
-            | _tokens(dataset.description)
-        )
-        for synonym in dataset.synonyms:
-            dataset_terms |= _tokens(synonym)
-        score = len(q & dataset_terms)
-        if score:
-            hits.append(
-                (
-                    score * 2,
-                    {
-                        "kind": "dataset",
-                        "name": dataset.name,
-                        "table": dataset.source,
-                        "type": dataset.kind,
-                        "description": dataset.description,
-                    },
-                )
-            )
-        for field in dataset.fields.values():
-            if field.role in ("identifier", "foreign_key"):
-                continue
-            field_terms = (
-                _tokens(field.name)
-                | _tokens(field.label)
-                | _tokens(field.description)
-            )
-            for synonym in field.synonyms:
-                field_terms |= _tokens(synonym)
-            score = len(q & field_terms)
-            if score:
-                hits.append(
-                    (
-                        score,
-                        {
-                            "kind": "field",
-                            "role": field.role,
-                            "name": field.label,
-                            "datatype": field.datatype,
-                            "column": (
-                                f"{dataset.source}.{field.name}"
-                            ),
-                            "description": field.description,
-                        },
-                    )
-                )
-    for metric in model.metrics.values():
-        metric_terms = (
-            _tokens(metric.name) | _tokens(metric.description)
-        )
-        for synonym in metric.synonyms:
-            metric_terms |= _tokens(synonym)
-        score = len(q & metric_terms)
-        if score:
-            hits.append(
-                (
-                    score * 2,
-                    {
-                        "kind": "metric",
-                        "name": metric.name,
-                        "dataset": metric.dataset,
-                        "datatype": metric.datatype,
-                        "expression": metric.expression,
-                        "description": metric.description,
-                    },
-                )
-            )
-    hits.sort(key=lambda h: -h[0])
-    return {"matches": [h for _, h in hits[:limit]]}
-
-
-def _error(code: str, message: str, *, retryable: bool = False) -> dict:
-    return {"error": code, "message": message, "retryable": retryable}
-
-
-def _semantic_error_message(exc: BaseException) -> str:
-    detail = (
-        str(exc.args[0])
-        if isinstance(exc, KeyError) and exc.args
-        else str(exc)
-    )
-    return (
-        f"{detail}. Use an exact metric name from search_semantics and use "
-        "database.table.column identifiers for dimensions and filters."
-    )
+# The library's pieces, under the names this module and its tests have always used.
+search = tools.search
+_error = tools.error
+_semantic_error_message = tools.semantic_error_message
 
 
 def _impala_filter_type_error(exc: BaseException) -> str | None:
-    detail = str(exc)
-    if type(exc).__name__ != "HiveServer2Error":
-        return None
-    if "AnalysisException:" not in detail or not any(
-        marker in detail
-        for marker in (
-            "are not comparable",
-            "Incompatible return types",
-            "incompatible types",
-        )
-    ):
-        return None
-    return (
-        "Impala rejected a generated filter because its value type did not "
-        "match the semantic field type. Search for the field again, preserve "
-        "the datatype returned by search_semantics, and use JSON numbers "
-        "without quotes for numeric fields."
-    )
+    """The message for Impala refusing a filter value's type; None for anything else."""
+    from helios_cloudera.impala import ImpalaEngine
+
+    return tools.VALUE_TYPE_REJECTED if ImpalaEngine.rejected_value_type(None, exc) else None
 
 
-def _diagnostic_error(
-    code: str,
-    message: str,
-    exc: BaseException,
-    *,
-    stage: str,
-    retryable: bool = False,
-    excluded_values: tuple[str, ...] = (),
-) -> dict:
-    result = _error(code, message, retryable=retryable)
-    result["_audit_diagnostics"] = audit.exception_diagnostics(
-        exc,
-        stage=stage,
-        excluded_values=excluded_values,
-    )
-    return result
-
-
-def _semantic_request(
-    metrics: list[str],
-    dimensions: list[str] | None,
-    filters: list[dict] | None,
-    limit: int,
-) -> SemanticRequest:
-    semantic_filters: list[Filter] = []
-    for item in filters or []:
-        if not isinstance(item, dict):
-            raise CompileError("each filter must be an object")
-        field = item.get("field") or item.get("column")
-        operator = item.get("op")
-        if not isinstance(field, str) or not field:
-            raise CompileError("each filter requires column or field")
-        if not isinstance(operator, str) or not operator:
-            raise CompileError("each filter requires op")
-        semantic_filters.append(
-            Filter(field, operator, item.get("value"))
-        )
-    return SemanticRequest(
-        metrics=list(metrics),
-        dimensions=list(dimensions or []),
-        filters=semantic_filters,
-        limit=min(max(limit, 1), 1000),
-    )
-
-
-def _compile_semantic(
-    model: SemanticModel,
-    metrics: list[str],
-    dimensions: list[str] | None,
-    filters: list[dict] | None,
-    limit: int,
-    engine: str,
-) -> tuple[dict, set[str]]:
+def _compile_semantic(model, metrics, dimensions, filters, limit, engine):
     dialect = ENGINE_DIALECT.get(engine.lower())
     if dialect is None:
-        raise CompileError(
-            f"unsupported engine {engine!r}; use impala, hive, or spark"
-        )
-    compiled = Compiler(model).compile(
-        _semantic_request(metrics, dimensions, filters, limit),
-        dialect=dialect,
-    )
-    dataset_names = {compiled.fact}
-    for relationship_name in compiled.joins:
-        relationship = model.relationships[relationship_name]
-        dataset_names.update(
-            {
-                relationship.from_dataset,
-                relationship.to_dataset,
-            }
-        )
-    assets = {
-        model.datasets[dataset_name].source
-        for dataset_name in dataset_names
-    }
-    fact_source = model.datasets[compiled.fact].source
-    return (
-        {
-            "sql": compiled.sql,
-            "dataset": fact_source,
-            "joins": sorted(assets - {fact_source}),
-            "columns": compiled.columns,
-            "dialect": compiled.dialect,
-        },
-        assets,
-    )
+        raise tools.CompileError(f"unsupported engine {engine!r}; use impala, hive, or spark")
+    return tools.compile_semantic(model, metrics, dimensions, filters, limit, dialect_named(dialect))
 
 
 def _model_connection(settings: Settings, model) -> tuple[str | None, str | None]:
-    """The connection a model's data sources resolve to, or an error message when
-    they resolve to more than one: a query runs on one connection."""
-    refs = [
-        source.connection_ref
-        for reference in model.data_sources
-        if (source := metadata_repository.data_source(reference.data_source_id)) is not None
-    ]
-    names = {settings.resolve_connection(ref) for ref in refs} if refs else {settings.resolve_connection()}
-    names.discard(None)
-    if len(names) > 1:
-        return None, (
-            "the model's data sources use different connections ("
-            + ", ".join(sorted(names)) + "); a query runs on one connection"
-        )
-    return next(iter(names), None), None
+    return helios_serve.model_connection(settings, metadata_repository, model)
+
+
+def _stores() -> helios_serve.Stores:
+    """helios-serve's view of this server: the console's repository as the registry,
+    its policy and visibility hooks, Impala through ``impala_config`` and Atlas through
+    ``atlas_config``. Auditing stays with ``_audited_tool``, which also sees the console's
+    denials."""
+    settings = Settings()
+
+    def engines(connection: str | None):
+        from helios_cloudera.impala import ImpalaEngine
+
+        cfg = impala_config(settings, connection)
+        return ImpalaEngine(cfg) if cfg is not None else None
+
+    def catalogs():
+        from helios_cloudera.atlas import AtlasClient
+
+        cfg = atlas_config(settings)
+        return AtlasClient(cfg) if cfg is not None else None
+
+    return helios_serve.Stores(settings, metadata_repository, store, visibility=model_visibility,
+                               data_policy=data_policy, audit=None, engines=engines, catalogs=catalogs)
+
+
+def _library(tool):
+    """The helios-serve tool without its own audit record (``_audited_tool`` keeps one)."""
+    return tool.__wrapped__
 
 
 def _resource(model, action: authz.Action) -> authz.Resource:
@@ -660,119 +420,40 @@ server = MCPServer(
 )
 
 
-@server.tool(description="List the semantic models this server can answer from, and whether they are published or an unreviewed proposal.")
+@server.tool(description="List the semantic models this server can answer from.")
 @_audited_tool("list_models")
 def list_models() -> list[dict] | dict:
     caller = _caller_context.get()
     if caller is None:
         return _error("authentication_required", "authenticated MCP caller context is required")
-    visible = []
-    for source in store.sources():
-        _, _, denied = _authorized_tool(authz.Action.MODEL_READ, source["name"])
-        if denied is None:
-            visible.append({"name": source["name"], "status": source["status"]})
-    return visible
+    listed = _library(tools.list_models)(caller.caller, _stores())["models"]
+    return [m for m in listed if _authorized_tool(authz.Action.MODEL_READ, m["name"])[2] is None]
+
+
+def _call(tool, action: authz.Action, model: str | None, **arguments):
+    """Check the console's grants for ``model``, then run the helios-serve tool on it."""
+    caller, authorized_model, denied = _authorized_tool(action, model)
+    if denied:
+        return denied
+    return _library(tool)(caller.caller, _stores(), model=authorized_model.id, **arguments)
 
 
 @server.tool(description="Datasets, fields, metrics and relationships of a model. Omit model to use the default.")
 @_audited_tool("describe_model")
 def describe_model(model: str | None = None) -> dict:
-    _, authorized_model, denied = _authorized_tool(
-        authz.Action.SEMANTIC_READ, model
-    )
-    if denied:
-        return denied
-    src, semantic_model = store.load(authorized_model.id)
-    description = semantic_model.describe()
-    for item in description["datasets"]:
-        dataset = semantic_model.datasets[item["name"]]
-        item["table"] = dataset.source
-        for field in item["fields"]:
-            field["column"] = field["name"]
-    return {
-        "model": src["name"],
-        "status": src["status"],
-        **description,
-    }
+    return _call(tools.describe_model, authz.Action.SEMANTIC_READ, model)
 
 
 @server.tool(description="Resolve a natural-language question to the datasets, fields, metrics and glossary terms it involves.")
 @_audited_tool("search_semantics")
 def search_semantics(question: str, limit: int = 10, model: str | None = None) -> dict:
-    _, authorized_model, denied = _authorized_tool(
-        authz.Action.SEMANTIC_READ, model
-    )
-    if denied:
-        return denied
-    _, semantic_model = store.load(authorized_model.id)
-    return search(semantic_model, question, min(max(limit, 1), 100))
+    return _call(tools.search_semantics, authz.Action.SEMANTIC_READ, model, question=question, limit=limit)
 
 
 @server.tool(description="Definition and context for one thing by name: a dataset, a column (database.table.column), a metric or a glossary term.")
 @_audited_tool("describe")
 def describe(name: str, model: str | None = None) -> dict:
-    _, authorized_model, denied = _authorized_tool(
-        authz.Action.SEMANTIC_READ, model
-    )
-    if denied:
-        return denied
-    _, semantic_model = store.load(authorized_model.id)
-    n = name.lower()
-    for dataset in semantic_model.datasets.values():
-        dataset_names = {
-            dataset.name.lower(),
-            dataset.source.lower(),
-            *(synonym.lower() for synonym in dataset.synonyms),
-        }
-        if n in dataset_names:
-            return {
-                "kind": "dataset",
-                "table": dataset.source,
-                "name": dataset.name,
-                "type": dataset.kind,
-                "description": dataset.description,
-                "primary_key": dataset.primary_key,
-                "fields": [
-                    {
-                        "column": field.name,
-                        "name": field.label,
-                        "role": field.role,
-                        "datatype": field.datatype,
-                        "description": field.description,
-                    }
-                    for field in dataset.fields.values()
-                ],
-            }
-    try:
-        metric = semantic_model.metric(name)
-        return {
-            "kind": "metric",
-            "name": metric.name,
-            "dataset": metric.dataset,
-            "expression": metric.expression,
-            "description": metric.description,
-            "datatype": metric.datatype,
-        }
-    except KeyError:
-        pass
-    try:
-        field = semantic_model.field(name)
-        dataset = semantic_model.datasets[field.dataset]
-        return {
-            "kind": "field",
-            "dataset": dataset.source,
-            "column": field.name,
-            "name": field.label,
-            "role": field.role,
-            "datatype": field.datatype,
-            "description": field.description,
-        }
-    except KeyError:
-        pass
-    return _error(
-        "semantic_not_found",
-        f"nothing named {name!r} is available in the authorized model",
-    )
+    return _call(tools.describe, authz.Action.SEMANTIC_READ, model, name=name)
 
 
 @server.tool(description="Compile a semantic request into SQL. Call search_semantics first and copy metric names exactly from its results. "
@@ -784,32 +465,12 @@ def describe(name: str, model: str | None = None) -> dict:
 @_audited_tool("compile_query")
 def compile_query(metrics: list[str], dimensions: list[str] | None = None, filters: list[dict] | None = None,
                   limit: int = 100, engine: str = "impala", model: str | None = None) -> dict:
-    _, authorized_model, denied = _authorized_tool(
-        authz.Action.QUERY_COMPILE, model
-    )
-    if denied:
-        return denied
-    _, semantic_model = store.load(authorized_model.id)
-    try:
-        compiled, _ = _compile_semantic(
-            semantic_model,
-            metrics,
-            dimensions,
-            filters,
-            limit,
-            engine,
-        )
-        return compiled
-    except FilterValueTypeError as exc:
-        return _error(
-            "invalid_filter_value_type",
-            _semantic_error_message(exc),
-        )
-    except (CompileError, KeyError, TypeError, ValueError) as exc:
-        return _error(
-            "invalid_semantic_query",
-            _semantic_error_message(exc),
-        )
+    dialect = ENGINE_DIALECT.get(engine.lower())
+    if dialect is None:
+        return _error("invalid_semantic_query", _semantic_error_message(
+            ValueError(f"unsupported engine {engine!r}; use impala, hive, or spark")))
+    return _call(tools.compile_query, authz.Action.QUERY_COMPILE, model, metrics=metrics, dimensions=dimensions,
+                 filters=filters, limit=limit, dialect=dialect)
 
 
 @server.tool(description="Compile a semantic request and run it on the warehouse. Call search_semantics first, copy metric names exactly, and use "
@@ -819,209 +480,14 @@ def compile_query(metrics: list[str], dimensions: list[str] | None = None, filte
 @_audited_tool("run_query")
 def run_query(metrics: list[str], dimensions: list[str] | None = None, filters: list[dict] | None = None,
               limit: int = 100, model: str | None = None) -> dict:
-    from helios_cloudera.impala import (
-        ImpalaAuthenticationError,
-        ImpalaEngine,
-        ImpalaProxyDelegationError,
-    )
-    caller, authorized_model, denied = _authorized_tool(
-        authz.Action.QUERY_EXECUTE, model
-    )
-    if denied:
-        return denied
-    _, semantic_model = store.load(authorized_model.id)
-    settings = Settings()
-    connection, conflict = _model_connection(settings, authorized_model)
-    if conflict:
-        return _error("connection_conflict", conflict)
-    cfg = impala_config(settings, connection)
-    if cfg is None:
-        return _error(
-            "impala_unavailable",
-            "Impala proxy credentials are not configured on the server",
-            retryable=True,
-        )
-    safe_limit = min(max(limit, 1), 1000)
-    compiled_sql = ""
-    try:
-        compiled, assets = _compile_semantic(
-            semantic_model,
-            metrics,
-            dimensions,
-            filters,
-            safe_limit,
-            "impala",
-        )
-        compiled_sql = compiled["sql"]
-        resources: dict[tuple[str, str], DataResource] = {}
-        for asset in assets:
-            references = [
-                reference
-                for reference in authorized_model.data_sources
-                if not reference.selected_assets
-                or asset in reference.selected_assets
-            ]
-            if len(references) != 1:
-                return _error(
-                    "data_authorization_denied",
-                    f"dataset {asset!r} is not uniquely authorized by the model",
-                )
-            resource = DataResource(references[0].data_source_id, asset, cfg.identity)
-            resources[(resource.data_source_id, asset)] = resource
-        data_caller = caller.caller
-        for resource in resources.values():
-            access = data_policy.can_access(
-                data_caller,
-                resource,
-                DataAction.QUERY_EXECUTE,
-            )
-            if not access.allowed:
-                return _error("data_authorization_denied", access.reason)
-        res = ImpalaEngine(cfg).query(
-            compiled["sql"],
-            data_caller,
-            limit=safe_limit,
-        )
-    except ImpalaAuthenticationError as exc:
-        LOGGER.warning(
-            "delegated Impala authentication failed request_id=%s",
-            caller.request_id,
-        )
-        if cfg.identity is IdentityMode.TOKEN:
-            # The caller's own token was refused; the workload account is not involved.
-            return _diagnostic_error(
-                "caller_token_rejected",
-                "CDW rejected the caller's token",
-                exc,
-                stage="impala_token_authentication",
-            )
-        try:
-            service_authenticated = ImpalaEngine(cfg).ping()
-        except ImpalaAuthenticationError as service_exc:
-            return _diagnostic_error(
-                "workload_authentication_failed",
-                "CDW rejected the configured workload username or password",
-                service_exc,
-                stage="impala_service_authentication",
-            )
-        except Exception as diagnostic_exc:
-            LOGGER.exception(
-                "Impala service-account diagnostic failed request_id=%s",
-                caller.request_id,
-            )
-            return _diagnostic_error(
-                "impala_authentication_failed",
-                "CDW rejected the delegated query and service-account "
-                "authentication could not be confirmed",
-                diagnostic_exc,
-                stage="impala_authentication_diagnostic",
-                retryable=True,
-            )
-        if service_authenticated:
-            return _diagnostic_error(
-                "proxy_delegation_denied",
-                "The workload account connected to CDW, but CDW rejected "
-                "delegation to the authenticated Helios user",
-                exc,
-                stage="impala_proxy_delegation",
-            )
-        return _diagnostic_error(
-            "impala_authentication_failed",
-            "CDW authentication could not be confirmed",
-            exc,
-            stage="impala_authentication",
-            retryable=True,
-        )
-    except ImpalaProxyDelegationError as exc:
-        return _diagnostic_error(
-            "proxy_delegation_denied",
-            str(exc),
-            exc,
-            stage="impala_effective_user",
-        )
-    except FilterValueTypeError as exc:
-        return _error(
-            "invalid_filter_value_type",
-            _semantic_error_message(exc),
-        )
-    except (CompileError, KeyError, TypeError, ValueError) as exc:
-        return _error(
-            "invalid_semantic_query",
-            _semantic_error_message(exc),
-        )
-    except PermissionError as exc:
-        return _error("query_denied", str(exc))
-    except Exception as exc:
-        context = audit.current_context()
-        filter_error = _impala_filter_type_error(exc)
-        if filter_error:
-            LOGGER.warning(
-                "Impala rejected generated filter types request_id=%s",
-                context.request_id if context else None,
-            )
-            return _diagnostic_error(
-                "invalid_filter_value_type",
-                filter_error,
-                exc,
-                stage="impala_query_analysis",
-                excluded_values=(compiled_sql,),
-            )
-        LOGGER.exception(
-            "delegated Impala query failed request_id=%s error_type=%s",
-            context.request_id if context else None,
-            type(exc).__name__,
-        )
-        return _diagnostic_error(
-            "query_unavailable",
-            "The delegated Impala query could not be completed",
-            exc,
-            stage="impala_query",
-            retryable=True,
-            excluded_values=(compiled_sql,),
-        )
-    return {
-        "sql": compiled["sql"],
-        "dataset": compiled["dataset"],
-        "joins": compiled["joins"],
-        "data_source_ids": sorted({
-            resource.data_source_id for resource in resources.values()
-        }),
-        "columns": res.columns,
-        "rows": [[_json(v) for v in r] for r in res.rows],
-    }
+    return _call(tools.run_query, authz.Action.QUERY_EXECUTE, model, metrics=metrics, dimensions=dimensions,
+                 filters=filters, limit=limit)
 
 
 @server.tool(description="Atlas lineage for a column given as database.table.column: the processes and datasets upstream and downstream.")
 @_audited_tool("explain_lineage")
 def explain_lineage(column: str, depth: int = 3, model: str | None = None) -> dict:
-    _, _, denied = _authorized_tool(authz.Action.DATASOURCE_READ, model)
-    if denied:
-        return denied
-    from helios_cloudera.atlas import AtlasClient
-    cfg = atlas_config(Settings())
-    if cfg is None:
-        return _error(
-            "atlas_unavailable",
-            "Atlas is not configured on the server",
-            retryable=True,
-        )
-    parts = column.split(".")
-    if len(parts) != 3:
-        return _error(
-            "invalid_semantic_reference",
-            "column must be database.table.column",
-        )
-    lineage = AtlasClient(cfg).column_lineage(*parts, depth)
-    if lineage is None:
-        return _error(
-            "semantic_not_found",
-            f"{column} was not found in Atlas",
-        )
-    return lineage.as_dict()
-
-
-def _json(v):
-    return v if isinstance(v, (int, float, str, bool)) or v is None else str(v)
+    return _call(tools.explain_lineage, authz.Action.DATASOURCE_READ, model, column=column, depth=depth)
 
 
 @server.custom_route("/healthz", methods=["GET"])

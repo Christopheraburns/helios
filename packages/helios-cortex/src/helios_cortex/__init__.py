@@ -1,8 +1,8 @@
 """helios core library: shared clients and logic for jobs and applications."""
 
-from helios_cortex.caller import Caller, IdentityError, IdentityMode
+from helios_cortex.caller import Caller, EngineAuthenticationError, IdentityError, IdentityMode, ImpersonationError
 
-__all__ = ["Caller", "IdentityError", "IdentityMode"]
+__all__ = ["Caller", "EngineAuthenticationError", "IdentityError", "IdentityMode", "ImpersonationError"]
 
 
 def __getattr__(name: str) -> str:

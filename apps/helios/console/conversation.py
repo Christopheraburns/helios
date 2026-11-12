@@ -716,11 +716,14 @@ _ACCESS_ERROR_CODES = frozenset({
     "proxy_delegation_denied",
     "query_denied",
 })
+# helios-serve's neutral codes (6.2), and the Impala-named ones they replaced.
 _IMPALA_AUTH_ERROR_CODES = frozenset({
+    "warehouse_authentication_failed",
     "impala_authentication_failed",
     "workload_authentication_failed",
 })
 _IMPALA_SERVICE_ERROR_CODES = frozenset({
+    "connection_unavailable",
     "impala_unavailable",
     "query_unavailable",
 })

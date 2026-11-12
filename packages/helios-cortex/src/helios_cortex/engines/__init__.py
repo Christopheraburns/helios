@@ -1,5 +1,5 @@
 from .base import Engine, QueryResult
-from .dialect import SqlDialect, dialect_for
+from .dialect import SqlDialect, dialect_for, dialect_named
 
 
 def engine_for(connection) -> Engine:
@@ -13,4 +13,4 @@ def engine_for(connection) -> Engine:
     return plugin.from_connection(connection)
 
 
-__all__ = ["Engine", "QueryResult", "SqlDialect", "dialect_for", "engine_for"]
+__all__ = ["Engine", "QueryResult", "SqlDialect", "dialect_for", "dialect_named", "engine_for"]

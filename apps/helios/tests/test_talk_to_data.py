@@ -899,10 +899,13 @@ def test_mcp_compiles_repository_tpcds_ossie(monkeypatch):
     assert "WHERE" in compiled["sql"]
 
 
-def test_mcp_model_store_converts_proposal_fallback(
+def test_mcp_model_store_serves_no_unreviewed_proposal(
     tmp_path,
     monkeypatch,
 ):
+    """Published models only (burndown 6.2): a run's proposal is never answered from."""
+    from helios_serve import ModelNotAvailable
+
     artifacts = ArtifactStore(tmp_path / "artifacts")
     runs = tmp_path / "runs"
     run = runs / "run-1"
@@ -917,12 +920,10 @@ def test_mcp_model_store_converts_proposal_fallback(
     )
     monkeypatch.setattr(runtime, "runs", run_store)
 
-    source, model = mcp_server.ModelStore().load("customer360")
-
-    assert artifacts.published_model_ids() == []
-    assert source["status"] == "proposed (unreviewed)"
-    assert model.datasets["customers"].source == "crm.customers"
-    assert model.metric("Customer count").dataset == "customers"
+    store = mcp_server.ModelStore()
+    assert store.sources() == []
+    with pytest.raises(ModelNotAvailable, match="no model is published"):
+        store.load("customer360")
 
 
 def test_mcp_run_query_uses_delegated_identity(
@@ -1062,7 +1063,7 @@ def test_mcp_run_query_uses_delegated_identity(
     finally:
         mcp_server._caller_context.reset(context_token)
     assert rejected["error"] == "workload_authentication_failed"
-    assert "username or password" in rejected["message"]
+    assert "service" in rejected["message"] and "credentials" in rejected["message"]   # neutral wording (6.2)
     assert not rejected["retryable"]
 
     monkeypatch.setenv("WORKLOAD_PASSWORD", "private-password")
@@ -1106,7 +1107,7 @@ def test_mcp_run_query_uses_delegated_identity(
         if event.details.get("error_code") == "query_unavailable"
     )
     rendered = str(failed.details["diagnostics"])
-    assert failed.details["diagnostics"]["stage"] == "impala_query"
+    assert failed.details["diagnostics"]["stage"] == "query"
     assert "RuntimeError" in rendered
     assert "private-password" not in rendered
     assert "SELECT" not in rendered
@@ -1210,7 +1211,7 @@ def test_run_query_reports_a_rejected_caller_token_without_a_service_retry(wareh
     )
 
     assert result["error"] == "caller_token_rejected"
-    assert result["message"] == "CDW rejected the caller's token"
+    assert result["message"] == "The warehouse rejected the caller's token"
     assert not result["retryable"]
     assert len(calls) == 1
     assert "caller-jwt" not in repr(result)

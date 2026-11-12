@@ -166,3 +166,20 @@ def test_the_connection_setting_picks_the_mode():
 
 def test_the_workload_password_is_not_in_the_config_repr():
     assert "pw" not in repr(ImpalaConfig("vw", 443, "svc", "pw"))
+
+
+def test_impalas_errors_are_the_neutral_ones_and_it_names_its_dialect():
+    """helios-serve diagnoses any engine through these (burndown 6.2)."""
+    from helios_cortex import EngineAuthenticationError, ImpersonationError
+    from helios_cortex.engines import dialect_named
+
+    from helios_cloudera.impala import IMPALA
+
+    assert issubclass(ImpalaAuthenticationError, EngineAuthenticationError)
+    assert issubclass(ImpalaProxyDelegationError, ImpersonationError)
+    assert dialect_named("impala") is IMPALA
+    hive_server_error = type("HiveServer2Error", (Exception,), {})
+    engine = impala(IdentityMode.SERVICE)
+    assert engine.rejected_value_type(hive_server_error("AnalysisException: BIGINT and STRING are not comparable"))
+    assert not engine.rejected_value_type(hive_server_error("Session closed"))
+    assert not engine.rejected_value_type(RuntimeError("AnalysisException: are not comparable"))

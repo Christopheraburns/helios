@@ -40,6 +40,9 @@ class Engine(ABC):
 
     name: str = "engine"
     sqlglot_dialect: str = ""
+    # The dialect this engine's name stands for when no connection is at hand
+    # (``dialect_named("impala")``): set it when ``dialect`` adds rules to SQLGlot's.
+    named_dialect: ClassVar[SqlDialect | None] = None
     identity_modes: ClassVar[frozenset[IdentityMode]] = frozenset({IdentityMode.SERVICE})
 
     def __init__(self, identity_mode: IdentityMode | str = IdentityMode.SERVICE):
@@ -69,6 +72,12 @@ class Engine(ABC):
 
     @abstractmethod
     def ping(self) -> bool: ...
+
+    def rejected_value_type(self, error: BaseException) -> bool:
+        """True when ``error`` is the database refusing a query because a value's type
+        does not match its column's (a quoted number compared with a number column).
+        The tools report that as the caller's mistake, not an outage."""
+        return False
 
     @property
     def dialect(self) -> SqlDialect:

@@ -55,3 +55,26 @@ def test_compiled_queries_are_pretty_and_statements_are_not():
 
 def test_engines_supply_their_dialect():
     assert DuckDBEngine().dialect.name == "duckdb"
+
+
+def test_a_dialect_is_named_by_sqlglot_or_by_an_engine_plugin():
+    """dialect_named (burndown 6.2): a SQLGlot name, or an installed engine plugin's own
+    dialect when it declares one; anything else is refused."""
+    from helios_cortex import plugins
+    from helios_cortex.engines import SqlDialect, dialect_named
+
+    assert type(dialect_named("duckdb")) is SqlDialect and dialect_named("duckdb").name == "duckdb"
+    if "impala" in plugins.names(plugins.ENGINES):
+        assert type(dialect_named("impala")).__name__ == "ImpalaDialect"
+    with pytest.raises(ValueError, match="unknown SQL dialect 'cobol'"):
+        dialect_named("cobol")
+    # an engine plugin whose client is missing (trino without its extra) still names SQLGlot's dialect
+    assert dialect_named("trino").name == "trino"
+
+
+def test_engines_raise_the_neutral_identity_errors():
+    from helios_cortex import EngineAuthenticationError, ImpersonationError
+    from helios_cortex.engines.duckdb_engine import DuckDBEngine
+
+    assert issubclass(EngineAuthenticationError, PermissionError) and issubclass(ImpersonationError, PermissionError)
+    assert DuckDBEngine().rejected_value_type(RuntimeError("are not comparable")) is False   # the default

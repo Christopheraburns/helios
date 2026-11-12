@@ -12,7 +12,7 @@ from urllib.parse import parse_qsl, urlencode
 from pydantic import BaseModel, ConfigDict, SecretStr, ValidationInfo, model_validator
 from sqlglot import exp
 
-from helios_cortex.caller import Caller, IdentityError, IdentityMode
+from helios_cortex.caller import Caller, EngineAuthenticationError, IdentityError, IdentityMode, ImpersonationError
 from helios_cortex.engines.base import Engine, QueryResult
 from helios_cortex.engines.dialect import SqlDialect
 from helios_cortex.settings import ConnectionSettings, Settings
@@ -103,12 +103,12 @@ def impala_config(settings: Settings, ref: str | None = None) -> ImpalaConfig | 
     return impala_config_for(connection)
 
 
-class ImpalaAuthenticationError(PermissionError):
+class ImpalaAuthenticationError(EngineAuthenticationError):
     """The CDW HTTP endpoint rejected the credential: the workload user's, or in
     token mode the caller's token."""
 
 
-class ImpalaProxyDelegationError(PermissionError):
+class ImpalaProxyDelegationError(ImpersonationError):
     """Impala did not accept or enforce the impersonated effective user."""
 
 
@@ -144,6 +144,7 @@ IMPALA = ImpalaDialect()
 class ImpalaEngine(Engine):
     name = "impala"
     sqlglot_dialect = "hive"
+    named_dialect = IMPALA
     identity_modes = frozenset(IdentityMode)
 
     def __init__(self, cfg: ImpalaConfig):
@@ -224,6 +225,13 @@ class ImpalaEngine(Engine):
 
     def ping(self) -> bool:
         return self.query("SELECT 1").rows == [(1,)]
+
+    def rejected_value_type(self, error: BaseException) -> bool:
+        """Impala's analyzer refusing to compare a value with a column of another type."""
+        detail = str(error)
+        return (type(error).__name__ == "HiveServer2Error" and "AnalysisException:" in detail
+                and any(marker in detail for marker in
+                        ("are not comparable", "Incompatible return types", "incompatible types")))
 
     def query_history(self, limit: int = 500) -> QueryResult:
         """Recent statements from Impala's query log, when the VW exposes it via the sys database."""

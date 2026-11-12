@@ -60,3 +60,26 @@ class SqlDialect:
 def dialect_for(dialect: SqlDialect | str) -> SqlDialect:
     """``dialect`` as a SqlDialect; a string names a SQLGlot dialect with no engine rules."""
     return dialect if isinstance(dialect, SqlDialect) else SqlDialect(dialect)
+
+
+def dialect_named(name: str) -> SqlDialect:
+    """The dialect ``name`` stands for: an installed engine plugin's own dialect when it
+    declares one (``impala`` from helios-cloudera), else SQLGlot's dialect of that name.
+    ValueError when neither knows it."""
+    from sqlglot.dialects.dialect import Dialect
+
+    from .. import plugins
+
+    if name in plugins.names(plugins.ENGINES):
+        try:
+            engine = plugins.load(plugins.ENGINES, name)
+        except plugins.PluginError:      # its client is not installed; writing its SQL needs none
+            engine = None
+        named = getattr(engine, "named_dialect", None)
+        if isinstance(named, SqlDialect):
+            return named
+    try:
+        Dialect.get_or_raise(name)
+    except ValueError as exc:
+        raise ValueError(f"unknown SQL dialect {name!r}") from exc
+    return SqlDialect(name)
