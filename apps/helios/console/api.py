@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from apps.helios.console import audit, authz
 from apps.helios.console import health as system_health
+from apps.helios.console import legacy_names
 from helios_model import publication
 from helios_model import review as review_store
 from apps.helios import runtime
@@ -1117,7 +1118,7 @@ def _review_summary(
 ) -> dict:
     prepared = publication.prepare_reviewed_publication(
         model_id=model_id,
-        model_name=publication.model_name_for_proposal(proposal, harvest),
+        model_name=legacy_names.model_name_for_proposal(proposal, harvest),
         run_id=run_id,
         proposal=proposal,
         review=review,
@@ -3274,7 +3275,7 @@ def publish_model_review(
         result = publication.publish_reviewed_proposal(
             runtime.artifacts,
             model_id=context.model.id,
-            model_name=publication.model_name_for_proposal(proposal, harvest),
+            model_name=legacy_names.model_name_for_proposal(proposal, harvest),
             run_id=run_id,
             proposal=proposal,
             review=review,

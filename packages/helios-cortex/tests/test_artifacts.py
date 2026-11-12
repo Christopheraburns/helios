@@ -198,11 +198,10 @@ def test_published_ossie_revisions_are_immutable_and_verifiable(tmp_path):
         store.revision_ossie_path("customer360", first_revision, "json")
 
 
-def test_explicit_model_id_replaces_only_legacy_default():
-    assert model_id_for_run(
-        explicit="customer360", legacy_default="physical_database"
-    ) == "customer360"
+def test_a_runs_model_id_is_named_never_guessed():
+    assert model_id_for_run(explicit="customer360") == "customer360"
+    assert model_id_for_run({"model_id": "finance"}, {"model_id": "finance"}) == "finance"
     with pytest.raises(ValueError, match="conflicting"):
-        model_id_for_run(
-            {"model_id": "finance"}, explicit="customer360"
-        )
+        model_id_for_run({"model_id": "finance"}, explicit="customer360")
+    with pytest.raises(ValueError, match="model_id is required"):       # 5.7: no database-name fallback
+        model_id_for_run({"databases": ["tpcds"]})

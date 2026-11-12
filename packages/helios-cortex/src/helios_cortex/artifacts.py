@@ -325,9 +325,9 @@ class ArtifactStore:
 def model_id_for_run(
     *documents: dict[str, Any],
     explicit: str | None = None,
-    legacy_default: str | None = None,
 ) -> str:
-    """Resolve one model identity and reject conflicting run artifacts."""
+    """The one model id that ``explicit`` and the documents' ``model_id`` agree on.
+    ValueError when none names a model (it is never guessed) or they conflict."""
     candidates = [
         value
         for value in [
@@ -337,9 +337,7 @@ def model_id_for_run(
         if value
     ]
     if not candidates:
-        if not legacy_default:
-            raise ValueError("model_id is required")
-        candidates = [legacy_default]
+        raise ValueError("model_id is required")
     model_id = candidates[0]
     _validate_component(model_id, "model_id")
     if any(candidate != model_id for candidate in candidates[1:]):

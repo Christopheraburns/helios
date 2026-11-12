@@ -19,7 +19,7 @@ from helios_cortex import __version__
 from helios_model import publication
 from helios_model import review as rv
 from apps.helios import runtime
-from helios_cortex.artifacts import model_id_for_run
+from apps.helios.console import legacy_names
 from helios_model.build import preflight
 
 HERE = Path(__file__).parent
@@ -47,16 +47,12 @@ def _load(run_id: str) -> tuple[dict, dict, str]:
 
 def _published_model_name(prop: dict, run_id: str) -> str:
     h = runtime.runs.load(run_id, "harvest") or {}
-    return publication.model_name_for_proposal(prop, h)
+    return legacy_names.model_name_for_proposal(prop, h)
 
 
 def _model_id(prop: dict, run_id: str) -> str:
     harvest = runtime.runs.load(run_id, "harvest") or {}
-    return model_id_for_run(
-        prop,
-        harvest,
-        legacy_default=_published_model_name(prop, run_id),
-    )
+    return legacy_names.legacy_model_id(prop, harvest, fallback=_published_model_name(prop, run_id))
 
 
 # ---------------------------------------------------------------- page

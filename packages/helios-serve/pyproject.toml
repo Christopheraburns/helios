@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "helios-serve"
+version = "0.1.0"
+description = "Helios tools: list, describe, compile and query published semantic models, as plain Python functions"
+authors = [{name = "Helios Team"}]
+license = "Apache-2.0"
+requires-python = ">=3.11"
+# helios-cortex only. No MCP SDK and no web framework: the tools are plain functions with
+# metadata; Daedalus (shared) and helios-mcp (local stdio) serve them over MCP.
+dependencies = [
+    "helios-cortex",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/helios_serve"]

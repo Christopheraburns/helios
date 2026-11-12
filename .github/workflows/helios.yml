@@ -137,6 +137,22 @@ jobs:
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/model/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-model/tests"
 
+  # helios-serve installed from wheels beside a base helios-cortex (burndown 6.1): no
+  # MCP SDK, no web framework, no other Helios package.
+  serve-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv build --package helios-cortex --wheel --out-dir dist
+      - run: uv build --package helios-serve --wheel --out-dir dist
+      - run: uv venv "$RUNNER_TEMP/serve" && uv pip install --python "$RUNNER_TEMP/serve/bin/python" dist/*.whl pytest
+      - run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/serve/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-serve/tests"
+
   # Wheels go to the internal index on a package tag (helios-cortex/v0.1.0).
   # Nothing installs them yet; host projects switch over in Phase 8.
   # Needs repository secrets HELIOS_INDEX_URL and HELIOS_INDEX_TOKEN.

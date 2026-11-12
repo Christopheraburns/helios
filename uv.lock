@@ -15,6 +15,7 @@ members = [
     "helios-cloudera",
     "helios-cortex",
     "helios-model",
+    "helios-serve",
 ]
 
 [[package]]
@@ -1676,6 +1677,7 @@ dependencies = [
     { name = "helios-cloudera" },
     { name = "helios-cortex", extra = ["azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"] },
     { name = "helios-model" },
+    { name = "helios-serve" },
     { name = "httpx" },
     { name = "httpx2" },
     { name = "jinja2" },
@@ -1707,6 +1709,7 @@ requires-dist = [
     { name = "helios-cortex", extras = ["azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"], editable = "packages/helios-cortex" },
     { name = "helios-cortex", extras = ["evidence"], marker = "extra == 'evidence'", editable = "packages/helios-cortex" },
     { name = "helios-model", editable = "packages/helios-model" },
+    { name = "helios-serve", editable = "packages/helios-serve" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "httpx2", specifier = ">=2.13.1" },
     { name = "jinja2", specifier = ">=3.1.0" },
@@ -1826,6 +1829,17 @@ provides-extras = ["llm", "ontology", "postgres", "trino", "s3", "azure", "gcs",
 name = "helios-model"
 version = "0.1.0"
 source = { editable = "packages/helios-model" }
+dependencies = [
+    { name = "helios-cortex" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "helios-cortex", editable = "packages/helios-cortex" }]
+
+[[package]]
+name = "helios-serve"
+version = "0.1.0"
+source = { editable = "packages/helios-serve" }
 dependencies = [
     { name = "helios-cortex" },
 ]

@@ -17,6 +17,7 @@ classifiers = ["Private :: Do Not Upload"]
 dependencies = [
     "helios-cloudera",
     "helios-model",
+    "helios-serve",
     "helios-cortex[azure,gcs,llm,ontology,ozone,postgres,s3,trino]",
     "fastapi>=0.115.0",
     "httpx>=0.27.0",
@@ -51,6 +52,7 @@ members = ["packages/*"]
 helios-cortex = { workspace = true }
 helios-cloudera = { workspace = true }
 helios-model = { workspace = true }
+helios-serve = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["apps"]
@@ -60,11 +62,12 @@ testpaths = [
     "packages/helios-cortex/tests",
     "packages/helios-cloudera/tests",
     "packages/helios-model/tests",
+    "packages/helios-serve/tests",
     "apps/helios/tests",
 ]
 
 [tool.importlinter]
-root_packages = ["helios_cortex", "helios_cloudera", "helios_model"]
+root_packages = ["helios_cortex", "helios_cloudera", "helios_model", "helios_serve"]
 include_external_packages = true  # so apps.* and sibling packages can be named
 
 [[tool.importlinter.contracts]]
@@ -102,6 +105,24 @@ forbidden_modules = [
     "apps",
     "helios_cloudera",
     "helios_serve",
+    "helios_mcp",
+    "helios_crawl",
+    "helios_cortex._pending",
+]
+
+[[tool.importlinter.contracts]]
+# The tools are plain functions over published models: no MCP SDK (Daedalus and
+# helios-mcp serve them), no web framework, and no model discovery.
+name = "helios-serve imports no app code, no MCP and no sibling package but helios-cortex"
+type = "forbidden"
+source_modules = ["helios_serve"]
+forbidden_modules = [
+    "apps",
+    "mcp",
+    "fastapi",
+    "starlette",
+    "helios_model",
+    "helios_cloudera",
     "helios_mcp",
     "helios_crawl",
     "helios_cortex._pending",

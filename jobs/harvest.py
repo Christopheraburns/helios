@@ -5,11 +5,11 @@ history of a registered data source into a new run.
 
 Environment:
   HELIOS_SOURCE_ID   the registered data source to harvest (`helios source add`)
-  HELIOS_DATABASES   comma-separated databases to harvest (default: tpcds; 5.7 removes the default)
+  HELIOS_DATABASES   comma-separated databases to harvest (required)
   HELIOS_GLOSSARIES  comma-separated Atlas glossaries to include (default: all)
   HELIOS_QUERY_DIR   optional folder of .sql files to treat as query history
   HELIOS_RUN_ID      optional; default is a new timestamp run id
-  HELIOS_MODEL_ID    stable Helios Model ID (legacy fallback: first database)
+  HELIOS_MODEL_ID    the registered model the run is for (required)
 """
 import os
 import sys
@@ -19,12 +19,18 @@ from _common import env_list, helios  # noqa: E402
 
 from helios_model.discovery import new_run_id  # noqa: E402
 
-source = os.environ.get("HELIOS_SOURCE_ID")
-if not source:
-    raise SystemExit("set HELIOS_SOURCE_ID to a registered data source (helios source add ID --connection default)")
-databases = env_list("HELIOS_DATABASES") or ["tpcds"]
+REQUIRED = {
+    "HELIOS_SOURCE_ID": "a registered data source (helios source add ID --connection default)",
+    "HELIOS_DATABASES": "the comma-separated databases to harvest",
+    "HELIOS_MODEL_ID": "the registered model the run is for (helios model add ID ...)",
+}
+missing = [f"{name}: {what}" for name, what in REQUIRED.items() if not os.environ.get(name, "").strip()]
+if missing:
+    raise SystemExit("set " + "; ".join(missing))
+source = os.environ["HELIOS_SOURCE_ID"].strip()
+databases = env_list("HELIOS_DATABASES")
+model_id = os.environ["HELIOS_MODEL_ID"].strip()
 run_id = os.environ.get("HELIOS_RUN_ID") or new_run_id()
-model_id = os.environ.get("HELIOS_MODEL_ID") or databases[0]
 
 arguments = ["--source", source, "--model", model_id, "--run-id", run_id]
 arguments += [a for d in databases for a in ("--database", d)]
