@@ -14,6 +14,7 @@ requires-python = ">=3.11"
 # authentication, no deployment (decision 8); shared deployments use Daedalus.
 dependencies = [
     "helios-serve",
+    "jsonschema>=4.23.0",   # checks each call's arguments against the tool's input schema
     "mcp>=2.2.0,<3",
 ]
 

@@ -1837,12 +1837,14 @@ version = "0.1.0"
 source = { editable = "packages/helios-mcp" }
 dependencies = [
     { name = "helios-serve" },
+    { name = "jsonschema" },
     { name = "mcp" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "helios-serve", editable = "packages/helios-serve" },
+    { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "mcp", specifier = ">=2.2.0,<3" },
 ]
 

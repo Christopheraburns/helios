@@ -1,4 +1,4 @@
-"""helios-mcp is a package of its own (burndown 7.1): helios-serve and the MCP SDK, a
+"""helios-mcp is a package of its own (burndown 7.1): helios-serve, jsonschema and the MCP SDK, a
 `helios mcp` subcommand, and a server an MCP client can initialize, in process and over
 real stdio."""
 import json
@@ -23,7 +23,7 @@ def test_the_package_reports_its_version_and_depends_on_serve_and_the_sdk():
     assert helios_mcp.__version__ == project["version"]
     installed = {r.split(";")[0].split("[")[0].split(">")[0].split("=")[0].split("<")[0].strip().lower()
                  for r in requires("helios-mcp") or []}
-    assert installed == {"helios-serve", "mcp"}
+    assert installed == {"helios-serve", "jsonschema", "mcp"}
 
 
 def test_importing_it_loads_no_sdk_no_web_server_and_no_other_helios_package():
@@ -48,14 +48,15 @@ async def _initialize(server):
         return client.server_info, client.instructions
 
 
-def test_an_mcp_client_initializes_the_server_in_process():
-    info, instructions = anyio.run(_initialize, build_server())
+def test_an_mcp_client_initializes_the_server_in_process(stores):
+    info, instructions = anyio.run(_initialize, build_server(stores))
     assert (info.name, info.version, info.title) == (SERVER_NAME, helios_mcp.__version__, "Helios")
     assert "search_semantics" in instructions and "single-user" in instructions
 
 
 def test_an_agent_launches_helios_mcp_over_stdio(tmp_path):
     """What Claude Code or goose does: run the command and speak MCP on its stdin/stdout."""
+    (tmp_path / "helios.toml").write_text(f'data_dir = "{tmp_path / "data"}"\n')
     launch = StdioServerParameters(command=sys.executable, args=["-m", "helios_cortex.cli", "-q", "mcp"],
                                    cwd=str(tmp_path))
     info, _ = anyio.run(_initialize, launch)
