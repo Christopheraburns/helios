@@ -21,7 +21,7 @@ jobs:
           python-version: "3.12" # matches the helios Workbench runtime
           enable-cache: true
       - run: uv sync --locked
-      - run: uv run ruff check packages apps/helios jobs scripts
+      - run: uv run ruff check packages apps/helios jobs scripts tests
       - run: uv run lint-imports
       - run: uv run pytest -q
 
@@ -175,6 +175,21 @@ jobs:
           "$RUNNER_TEMP/semantic/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-semantic/tests"
           "$RUNNER_TEMP/semantic/bin/helios" --help
       - run: uv pip install --python "$RUNNER_TEMP/semantic/bin/python" --find-links dist "helios-semantic[all]"
+
+  # helios-mcp from wheels beside helios-serve and helios-cortex alone (burndown 7.1):
+  # the MCP SDK, no other Helios package, and `helios mcp` answering over stdio.
+  mcp-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: for p in helios-cortex helios-serve helios-mcp; do uv build --package "$p" --wheel --out-dir dist; done
+      - run: uv venv "$RUNNER_TEMP/mcp" && uv pip install --python "$RUNNER_TEMP/mcp/bin/python" --find-links dist helios-mcp pytest
+      - run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/mcp/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-mcp/tests"
 
   # Wheels go to the internal index on a package tag (helios-cortex/v0.1.0).
   # Nothing installs them yet; host projects switch over in Phase 8.

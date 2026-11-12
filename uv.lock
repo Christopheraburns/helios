@@ -14,6 +14,7 @@ members = [
     "helios-apps",
     "helios-cloudera",
     "helios-cortex",
+    "helios-mcp",
     "helios-model",
     "helios-semantic",
     "helios-serve",
@@ -1677,6 +1678,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "helios-cloudera" },
     { name = "helios-cortex", extra = ["azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"] },
+    { name = "helios-mcp" },
     { name = "helios-model" },
     { name = "helios-semantic" },
     { name = "helios-serve" },
@@ -1710,6 +1712,7 @@ requires-dist = [
     { name = "helios-cloudera", editable = "packages/helios-cloudera" },
     { name = "helios-cortex", extras = ["azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"], editable = "packages/helios-cortex" },
     { name = "helios-cortex", extras = ["evidence"], marker = "extra == 'evidence'", editable = "packages/helios-cortex" },
+    { name = "helios-mcp", editable = "packages/helios-mcp" },
     { name = "helios-model", editable = "packages/helios-model" },
     { name = "helios-semantic", editable = "packages/helios-semantic" },
     { name = "helios-serve", editable = "packages/helios-serve" },
@@ -1827,6 +1830,21 @@ requires-dist = [
     { name = "trino", marker = "extra == 'trino'", specifier = ">=0.330" },
 ]
 provides-extras = ["llm", "ontology", "postgres", "trino", "s3", "azure", "gcs", "ozone", "testing", "evidence"]
+
+[[package]]
+name = "helios-mcp"
+version = "0.1.0"
+source = { editable = "packages/helios-mcp" }
+dependencies = [
+    { name = "helios-serve" },
+    { name = "mcp" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "helios-serve", editable = "packages/helios-serve" },
+    { name = "mcp", specifier = ">=2.2.0,<3" },
+]
 
 [[package]]
 name = "helios-model"

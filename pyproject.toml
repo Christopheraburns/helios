@@ -19,6 +19,7 @@ dependencies = [
     "helios-model",
     "helios-serve",
     "helios-semantic",
+    "helios-mcp",
     "helios-cortex[azure,gcs,llm,ontology,ozone,postgres,s3,trino]",
     "fastapi>=0.115.0",
     "httpx>=0.27.0",
@@ -55,6 +56,7 @@ helios-cloudera = { workspace = true }
 helios-model = { workspace = true }
 helios-serve = { workspace = true }
 helios-semantic = { workspace = true }
+helios-mcp = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["apps"]
@@ -66,11 +68,13 @@ testpaths = [
     "packages/helios-model/tests",
     "packages/helios-serve/tests",
     "packages/helios-semantic/tests",
+    "packages/helios-mcp/tests",
+    "tests/integration",
     "apps/helios/tests",
 ]
 
 [tool.importlinter]
-root_packages = ["helios_cortex", "helios_cloudera", "helios_model", "helios_serve", "helios_semantic"]
+root_packages = ["helios_cortex", "helios_cloudera", "helios_model", "helios_serve", "helios_semantic", "helios_mcp"]
 include_external_packages = true  # so apps.* and sibling packages can be named
 
 [[tool.importlinter.contracts]]
@@ -147,6 +151,24 @@ forbidden_modules = [
     "starlette",
     "helios_cloudera",
     "helios_mcp",
+    "helios_crawl",
+    "helios_cortex._pending",
+]
+
+[[tool.importlinter.contracts]]
+# The local stdio adapter (decision 8): the registry's tools through the MCP SDK and
+# nothing else. No HTTP server of its own, no discovery, no plugin package by import.
+name = "helios-mcp imports no app code, no web server and no sibling package but helios-serve and helios-cortex"
+type = "forbidden"
+source_modules = ["helios_mcp"]
+forbidden_modules = [
+    "apps",
+    "fastapi",
+    "starlette",
+    "uvicorn",
+    "helios_model",
+    "helios_cloudera",
+    "helios_semantic",
     "helios_crawl",
     "helios_cortex._pending",
 ]

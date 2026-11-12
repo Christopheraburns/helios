@@ -33,12 +33,6 @@ from apps.helios.mcp_server import server as mcp_server
 from helios_cortex import Caller, IdentityMode
 from apps.helios.console import audit, authz
 from helios_cloudera.impala import ImpalaConfig
-from helios_cortex.compiler import (
-    Compiler,
-    Filter,
-    FilterValueTypeError,
-    SemanticRequest,
-)
 from apps.helios.console.metadata.migrations import MIGRATIONS
 from helios_cortex.data_authorization import (
     DataPolicy,
@@ -150,47 +144,6 @@ def canonical_model() -> SemanticModel:
     )
     assert problems == []
     return SemanticModel(document)
-
-
-def test_compiler_coerces_filter_values_using_semantic_datatype():
-    model = canonical_model()
-    model.datasets["customers"].fields["customer_id"].datatype = "BIGINT"
-
-    compiled = Compiler(model).compile(
-        SemanticRequest(
-            metrics=["Customer count"],
-            filters=[
-                Filter("crm.customers.customer_id", "=", "2002")
-            ],
-        ),
-        dialect="hive",
-    )
-
-    assert "customers.customer_id = 2002" in compiled.sql
-    assert "'2002'" not in compiled.sql
-
-
-def test_compiler_rejects_unsafe_filter_type_before_impala():
-    model = canonical_model()
-    model.datasets["customers"].fields["customer_id"].datatype = "BIGINT"
-
-    with pytest.raises(
-        FilterValueTypeError,
-        match="expects BIGINT.*without quotes",
-    ):
-        Compiler(model).compile(
-            SemanticRequest(
-                metrics=["Customer count"],
-                filters=[
-                    Filter(
-                        "crm.customers.customer_id",
-                        "=",
-                        "2001-10-01",
-                    )
-                ],
-            ),
-            dialect="hive",
-        )
 
 
 def test_impala_analysis_type_mismatch_is_not_service_unavailable():
@@ -1113,108 +1066,9 @@ def test_mcp_run_query_uses_delegated_identity(
     assert "SELECT" not in rendered
 
 
-# The Phase 2 gate: run_query runs as the host's caller, through the default
-# DataPolicy and the real ImpalaEngine, down to the impyla connect call.
-
-IDENTITY_CONFIGS = {
-    IdentityMode.IMPERSONATE: ImpalaConfig(
-        "warehouse.example", 443, "helios-service", "secret",
-        identity=IdentityMode.IMPERSONATE,
-    ),
-    IdentityMode.TOKEN: ImpalaConfig(
-        "warehouse.example", 443, None, identity=IdentityMode.TOKEN
-    ),
-}
-
-
-@pytest.fixture
-def warehouse_as(persistent_auth_stack, monkeypatch):
-    """Point run_query at a fake warehouse in ``mode``; returns the connect calls."""
-    monkeypatch.setattr(
-        mcp_server, "metadata_repository", persistent_auth_stack.repository
-    )
-    monkeypatch.setattr(
-        mcp_server.store,
-        "load",
-        lambda model=None: ({"name": model, "status": "published"}, canonical_model()),
-    )
-    monkeypatch.setattr(mcp_server, "data_policy", DataPolicy())
-
-    def configure(mode, connection):
-        calls = []
-
-        def connect(**kwargs):
-            calls.append(kwargs)
-            return connection
-
-        monkeypatch.setattr(
-            mcp_server, "impala_config", lambda *args, **kwargs: IDENTITY_CONFIGS[mode]
-        )
-        monkeypatch.setattr(impala_dbapi, "connect", connect)
-        return calls
-
-    return configure
-
-
-def _run_query_as(caller):
-    context_token = mcp_server._caller_context.set(caller)
-    try:
-        return mcp_server.run_query(["Customer count"], model="customer360")
-    finally:
-        mcp_server._caller_context.reset(context_token)
-
-
-def test_run_query_impersonates_the_hosts_caller(warehouse_as):
-    connection = FakeConnection("owner")
-    calls = warehouse_as(IdentityMode.IMPERSONATE, connection)
-
-    result = _run_query_as(mcp_server.MCPCaller(principal(), "customer360", "acme"))
-
-    assert result["rows"] == [[7]]
-    [call] = calls
-    assert call["auth_mechanism"] == "LDAP"
-    assert call["user"] == "helios-service"
-    assert "doAs=owner" in call["http_path"]
-    assert connection.cursor_value.executed == ["SELECT EFFECTIVE_USER()", result["sql"]]
-
-
-def test_run_query_sends_the_hosts_caller_token(warehouse_as):
-    connection = FakeConnection("owner")
-    calls = warehouse_as(IdentityMode.TOKEN, connection)
-
-    result = _run_query_as(
-        mcp_server.MCPCaller(principal(), "customer360", "acme", token="caller-jwt")
-    )
-
-    assert result["rows"] == [[7]]
-    [call] = calls
-    assert call["auth_mechanism"] == "JWT"
-    assert call["jwt"] == "caller-jwt"
-    assert "user" not in call and "password" not in call
-    assert connection.cursor_value.executed == [result["sql"]]
-
-
-def test_run_query_in_token_mode_refuses_a_caller_without_a_token(warehouse_as):
-    calls = warehouse_as(IdentityMode.TOKEN, FakeConnection("owner"))
-
-    result = _run_query_as(mcp_server.MCPCaller(principal(), "customer360", "acme"))
-
-    assert result["error"] == "data_authorization_denied"
-    assert calls == []
-
-
-def test_run_query_reports_a_rejected_caller_token_without_a_service_retry(warehouse_as):
-    calls = warehouse_as(IdentityMode.TOKEN, FailedOpenConnection())
-
-    result = _run_query_as(
-        mcp_server.MCPCaller(principal(), "customer360", "acme", token="caller-jwt")
-    )
-
-    assert result["error"] == "caller_token_rejected"
-    assert result["message"] == "The warehouse rejected the caller's token"
-    assert not result["retryable"]
-    assert len(calls) == 1
-    assert "caller-jwt" not in repr(result)
+# The Phase 2 gate (run_query as the host's caller, through the default DataPolicy and
+# the real ImpalaEngine, down to impyla's connect) moved to
+# tests/integration/test_integration_identity.py in 6.7, against helios-serve itself.
 
 
 def test_the_mcp_caller_never_shows_its_token():
@@ -2184,7 +2038,6 @@ def test_session_model_provider_override_is_private_and_drives_conversation(
         principal().id,
         headers["x-helios-session-id"],
     ) is None
-
 
 
 def test_openai_compatible_provider_uses_the_deployments_token_and_model(

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "helios-mcp"
+version = "0.1.0"
+description = "Helios tools over MCP on stdio, for one developer's local agent (Claude Code, Cursor, goose, Mistral Vibe)"
+readme = "README.md"
+authors = [{name = "Helios Team"}]
+license = "Apache-2.0"
+requires-python = ">=3.11"
+# helios-serve's tools and the MCP SDK. Local and single-user: no HTTP, no
+# authentication, no deployment (decision 8); shared deployments use Daedalus.
+dependencies = [
+    "helios-serve",
+    "mcp>=2.2.0,<3",
+]
+
+# helios mcp: serve the tools over stdio.
+[project.entry-points."helios.commands"]
+mcp = "helios_mcp.commands:McpCommand"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/helios_mcp"]

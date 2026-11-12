@@ -5,7 +5,7 @@
 Subcommands come from the ``helios.commands`` entry-point group, so each installed
 package adds its own: helios-cortex ``init``, ``registry``, ``index``, ``source`` and
 ``model``; helios-model ``harvest``, ``profile``, ``propose`` and ``publish``;
-helios-serve ``eval``; helios-cloudera ``impala``. A command is an object (or a class, instantiated with no
+helios-serve ``eval``; helios-mcp ``mcp``; helios-cloudera ``impala``. A command is an object (or a class, instantiated with no
 arguments) with:
 
     help: str                                            one line for ``helios --help``
