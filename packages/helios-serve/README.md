@@ -82,4 +82,23 @@ def row_count(caller, stores, *, table: str) -> dict: ...
 row_count = "my_package.tools:row_count"
 ```
 
-`health` comes in 6.4 (Phase 6 of `docs/helios-decomposition-burndown.md`).
+## Health
+
+`health(stores)` says whether the deployment can answer, for a host to serve wherever it
+reports health (an HTTP `/healthz`, a Daedalus probe, a CLI):
+
+```python
+from helios_serve import health
+
+health(stores)             # the model registry and the published models
+health(stores, deep=True)  # also pings each warehouse connection and the catalog
+# {"status": "healthy", "version": "0.1.0", "model_count": 3,
+#  "components": [{"id": "registry", "label": ..., "status": "healthy", "description": ...}, ...]}
+```
+
+A component is `healthy`, `degraded` (reachable but not ready: a registry schema that
+needs `helios registry upgrade`, or nothing published yet), `unavailable`, or `unknown`
+(nothing configured to check). The deployment is `unavailable` when the registry or the
+models are, `degraded` when any checked component is not healthy, and `healthy`
+otherwise. Descriptions are fixed sentences: an exception's text never reaches the
+result or the log. A deep check pings with the connection's own (service) credentials.

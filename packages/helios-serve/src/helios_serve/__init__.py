@@ -16,6 +16,7 @@ _EXPORTS = {
     "Stores": "stores", "ModelStore": "stores", "ModelNotAvailable": "stores", "model_connection": "stores",
     **{name: "tools" for name in ("list_models", "describe_model", "search_semantics", "describe",
                                   "compile_query", "run_query", "explain_lineage", "QueryFilter")},
+    "health": "checks", "HealthComponent": "checks", "aggregate_status": "checks",
     **{name: "registry" for name in ("Effect", "Registry", "Tool", "tool", "load_registry", "input_schema")},
 }
 
