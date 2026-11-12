@@ -152,6 +152,29 @@ jobs:
       - run: |
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/serve/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-serve/tests"
+      # The eval extra (6.5): helios-cortex's LLM client, so the evaluation tests run too.
+      - run: uv pip install --python "$RUNNER_TEMP/serve/bin/python" "$(ls dist/helios_cortex-*.whl)[llm]"
+      - run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/serve/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-serve/tests"
+
+  # helios-semantic, the package a developer installs (burndown 6.6), from wheels: the
+  # facade and the helios command on a base install (no LLM client, no Cloudera), then
+  # every extra through [all].
+  semantic-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: for p in helios-cortex helios-model helios-serve helios-semantic helios-cloudera; do uv build --package "$p" --wheel --out-dir dist; done
+      - run: uv venv "$RUNNER_TEMP/semantic" && uv pip install --python "$RUNNER_TEMP/semantic/bin/python" --find-links dist helios-semantic pytest
+      - run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/semantic/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-semantic/tests"
+          "$RUNNER_TEMP/semantic/bin/helios" --help
+      - run: uv pip install --python "$RUNNER_TEMP/semantic/bin/python" --find-links dist "helios-semantic[all]"
 
   # Wheels go to the internal index on a package tag (helios-cortex/v0.1.0).
   # Nothing installs them yet; host projects switch over in Phase 8.

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "helios-semantic"
+version = "0.1.0"
+description = "Helios: build semantic models of your data and query them; the package a developer installs"
+readme = "README.md"
+authors = [{name = "Helios Team"}]
+license = "Apache-2.0"
+requires-python = ">=3.11"
+# The Helios libraries a developer needs on a laptop. The `helios` command comes with
+# helios-cortex; helios-model adds harvest/profile/propose/publish, helios-serve eval.
+dependencies = [
+    "helios-cortex",
+    "helios-model",
+    "helios-serve",
+]
+
+[project.optional-dependencies]
+# Cloudera: the Impala engine, the Atlas catalog and the Workbench settings profile.
+cloudera = ["helios-cloudera"]
+# An LLM provider, to propose models and run evaluations.
+llm = ["helios-cortex[llm]", "helios-serve[eval]"]
+# Databases and engines beyond DuckDB and SQLite.
+postgres = ["helios-cortex[postgres]"]
+trino = ["helios-cortex[trino]"]
+# Object storage for published models.
+s3 = ["helios-cortex[s3]"]
+azure = ["helios-cortex[azure]"]
+gcs = ["helios-cortex[gcs]"]
+ozone = ["helios-cortex[ozone]"]
+# LinkML ontology parsing.
+ontology = ["helios-cortex[ontology]"]
+# Everything above.
+all = ["helios-semantic[cloudera,llm,postgres,trino,s3,azure,gcs,ozone,ontology]"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/helios_semantic"]

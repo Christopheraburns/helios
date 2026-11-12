@@ -16,7 +16,8 @@ def test_the_package_reports_its_version():
     project = tomllib.loads((PACKAGE / "pyproject.toml").read_text())["project"]
     assert helios_serve.__version__ == project["version"]
     assert project["dependencies"] == ["helios-cortex"]
-    assert "optional-dependencies" not in project
+    # One extra: the evaluation's LLM client (6.5), still from helios-cortex.
+    assert project["optional-dependencies"] == {"eval": ["helios-cortex[llm]"]}
 
 
 def test_it_installs_without_mcp_or_a_web_framework():

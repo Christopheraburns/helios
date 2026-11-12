@@ -242,3 +242,18 @@ def test_from_settings_reads_the_registry_and_artifacts(tmp_path, warehouse):
     stores = Stores.from_settings(settings)
     assert tools.list_models(None, stores)["models"] == [{"name": "shop", "status": "published"}]
     assert stores.audit is None and tools.describe_model(None, stores)["model"] == "shop"
+
+
+def test_query_values_keeps_the_engines_values_and_run_query_makes_them_json(stores):
+    """query_values (6.6) is run_query for a Python program: same audit, native values, not a registered tool."""
+    from decimal import Decimal
+
+    from helios_serve import load_registry
+
+    native = tools.query_values(ALICE, stores, metrics=["revenue"])
+    assert isinstance(native["rows"][0][0], Decimal)
+    assert stores.audit.records[-1].action == "run_query" and stores.audit.records[-1].row_count == 1
+    as_json = tools.run_query(ALICE, stores, metrics=["revenue"])
+    assert as_json["rows"] == [[str(native["rows"][0][0])]] and as_json["sql"] == native["sql"]
+    assert tools.query_values(ALICE, stores, metrics=["profit"])["error"] == "invalid_semantic_query"
+    assert "query_values" not in load_registry()

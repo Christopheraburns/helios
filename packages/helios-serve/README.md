@@ -102,3 +102,31 @@ needs `helios registry upgrade`, or nothing published yet), `unavailable`, or `u
 models are, `degraded` when any checked component is not healthy, and `healthy`
 otherwise. Descriptions are fixed sentences: an exception's text never reaches the
 result or the log. A deep check pings with the connection's own (service) credentials.
+
+## Evaluation
+
+`helios_serve.evaluation` measures how well an LLM answers questions through the tools.
+A suite is a JSON list of questions, each with the SQL whose result is the right answer;
+the LLM answers through the registry's tools, called directly as the caller (no MCP
+server), and an answer is accurate when its last query returns the reference result.
+Path metrics (tool calls, invalid and redundant calls, recovery, grounding, tokens, time)
+are aggregated per LLM variant. It needs an LLM client: `pip install "helios-serve[eval]"`.
+
+```sh
+helios eval --list                                  # the built-in tpcds suite and your own
+helios eval tpcds --candidate-model claude-opus-5-5 # compare the configured model with another
+helios eval --suite-file my-suite.json --json       # the full report
+```
+
+```python
+from helios_serve.evaluation import load_suite, run_evaluation
+
+report = run_evaluation(load_suite("tpcds"), stores, {"baseline": llm, "candidate": other}, caller=alice)
+report.metrics["candidate"]["answer_accuracy"]
+```
+
+Your own suites live in `<data_dir>/state/eval-suites` (`save_suite`). Without `--as`,
+`helios eval` is one user running with the configured credentials, so it allows queries
+on a service-identity connection (`single_user_policy()`); with `--as USER` the
+warehouse enforces that user's access, as for any caller.
+

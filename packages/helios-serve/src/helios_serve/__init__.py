@@ -14,8 +14,12 @@ helios-serve depends on helios-cortex alone; engines and catalogs come from plug
 
 _EXPORTS = {
     "Stores": "stores", "ModelStore": "stores", "ModelNotAvailable": "stores", "model_connection": "stores",
+    "single_user_policy": "stores",
     **{name: "tools" for name in ("list_models", "describe_model", "search_semantics", "describe",
-                                  "compile_query", "run_query", "explain_lineage", "QueryFilter")},
+                                  "compile_query", "run_query", "query_values", "explain_lineage",
+                                  "QueryFilter")},
+    **{name: "evaluation" for name in ("run_evaluation", "answer_question", "list_suites", "load_suite",
+                                       "EvaluationReport", "EvaluationError")},
     "health": "checks", "HealthComponent": "checks", "aggregate_status": "checks",
     **{name: "registry" for name in ("Effect", "Registry", "Tool", "tool", "load_registry", "input_schema")},
 }

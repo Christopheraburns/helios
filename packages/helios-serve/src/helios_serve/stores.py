@@ -156,6 +156,26 @@ class Stores:
         return cls(settings=settings, **overrides)
 
 
+class SingleUserAuthorizer:
+    """For a host with one user who owns the connections' credentials (a command line,
+    a local agent): a query the connection runs as its own service identity is allowed,
+    since that identity is the user's; one run as a caller is left to the warehouse, as
+    ``EngineIdentityAuthorizer`` does. A shared deployment never uses this."""
+
+    def can_access(self, caller, resource, action):
+        from helios_cortex.caller import IdentityMode
+        from helios_cortex.data_authorization import DataAction, EngineIdentityAuthorizer, PlatformDataDecision
+
+        if resource.identity_mode is IdentityMode.SERVICE and DataAction(action) is DataAction.QUERY_EXECUTE:
+            return PlatformDataDecision.allow("a single-user host runs queries with its user's own credentials")
+        return EngineIdentityAuthorizer().can_access(caller, resource, action)
+
+
+def single_user_policy() -> DataPolicy:
+    """The data policy for a single-user host (``helios eval`` without ``--as``)."""
+    return DataPolicy(SingleUserAuthorizer())
+
+
 def model_connection(settings: Settings, registry: Registry, model: Any) -> tuple[str | None, str | None]:
     """The connection a model's data sources resolve to, or an error message when they
     resolve to more than one: a query runs on one connection. A model with no data

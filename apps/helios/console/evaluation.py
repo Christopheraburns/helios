@@ -1,17 +1,22 @@
-"""Background Talk-to-Your-Data model evaluation."""
+"""Background Talk-to-Your-Data model evaluation, in the console.
+
+The evaluation itself is ``helios_serve.evaluation`` (burndown 6.5): suites, result
+normalization and the aggregate metrics come from there. What stays here is the
+console's way of running one: through its MCP server and conversation service, as a
+console Principal, recording traces and results in the console's repository. It goes
+with the console in Phase 8; ``helios eval`` and ``run_evaluation`` call the tools directly.
+"""
 from __future__ import annotations
 
 import json
-import os
 import uuid
-from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import anyio
+from helios_serve import evaluation as library
 
-from apps.helios import runtime
 from apps.helios.console.conversation import (
     ConversationService,
     ConversationUnavailable,
@@ -29,87 +34,38 @@ from apps.helios.console.metadata import (
     MetadataRepository,
 )
 
-BUILTIN_SUITE = runtime.REPO / "eval" / "tpcds-v1.json"
+BUILTIN_SUITE = Path(str(library.BUILTIN_SUITES / "tpcds-v1.json"))
+
+
+def _suite_directory() -> Path:
+    return library.suite_directory(Settings())
 
 
 def _suite_paths() -> list[Path]:
-    return [
-        BUILTIN_SUITE,
-        *sorted((Settings().data_dir / "state" / "eval-suites").glob("*.json")),
-    ]
+    return [BUILTIN_SUITE, *sorted(_suite_directory().glob("*.json"))]
 
 
 def list_suites() -> list[dict[str, Any]]:
-    suites: dict[tuple[str, str], dict[str, Any]] = {}
-    for path in _suite_paths():
-        document = json.loads(path.read_text())
-        _validate_suite(document)
-        suites.setdefault((document["id"], document["version"]), document)
-    return sorted(
-        suites.values(),
-        key=lambda item: (item["id"], item["version"]),
-    )
+    return library.list_suites(_suite_directory())
 
 
 def load_suite(
     suite_id: str = "tpcds",
     suite_version: str | None = None,
 ) -> dict[str, Any]:
-    matches = [
-        document
-        for document in list_suites()
-        if document["id"] == suite_id
-        and (suite_version is None or document["version"] == suite_version)
-    ]
-    if matches:
-        return matches[-1]
-    raise LookupError("evaluation suite not found")
+    try:
+        return library.load_suite(suite_id, suite_version, directory=_suite_directory())
+    except LookupError:
+        raise LookupError("evaluation suite not found") from None
 
 
 def save_suite(document: dict[str, Any]) -> dict[str, Any]:
-    _validate_suite(document)
-    root = Path(
-        os.environ.get("HELIOS_ROOT")
-        or os.path.join(os.environ.get("CDSW_PROJECT_DIR", "/home/cdsw"), "helios")
-    )
-    directory = root / "state" / "eval-suites"
-    directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{document['id']}-{document['version']}.json"
-    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
-    return document
+    # Saved where list_suites reads (the settings' data directory); this used to read
+    # HELIOS_ROOT / CDSW_PROJECT_DIR itself.
+    return library.save_suite(document, _suite_directory())
 
 
-def _validate_suite(document: dict[str, Any]) -> None:
-    if not isinstance(document.get("id"), str) or not document["id"]:
-        raise ValueError("evaluation suite requires an id")
-    if not isinstance(document.get("version"), str) or not document["version"]:
-        raise ValueError("evaluation suite requires a version")
-    questions = document.get("questions")
-    if not isinstance(questions, list) or not 1 <= len(questions) <= 100:
-        raise ValueError("evaluation suite must contain 1 to 100 questions")
-    identifiers: set[str] = set()
-    for item in questions:
-        if not isinstance(item, dict):
-            raise ValueError("evaluation questions must be objects")
-        identifier = item.get("id")
-        if not isinstance(identifier, str) or not identifier:
-            raise ValueError("each evaluation question requires an id")
-        if identifier in identifiers:
-            raise ValueError("evaluation question ids must be unique")
-        identifiers.add(identifier)
-        for field in ("question", "reference_sql"):
-            if not isinstance(item.get(field), str) or not item[field].strip():
-                raise ValueError(f"evaluation question requires {field}")
-        for field in ("minimum_tools", "grounding"):
-            values = item.get(field)
-            if (
-                not isinstance(values, list)
-                or not values
-                or not all(isinstance(value, str) and value for value in values)
-            ):
-                raise ValueError(
-                    f"evaluation question requires non-empty {field}"
-                )
+_validate_suite = library.validate_suite
 
 
 async def execute_evaluation(
@@ -235,22 +191,8 @@ def _cancelled(repository: MetadataRepository, run_id: str) -> bool:
     return bool(current and current.cancel_requested)
 
 
-def _normalized_query_result(result: Any) -> dict[str, Any] | None:
-    if not isinstance(result, dict):
-        return None
-    return _normalized_result(result.get("columns") or [], result.get("rows") or [])
-
-
-def _normalized_result(columns: Any, rows: Any) -> dict[str, Any]:
-    normalized_rows = [
-        [None if value is None else str(value) for value in row]
-        for row in rows
-    ]
-    normalized_rows.sort(key=lambda row: json.dumps(row, sort_keys=True))
-    return {
-        "columns": [str(column).casefold() for column in columns],
-        "rows": normalized_rows,
-    }
+_normalized_query_result = library.normalized_query_result
+_normalized_result = library.normalized_result
 
 
 def _path_metrics(
@@ -312,50 +254,6 @@ def _path_metrics(
 
 def _aggregate_metrics(
     results: list[EvaluationResult],
-    repository: MetadataRepository,
+    repository: MetadataRepository | None,
 ) -> dict[str, Any]:
-    grouped: dict[str, list[EvaluationResult]] = defaultdict(list)
-    for result in results:
-        grouped[result.variant].append(result)
-    response = {}
-    for variant, items in grouped.items():
-        metrics = [item.metrics or {} for item in items]
-        correct = sum(item.accurate for item in items)
-        completed = sum(item.completed for item in items)
-        tool_calls = sum(item.get("tool_calls", 0) for item in metrics)
-        invalid_calls = sum(item.get("invalid_calls", 0) for item in metrics)
-        redundant_calls = sum(
-            item.get("redundant_calls", 0) for item in metrics
-        )
-        response[variant] = {
-            "runs": len(items),
-            "answer_accuracy": correct / len(items) if items else 0,
-            "completion_rate": completed / len(items) if items else 0,
-            "tool_calls": tool_calls,
-            "excess_tool_calls": sum(
-                item.get("excess_tool_calls", 0) for item in metrics
-            ),
-            "invalid_calls": invalid_calls,
-            "invalid_call_rate": invalid_calls / max(tool_calls, 1),
-            "redundant_calls": redundant_calls,
-            "redundant_call_rate": redundant_calls / max(tool_calls, 1),
-            "recovery_rate": (
-                sum(item.get("recovered", 0) for item in metrics)
-                / max(sum(item.get("recovery_attempts", 0) for item in metrics), 1)
-            ),
-            "grounding_rate": (
-                sum(item.get("grounded_calls", 0) for item in metrics)
-                / max(sum(item.get("tool_calls", 0) for item in metrics), 1)
-            ),
-            "tokens_per_correct_answer": (
-                sum(
-                    item.get("tokens_in", 0) + item.get("tokens_out", 0)
-                    for item in metrics
-                ) / max(correct, 1)
-            ),
-            "milliseconds_per_correct_answer": (
-                sum(item.get("duration_ms") or 0 for item in metrics)
-                / max(correct, 1)
-            ),
-        }
-    return response
+    return library.aggregate(results)

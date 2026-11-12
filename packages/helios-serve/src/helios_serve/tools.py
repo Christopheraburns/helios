@@ -393,8 +393,29 @@ def compile_query(caller: Caller | None, stores: Stores, *, metrics: Metrics, di
 def run_query(caller: Caller | None, stores: Stores, *, metrics: Metrics, dimensions: Dimensions = None,
               filters: Filters = None, limit: RowLimit = 100, model: ModelName = None) -> dict[str, Any]:
     """Compile a semantic request and run it on the model's connection as ``caller``:
-    columns and rows. Data authorization (``stores.data_policy``) is checked for every
-    table first; a refused credential or impersonation is diagnosed, not just reported."""
+    columns and rows, each value JSON-ready (numbers, strings, booleans and None; other
+    values, such as decimals and dates, as strings). Data authorization
+    (``stores.data_policy``) is checked for every table first; a refused credential or
+    impersonation is diagnosed, not just reported."""
+    result = _run_query(caller, stores, metrics=metrics, dimensions=dimensions, filters=filters, limit=limit,
+                        model=model)
+    if "rows" in result:
+        result["rows"] = [[_json(v) for v in row] for row in result["rows"]]
+    return result
+
+
+@audited("run_query")
+def query_values(caller: Caller | None, stores: Stores, *, metrics: list[str], dimensions: list[str] | None = None,
+                 filters: list[dict] | None = None, limit: int = 100, model: str | None = None) -> dict[str, Any]:
+    """``run_query`` for a Python program: the same checks, errors and audit record (as
+    ``run_query``), with each value as the engine returned it (``Decimal``, ``date``, ...).
+    Not a registered tool: an agent gets ``run_query``'s JSON."""
+    return _run_query(caller, stores, metrics=metrics, dimensions=dimensions, filters=filters, limit=limit,
+                      model=model)
+
+
+def _run_query(caller: Caller | None, stores: Stores, *, metrics: list[str], dimensions: list[str] | None,
+               filters: list[dict] | None, limit: int, model: str | None) -> dict[str, Any]:
     source, semantic_model, failed = _resolve(caller, stores, model)
     if failed:
         return failed
@@ -446,7 +467,7 @@ def run_query(caller: Caller | None, stores: Stores, *, metrics: Metrics, dimens
                           retryable=True, excluded_values=(compiled_sql,))
     return {"sql": compiled["sql"], "dataset": compiled["dataset"], "joins": compiled["joins"],
             "data_source_ids": sorted({r.data_source_id for r in resources.values()}),
-            "columns": result.columns, "rows": [[_json(v) for v in row] for row in result.rows]}
+            "columns": list(result.columns), "rows": [list(row) for row in result.rows]}
 
 
 def _authentication_diagnosis(engine, exc: BaseException) -> dict[str, Any]:

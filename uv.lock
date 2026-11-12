@@ -15,6 +15,7 @@ members = [
     "helios-cloudera",
     "helios-cortex",
     "helios-model",
+    "helios-semantic",
     "helios-serve",
 ]
 
@@ -1677,6 +1678,7 @@ dependencies = [
     { name = "helios-cloudera" },
     { name = "helios-cortex", extra = ["azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"] },
     { name = "helios-model" },
+    { name = "helios-semantic" },
     { name = "helios-serve" },
     { name = "httpx" },
     { name = "httpx2" },
@@ -1709,6 +1711,7 @@ requires-dist = [
     { name = "helios-cortex", extras = ["azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"], editable = "packages/helios-cortex" },
     { name = "helios-cortex", extras = ["evidence"], marker = "extra == 'evidence'", editable = "packages/helios-cortex" },
     { name = "helios-model", editable = "packages/helios-model" },
+    { name = "helios-semantic", editable = "packages/helios-semantic" },
     { name = "helios-serve", editable = "packages/helios-serve" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "httpx2", specifier = ">=2.13.1" },
@@ -1837,6 +1840,70 @@ dependencies = [
 requires-dist = [{ name = "helios-cortex", editable = "packages/helios-cortex" }]
 
 [[package]]
+name = "helios-semantic"
+version = "0.1.0"
+source = { editable = "packages/helios-semantic" }
+dependencies = [
+    { name = "helios-cortex" },
+    { name = "helios-model" },
+    { name = "helios-serve" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "helios-cloudera" },
+    { name = "helios-cortex", extra = ["azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"] },
+    { name = "helios-serve", extra = ["eval"] },
+]
+azure = [
+    { name = "helios-cortex", extra = ["azure"] },
+]
+cloudera = [
+    { name = "helios-cloudera" },
+]
+gcs = [
+    { name = "helios-cortex", extra = ["gcs"] },
+]
+llm = [
+    { name = "helios-cortex", extra = ["llm"] },
+    { name = "helios-serve", extra = ["eval"] },
+]
+ontology = [
+    { name = "helios-cortex", extra = ["ontology"] },
+]
+ozone = [
+    { name = "helios-cortex", extra = ["ozone"] },
+]
+postgres = [
+    { name = "helios-cortex", extra = ["postgres"] },
+]
+s3 = [
+    { name = "helios-cortex", extra = ["s3"] },
+]
+trino = [
+    { name = "helios-cortex", extra = ["trino"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "helios-cloudera", marker = "extra == 'cloudera'", editable = "packages/helios-cloudera" },
+    { name = "helios-cortex", editable = "packages/helios-cortex" },
+    { name = "helios-cortex", extras = ["azure"], marker = "extra == 'azure'", editable = "packages/helios-cortex" },
+    { name = "helios-cortex", extras = ["gcs"], marker = "extra == 'gcs'", editable = "packages/helios-cortex" },
+    { name = "helios-cortex", extras = ["llm"], marker = "extra == 'llm'", editable = "packages/helios-cortex" },
+    { name = "helios-cortex", extras = ["ontology"], marker = "extra == 'ontology'", editable = "packages/helios-cortex" },
+    { name = "helios-cortex", extras = ["ozone"], marker = "extra == 'ozone'", editable = "packages/helios-cortex" },
+    { name = "helios-cortex", extras = ["postgres"], marker = "extra == 'postgres'", editable = "packages/helios-cortex" },
+    { name = "helios-cortex", extras = ["s3"], marker = "extra == 's3'", editable = "packages/helios-cortex" },
+    { name = "helios-cortex", extras = ["trino"], marker = "extra == 'trino'", editable = "packages/helios-cortex" },
+    { name = "helios-model", editable = "packages/helios-model" },
+    { name = "helios-semantic", extras = ["cloudera", "llm", "postgres", "trino", "s3", "azure", "gcs", "ozone", "ontology"], marker = "extra == 'all'", editable = "packages/helios-semantic" },
+    { name = "helios-serve", editable = "packages/helios-serve" },
+    { name = "helios-serve", extras = ["eval"], marker = "extra == 'llm'", editable = "packages/helios-serve" },
+]
+provides-extras = ["cloudera", "llm", "postgres", "trino", "s3", "azure", "gcs", "ozone", "ontology", "all"]
+
+[[package]]
 name = "helios-serve"
 version = "0.1.0"
 source = { editable = "packages/helios-serve" }
@@ -1844,8 +1911,17 @@ dependencies = [
     { name = "helios-cortex" },
 ]
 
+[package.optional-dependencies]
+eval = [
+    { name = "helios-cortex", extra = ["llm"] },
+]
+
 [package.metadata]
-requires-dist = [{ name = "helios-cortex", editable = "packages/helios-cortex" }]
+requires-dist = [
+    { name = "helios-cortex", editable = "packages/helios-cortex" },
+    { name = "helios-cortex", extras = ["llm"], marker = "extra == 'eval'", editable = "packages/helios-cortex" },
+]
+provides-extras = ["eval"]
 
 [[package]]
 name = "hf-xet"

@@ -618,7 +618,7 @@ and the UI polls only while status is `queued` or `running`. Detail returns
 per-question results, linked trace IDs, and aggregate accuracy, completion,
 efficiency, invalid/redundant-call, recovery, and grounding metrics.
 
-The built-in `tpcds-v1` suite is loaded from `eval/tpcds-v1.json`. Imports are
+The built-in `tpcds-v1` suite ships in helios-serve (`helios_serve/suites/tpcds-v1.json`). Imports are
 validated before storage and cannot replace a built-in suite version.
 
 ## Current UI coverage and remaining limits

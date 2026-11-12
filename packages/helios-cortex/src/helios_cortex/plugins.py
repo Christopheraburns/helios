@@ -35,6 +35,7 @@ PROVIDERS = {
     (PROFILES, "workbench"): "helios-cloudera",
     (COMMANDS, "impala"): "helios-cloudera",
     **{(COMMANDS, name): "helios-model" for name in ("harvest", "profile", "propose", "publish")},
+    (COMMANDS, "eval"): "helios-serve",
 }
 
 

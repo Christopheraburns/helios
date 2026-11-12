@@ -2,7 +2,8 @@
 
 This repository is a uv workspace. Helios is being split into libraries that a host project
 installs like any other package (`helios-cortex`, `helios-model`, `helios-serve`, and later
-`helios-crawl`); Daedalus serves the tools over MCP. See
+`helios-crawl`), with `helios-semantic` as the one a developer installs; Daedalus serves the
+tools over MCP. See
 `docs/helios-decomposition-burndown.md` for progress. Today `helios-cortex` is a real
 package and the console, crawler, graph gateway and MCP server still live under
 `apps/helios/`, installed by the root project.

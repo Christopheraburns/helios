@@ -15,6 +15,10 @@ dependencies = [
     "helios-cortex",
 ]
 
+[project.optional-dependencies]
+# helios eval and helios_serve.evaluation talk to an LLM (helios-cortex's LLM client).
+eval = ["helios-cortex[llm]"]
+
 # The tool registry (helios_serve.load_registry) reads this group; the entry-point name
 # is the tool's name. explain_lineage is offered only beside a catalog with lineage.
 [project.entry-points."helios.tools"]
@@ -25,6 +29,10 @@ describe = "helios_serve.tools:describe"
 compile_query = "helios_serve.tools:compile_query"
 run_query = "helios_serve.tools:run_query"
 explain_lineage = "helios_serve.tools:explain_lineage"
+
+# helios eval: run an evaluation suite through the tools.
+[project.entry-points."helios.commands"]
+eval = "helios_serve.commands:EvalCommand"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/helios_serve"]

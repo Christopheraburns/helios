@@ -139,6 +139,10 @@ flowchart TB
 
 **`helios_model`** (`packages/helios-model`) — model discovery: `harvest`, `profile` (statistics, keys and verified foreign keys), `propose` (the LLM stage), `review`, `build` (a reviewed proposal as an Ossie document), `publication` and `graph`. See its README.
 
+**`helios_serve`** (`packages/helios-serve`) — the tools as plain functions, their registry (`helios.tools`), `health` and the evaluation (`helios eval`). See its README.
+
+**`helios_semantic`** (`packages/helios-semantic`) — the package a developer installs (`pip install "helios-semantic[cloudera,llm]"`): the `Helios` facade over the libraries above, and the extras. See its README.
+
 **`helios_cloudera`** (`packages/helios-cloudera`) — the Cloudera plugins: the Impala engine (`helios_cloudera.impala`), the Atlas REST client (`helios_cloudera.atlas`: glossary CRUD, term assignment, entity search, lineage) and the Impala-backed index store (`helios_cloudera.index`).
 | `helios_cortex.llm` | Client for Cloudera AI Inference with schema-constrained structured output |
 
