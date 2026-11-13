@@ -74,7 +74,13 @@ engine = "duckdb"
 path = "warehouse.duckdb"
 ```
 
-Build a model, then publish it:
+To try it without a warehouse of your own, `helios init --sample` writes a `helios.toml`, builds the TPC-DS store-sales star in `warehouse.duckdb` beside it (`store_sales` and the six tables it joins to: 60,000 sales lines over 1998–2002, the same every time), and registers and publishes its semantic model as `tpcds`:
+
+```sh
+helios init --sample
+```
+
+On your own warehouse, build a model, then publish it:
 
 ```sh
 helios init
@@ -89,8 +95,8 @@ Ask it questions from Python:
 from helios_semantic import Helios
 
 helios = Helios.from_settings()
-helios.search("revenue by region")
-helios.query(["revenue"], ["shop.customers.c_region"]).records()
+helios.search("store sales revenue")
+helios.query(["store_sales_revenue"], ["tpcds.date_dim.d_year"]).records()   # on the sample
 ```
 
 Or let a coding agent ask them: `helios mcp --print-config claude-code` prints the configuration to add to the agent ([helios-mcp's README](packages/helios-mcp/README.md)). To look at a published model, a query's path over it, or the ontology, run the [viewer](examples/viewer/README.md).

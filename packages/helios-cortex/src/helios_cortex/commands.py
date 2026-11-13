@@ -45,20 +45,40 @@ path = "warehouse.duckdb"   # opened read-only; `read_only = false` to let Helio
 
 
 class InitCommand:
-    help = "write a starter helios.toml"
+    help = "write a starter helios.toml; --sample also builds a TPC-DS warehouse and publishes its model"
 
     def configure(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("path", nargs="?", type=Path, default=Path("helios.toml"),
                             help="where to write it (default: ./helios.toml)")
-        parser.add_argument("--force", action="store_true", help="replace the file if it exists")
+        parser.add_argument("--sample", action="store_true",
+                            help="a sample project: the TPC-DS store-sales star in warehouse.duckdb beside the "
+                                 "file, and its semantic model registered and published as tpcds")
+        parser.add_argument("--force", action="store_true", help="replace the file (and the sample warehouse) if it exists")
 
     def run(self, args: argparse.Namespace, context: CommandContext) -> int:
         path: Path = args.path
+        if args.sample:
+            return self._sample(path, args.force, context)
         if path.exists() and not args.force:
             raise CommandError(f"{path} already exists; pass --force to replace it")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(STARTER_CONFIG)
         context.echo(f"wrote {path}")
+        return 0
+
+    @staticmethod
+    def _sample(path: Path, force: bool, context: CommandContext) -> int:
+        from helios_cortex import sample
+
+        try:
+            created = sample.create(path, force=force)
+        except sample.SampleError as exc:
+            raise CommandError(str(exc)) from None
+        context.echo(f"wrote {created.config}")
+        context.echo(f"built {created.warehouse}: " + ", ".join(f"{t} ({n:,} rows)" for t, n in created.tables.items()))
+        context.echo(f"published model {created.model_id} (revision {created.revision_id[:12]})")
+        context.echo("next: query it with the Helios facade (helios-semantic) or give it to your agent "
+                     "with `helios mcp --print-config claude-code` (helios-mcp)")
         return 0
 
 

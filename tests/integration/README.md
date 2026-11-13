@@ -18,5 +18,5 @@ the repository.
 - `test_integration_viewer.py`: `examples/viewer` served on the same sample: the page, the
   model graph, a query's path from the compiler, the ontology graph, and GET only.
 
-The DuckDB TPC-DS sample (`warehouse`, `settings`) is in `conftest.py`. CI runs this directory, with the crawler's tests and the import contracts, in the
+The DuckDB TPC-DS sample (`warehouse`, `settings`) is in `conftest.py`: what `helios init --sample` builds, made once per run. CI runs this directory, with the crawler's tests and the import contracts, in the
 `integration` job of `.github/workflows/helios.yml`.

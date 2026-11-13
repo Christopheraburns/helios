@@ -1,9 +1,8 @@
-"""The Helios facade and an evaluation on a DuckDB TPC-DS sample (burndown 6.7): the
-repository's published TPC-DS model (models/published/tpcds.ossie.yaml) over the trimmed
-star in helios-cortex's harvest fixture, with generated rows. Every answer is checked
-against SQL written by hand on the same DuckDB file. Crosses helios-cortex (engine,
-registry, artifacts), helios-serve (tools, evaluation) and helios-semantic (the facade).
-The sample itself is conftest.py's."""
+"""The Helios facade and an evaluation on the DuckDB TPC-DS sample (burndown 6.7, 9.1): the
+store-sales star and its published model as `helios init --sample` builds them (conftest.py).
+Every answer is checked against SQL written by hand on the same DuckDB file. Crosses
+helios-cortex (engine, registry, artifacts, the sample), helios-serve (tools, evaluation)
+and helios-semantic (the facade)."""
 from decimal import Decimal
 
 import duckdb

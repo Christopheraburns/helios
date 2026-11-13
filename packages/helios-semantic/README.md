@@ -43,6 +43,7 @@ uses helios-serve's tools directly.
 
 ```sh
 helios init                        # a starter helios.toml
+helios init --sample               # or a sample project: a TPC-DS star in DuckDB, its model published
 helios harvest --source warehouse --database shop --model shop
 helios profile && helios propose && helios publish --accept-pending
 helios eval tpcds                  # with [llm]
