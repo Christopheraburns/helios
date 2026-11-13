@@ -23,7 +23,7 @@ def test_the_package_reports_its_version_and_depends_on_serve_and_the_sdk():
     assert helios_mcp.__version__ == project["version"]
     installed = {r.split(";")[0].split("[")[0].split(">")[0].split("=")[0].split("<")[0].strip().lower()
                  for r in requires("helios-mcp") or []}
-    assert installed == {"helios-serve", "jsonschema", "mcp"}
+    assert installed == {"helios-serve", "jsonschema", "mcp", "pyyaml"}
 
 
 def test_importing_it_loads_no_sdk_no_web_server_and_no_other_helios_package():

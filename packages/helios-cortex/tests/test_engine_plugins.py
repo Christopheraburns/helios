@@ -18,13 +18,31 @@ def connection(**entry):
 
 
 def test_duckdb_is_built_from_its_path(tmp_path):
+    import duckdb
+
     path = tmp_path / "local.duckdb"
-    engine = engine_for(connection(engine="duckdb", path=str(path)))
-    assert isinstance(engine, DuckDBEngine)
-    engine.query("CREATE TABLE t AS SELECT 42 AS answer")
-    engine.con.close()
-    assert engine_for(connection(engine="duckdb", path=str(path))).query("SELECT answer FROM t").rows == [(42,)]
+    with pytest.raises(duckdb.IOException, match="does not exist"):          # read-only: no new, empty file
+        engine_for(connection(engine="duckdb", path=str(path)))
+    assert not path.exists()
+    writer = engine_for(connection(engine="duckdb", path=str(path), read_only=False))
+    assert isinstance(writer, DuckDBEngine)
+    writer.query("CREATE TABLE t AS SELECT 42 AS answer")
+    writer.con.close()
+    reader = engine_for(connection(engine="duckdb", path=str(path)))
+    assert reader.query("SELECT answer FROM t").rows == [(42,)]
+    with pytest.raises(duckdb.Error, match="read-only"):
+        reader.query("CREATE TABLE u AS SELECT 1")
     assert engine_for(connection(engine="duckdb")).query("SELECT 1").rows == [(1,)]  # :memory: by default
+
+
+def test_many_readers_share_a_duckdb_file(tmp_path):
+    """The facade, helios mcp and a harvest at once: DuckDB lets read-only connections share a file."""
+    import duckdb
+
+    path = tmp_path / "shared.duckdb"
+    duckdb.connect(str(path)).execute("CREATE TABLE t AS SELECT 1 AS x").close()
+    readers = [engine_for(connection(engine="duckdb", path=str(path))) for _ in range(3)]
+    assert [r.query("SELECT x FROM t").rows for r in readers] == [[(1,)]] * 3
 
 
 def test_a_plugin_rejects_options_it_does_not_know_and_modes_it_cannot_honour():

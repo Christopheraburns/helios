@@ -143,6 +143,8 @@ flowchart TB
 
 **`helios_semantic`** (`packages/helios-semantic`) — the package a developer installs (`pip install "helios-semantic[cloudera,llm]"`): the `Helios` facade over the libraries above, and the extras. See its README.
 
+**`helios_mcp`** (`packages/helios-mcp`) — the tools over MCP on stdio for one developer's local agent: `helios mcp`, and `helios mcp --print-config claude-code|cursor|goose|vibe` for the agent's configuration. Local, single-user and unauthenticated; shared deployments use Daedalus. See its README.
+
 **`helios_cloudera`** (`packages/helios-cloudera`) — the Cloudera plugins: the Impala engine (`helios_cloudera.impala`), the Atlas REST client (`helios_cloudera.atlas`: glossary CRUD, term assignment, entity search, lineage) and the Impala-backed index store (`helios_cloudera.index`).
 | `helios_cortex.llm` | Client for Cloudera AI Inference with schema-constrained structured output |
 

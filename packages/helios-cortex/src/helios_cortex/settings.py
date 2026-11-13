@@ -11,7 +11,7 @@ Values are resolved in this order, highest first:
    through ``profile_sources`` (helios-cloudera's ``WorkbenchSettings`` reads
    ``CDSW_*``, ``IMPALA_*``, ``WORKLOAD_*``, ``ATLAS_*`` and ``INFERENCE_*``)
 4. a config file: ``HELIOS_CONFIG``, else ``./helios.toml``, else
-   ``[tool.helios]`` in ``./pyproject.toml``
+   ``[tool.helios]`` in ``./pyproject.toml`` (relative file paths in it are relative to the file, see ``anchored``)
 5. defaults; files live under the user's data directory
 
 Importing this module reads nothing; constructing ``Settings`` reads the
@@ -263,18 +263,64 @@ class Settings(BaseSettings):
         )
 
 
-def _config_file_source(settings_cls: type[BaseSettings]) -> PydanticBaseSettingsSource:
+def config_file() -> Path | None:
+    """The config file Settings would read now: ``from_file``'s, else ``HELIOS_CONFIG``,
+    else ``./helios.toml``, else ``./pyproject.toml``; None when there is none. An explicit
+    file is returned even when it is missing (Settings then refuses it)."""
     explicit = _config_file.get() or (Path(os.environ["HELIOS_CONFIG"]) if os.environ.get("HELIOS_CONFIG") else None)
-    if explicit is not None and not explicit.is_file():
-        raise FileNotFoundError(f"Helios config file not found: {explicit}")
-    path = explicit or next((p for p in (Path("helios.toml"), Path("pyproject.toml")) if p.is_file()), None)
+    return explicit or next((p for p in (Path("helios.toml"), Path("pyproject.toml")) if p.is_file()), None)
+
+
+def _config_file_source(settings_cls: type[BaseSettings]) -> PydanticBaseSettingsSource:
+    path = config_file()
+    if path is not None and not path.is_file():
+        raise FileNotFoundError(f"Helios config file not found: {path}")
     values: dict[str, Any] = {}
     if path is not None:
         with path.open("rb") as handle:
             values = tomllib.load(handle)
         if path.name == "pyproject.toml":
             values = values.get("tool", {}).get("helios", {})
+        values = anchored(values, path.resolve().parent)
     return InitSettingsSource(settings_cls, init_kwargs=values)
+
+
+FILE_SETTINGS = ("data_dir", "artifacts_dir", "runs_dir", "metadata_db")
+
+
+def anchored(values: dict[str, Any], base: Path) -> dict[str, Any]:
+    """A config file's values with its relative file paths made relative to the file's own
+    directory, so a file means the same wherever the process starts (an agent launching
+    ``helios mcp --config /project/helios.toml`` from elsewhere, a notebook in a subfolder).
+    The paths: ``data_dir``, ``artifacts_dir``, ``runs_dir``, ``metadata_db``,
+    ``evidence.index``, each connection's ``path`` (DuckDB's database file), a relative
+    SQLite ``registry_url`` and a local ``artifact_storage.location``. ``~`` expands.
+    Environment variables and values passed in code keep meaning the working directory."""
+    def file(value: Any) -> Any:
+        if not isinstance(value, str) or not value or value == ":memory:":
+            return value
+        candidate = Path(value).expanduser()
+        return str(candidate if candidate.is_absolute() else base / candidate)
+
+    values = dict(values)
+    for name in FILE_SETTINGS:
+        if name in values:
+            values[name] = file(values[name])
+    if isinstance(values.get("evidence"), dict) and "index" in values["evidence"]:
+        values["evidence"] = {**values["evidence"], "index": file(values["evidence"]["index"])}
+    if isinstance(values.get("connections"), dict):
+        values["connections"] = {
+            name: {**entry, "path": file(entry["path"])} if isinstance(entry, dict) and "path" in entry else entry
+            for name, entry in values["connections"].items()}
+    url = values.get("registry_url")
+    if isinstance(url, str) and url.startswith("sqlite:///") and not url.startswith("sqlite:////"):
+        database = url[len("sqlite:///"):]
+        if database and database != ":memory:":
+            values["registry_url"] = "sqlite:///" + file(database)
+    storage = values.get("artifact_storage")
+    if isinstance(storage, dict) and isinstance(storage.get("location"), str) and "://" not in storage["location"]:
+        values["artifact_storage"] = {**storage, "location": file(storage["location"])}
+    return values
 
 
 SECRET_NAME_PARTS = ("credential", "password", "secret", "token", "api_key", "apikey")

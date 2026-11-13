@@ -11,3 +11,6 @@ the repository.
 - `test_integration_tpcds_sample.py`: the `Helios` facade (helios-semantic) and an
   evaluation (helios-serve) on a DuckDB TPC-DS sample with the repository's published
   TPC-DS model.
+- `test_integration_one_config.py`: one `helios init` project read by the `Helios` facade
+  (helios-semantic) and by `helios mcp` (helios-mcp) launched as an agent would, from the
+  project and from elsewhere with `HELIOS_CONFIG`, while the warehouse is held open.

@@ -1839,6 +1839,7 @@ dependencies = [
     { name = "helios-serve" },
     { name = "jsonschema" },
     { name = "mcp" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -1846,6 +1847,7 @@ requires-dist = [
     { name = "helios-serve", editable = "packages/helios-serve" },
     { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "mcp", specifier = ">=2.2.0,<3" },
+    { name = "pyyaml", specifier = ">=6.0.0" },
 ]
 
 [[package]]

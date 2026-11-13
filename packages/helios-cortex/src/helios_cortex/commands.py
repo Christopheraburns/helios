@@ -10,7 +10,9 @@ from helios_cortex.cli import CommandContext, CommandError
 STARTER_CONFIG = '''\
 # Helios configuration. Every value can also be set as an environment variable:
 # HELIOS_<NAME>, with sections joined by __ (HELIOS_CONNECTIONS__DEFAULT__PATH).
-# Secrets are better kept in the environment than in this file.
+# Secrets are better kept in the environment than in this file. Relative file paths
+# here are relative to this file, so the facade, `helios` commands and an agent's
+# `helios mcp` read the same files wherever they start.
 
 # Where Helios keeps its files (the SQLite registry, the model artifacts, runs).
 # The default is your user data directory.
@@ -26,7 +28,7 @@ STARTER_CONFIG = '''\
 # (`[trino]`) here, impala in helios-cloudera.
 [connections.default]
 engine = "duckdb"
-path = "warehouse.duckdb"
+path = "warehouse.duckdb"   # opened read-only; `read_only = false` to let Helios write it
 # identity = "service"      # or "impersonate" / "token", if the engine supports it
 
 # The LLM that proposes models (`pip install 'helios-cortex[llm]'`). The key is read

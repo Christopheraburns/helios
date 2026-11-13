@@ -16,6 +16,7 @@ dependencies = [
     "helios-serve",
     "jsonschema>=4.23.0",   # checks each call's arguments against the tool's input schema
     "mcp>=2.2.0,<3",
+    "pyyaml>=6.0.0",        # goose's configuration snippet
 ]
 
 # helios mcp: serve the tools over stdio.

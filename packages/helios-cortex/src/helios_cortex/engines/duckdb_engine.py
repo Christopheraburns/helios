@@ -15,11 +15,16 @@ if TYPE_CHECKING:
 
 class DuckDBOptions(BaseModel):
     """Options of an ``engine = "duckdb"`` connection. ``path`` is a database file,
-    or ``:memory:`` (the default) for an empty in-process database."""
+    or ``:memory:`` (the default) for an empty in-process database. A file is opened
+    read-only unless ``read_only = false``: Helios only reads the warehouse, and DuckDB
+    lets many processes share a file read-only (the facade in a notebook, ``helios mcp``
+    for an agent, a harvest) but none beside a writer. It also means a mistyped path is
+    an error rather than a new, empty database."""
 
     model_config = ConfigDict(extra="forbid")
 
     path: str = ":memory:"
+    read_only: bool = True
 
 
 class DuckDBEngine(Engine):
@@ -28,15 +33,17 @@ class DuckDBEngine(Engine):
     name = "duckdb"
     sqlglot_dialect = "duckdb"
 
-    def __init__(self, path: str = ":memory:", identity_mode: IdentityMode | str = IdentityMode.SERVICE):
+    def __init__(self, path: str = ":memory:", identity_mode: IdentityMode | str = IdentityMode.SERVICE, *,
+                 read_only: bool = False):
         super().__init__(identity_mode)
         import duckdb
-        self.con = duckdb.connect(path)
+        self.con = duckdb.connect(path, read_only=read_only and path != ":memory:")
 
     @classmethod
     def from_connection(cls, connection: ConnectionSettings) -> DuckDBEngine:
+        """The engine for a connection: its file read-only unless ``read_only = false``."""
         options = DuckDBOptions.model_validate(connection.options)
-        return cls(options.path, connection.identity)
+        return cls(options.path, connection.identity, read_only=options.read_only)
 
     def databases(self, *, caller: Caller | None = None) -> list[str]:
         # information_schema lists every attached catalog's schemas (system, temp); keep this database's.
