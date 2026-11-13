@@ -102,6 +102,14 @@ def test_catalog_reads_run_as_the_caller(warehouse):
     assert [c["http_path"] for c in warehouse["connects"]] == ["cliservice"]
 
 
+def test_impersonating_the_workload_user_itself_needs_no_doas(warehouse):
+    """A caller who is the connection's own user (in any case) runs as it, without doAs."""
+    warehouse["effective_user"] = "cburns"
+    engine = ImpalaEngine(ImpalaConfig("vw.example.com", 443, "cburns", "pw", identity=IdentityMode.IMPERSONATE))
+    assert engine.query("SELECT 7", Caller("CBurns")).rows == [(7,)]
+    [connect] = warehouse["connects"]
+    assert connect["http_path"] == "cliservice"
+
 def test_impersonate_mode_stops_when_impala_runs_as_someone_else(warehouse):
     warehouse["effective_user"] = "svc-helios"
     with pytest.raises(ImpalaProxyDelegationError):
@@ -183,3 +191,21 @@ def test_impalas_errors_are_the_neutral_ones_and_it_names_its_dialect():
     assert engine.rejected_value_type(hive_server_error("AnalysisException: BIGINT and STRING are not comparable"))
     assert not engine.rejected_value_type(hive_server_error("Session closed"))
     assert not engine.rejected_value_type(RuntimeError("AnalysisException: are not comparable"))
+
+
+def test_a_refused_login_stays_an_authentication_error_when_closing_fails(monkeypatch):
+    """impyla's close() fails on a connection that never opened; the 401 is still what is reported."""
+    class Unauthorized(Exception):
+        code = 401
+
+    class NeverOpened:
+        def cursor(self):
+            raise Unauthorized("HTTP code 401: Unauthorized")
+
+        def close(self):
+            raise AttributeError("'NoneType' object has no attribute 'close'")
+
+    monkeypatch.setattr(impala_dbapi, "connect", lambda **_kwargs: NeverOpened())
+    with pytest.raises(ImpalaAuthenticationError, match="workload authentication") as raised:
+        impala(IdentityMode.SERVICE).ping()
+    assert isinstance(raised.value.__cause__, Unauthorized)

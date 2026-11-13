@@ -75,6 +75,16 @@ def test_the_builtin_suite_ships_in_the_package_and_saved_suites_join_it(tmp_pat
         evaluation.load_suite("shop", "2.0.0", directory=tmp_path)
 
 
+def test_the_builtin_suite_grounds_every_question_in_the_repositorys_tpcds_model():
+    from pathlib import Path
+
+    from helios_cortex.ossie import SemanticModel
+
+    model = SemanticModel.load(str(Path(__file__).resolve().parents[3] / "models/published/tpcds.ossie.yaml"))
+    for question in evaluation.load_suite("tpcds")["questions"]:
+        for name in question["grounding"]:
+            assert name in model.metrics or model.field(name), (question["id"], name)
+
 @pytest.mark.parametrize("change, message", [
     ({"id": ""}, "id"), ({"questions": []}, "1 to 100"),
     ({"questions": [QUESTION, QUESTION]}, "unique"),
@@ -195,6 +205,26 @@ def test_aggregate_takes_any_result_with_the_four_fields():
                          Row("a", False, {"tool_calls": 2, "invalid_calls": 1})])
     assert metrics["a"]["answer_accuracy"] == 0.5 and metrics["a"]["invalid_call_rate"] == 0.25
     assert metrics["a"]["tokens_per_correct_answer"] == 100
+
+
+def test_aggregate_rates_are_per_tool_call_and_per_correct_answer():
+    class Row:
+        def __init__(self, variant, accurate, completed, metrics):
+            self.variant, self.accurate, self.completed, self.metrics = variant, accurate, completed, metrics
+
+    metrics = aggregate([
+        Row("baseline", True, True, {"tool_calls": 2, "grounded_calls": 2, "tokens_in": 80, "tokens_out": 20,
+                                     "duration_ms": 500}),
+        Row("candidate", False, False, {"tool_calls": 4, "excess_tool_calls": 2, "invalid_calls": 1,
+                                        "redundant_calls": 1, "recovery_attempts": 1, "recovered": 0,
+                                        "grounded_calls": 1, "tokens_in": 160, "tokens_out": 40}),
+    ])
+    baseline, candidate = metrics["baseline"], metrics["candidate"]
+    assert (baseline["answer_accuracy"], baseline["completion_rate"], baseline["grounding_rate"]) == (1, 1, 1)
+    assert (baseline["tokens_per_correct_answer"], baseline["milliseconds_per_correct_answer"]) == (100, 500)
+    assert (candidate["answer_accuracy"], candidate["completion_rate"], candidate["recovery_rate"]) == (0, 0, 0)
+    assert (candidate["invalid_call_rate"], candidate["redundant_call_rate"], candidate["grounding_rate"]) == (
+        0.25, 0.25, 0.25)
 
 
 # ---------------------------------------------------------------------------- helios eval

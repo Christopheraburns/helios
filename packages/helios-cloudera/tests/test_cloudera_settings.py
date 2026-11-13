@@ -74,6 +74,17 @@ def test_nested_helios_variables_merge_with_conventional_ones(monkeypatch):
     assert s.llm.timeout_seconds == 12
 
 
+def test_the_legacy_impala_user_variables_are_not_credentials(monkeypatch):
+    """Only WORKLOAD_USER and WORKLOAD_PASSWORD make the Workbench's Impala connection."""
+    monkeypatch.setenv("IMPALA_HOST", "warehouse.example")
+    monkeypatch.setenv("IMPALA_USER", "legacy-user")
+    monkeypatch.setenv("IMPALA_PASS", "legacy-password")
+    assert impala_config(WorkbenchSettings()) is None
+    monkeypatch.setenv("WORKLOAD_USER", "workload-user")
+    monkeypatch.setenv("WORKLOAD_PASSWORD", "workload-password")
+    config = impala_config(WorkbenchSettings())
+    assert (config.user, config.password) == ("workload-user", "workload-password")
+
 # Parity: in the environments Helios runs in today, the stores and clients built from
 # Settings resolve exactly what the code before Settings resolved. EXPECTED was
 # recorded by running that code (commit ef2b6f5 plus 1.3) in each environment.

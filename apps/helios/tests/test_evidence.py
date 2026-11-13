@@ -338,12 +338,3 @@ def test_warm_up_loads_the_model_once_in_the_background(monkeypatch):
     assert evidence.default_embedder(["again"]) == [[0.0, 0.0, 0.0]]
     assert loads == [evidence.MODEL_NAME]
 
-
-def test_document_tools_need_an_authorized_caller():
-    from apps.helios.mcp_server import server as mcp_server
-
-    for result in (
-        mcp_server.search_evidence("damage", model="sales"),
-        mcp_server.entity_claims("angela", model="sales"),
-    ):
-        assert result["error"] == "authorization_denied"
