@@ -14,8 +14,11 @@ dev = [
     "helios-cortex[azure,gcs,llm,ontology,ozone,postgres,s3,trino]",
     "import-linter>=2.15",
     "moto[server]>=5.0", # an in-process S3 server for the artifact storage tests
+    "mypy>=1.13",
     "pytest>=8.0",
     "ruff>=0.6.0",
+    "types-jsonschema",
+    "types-PyYAML",
 ]
 # apps/helios/crawler and its tests, until helios-crawl (Phase 10).
 crawler = [
@@ -165,11 +168,17 @@ source_modules = ["helios_cortex.*"]
 forbidden_modules = ["helios_cortex._pending"]
 ignore_imports = ["helios_cortex._pending.** -> helios_cortex._pending.**"]
 
+# mypy runs per package in CI (burndown 8.5): `uv run mypy packages/<package>/src`.
 [tool.mypy]
 python_version = "3.11"
-warn_return_any = true
+plugins = ["pydantic.mypy"]
 warn_unused_configs = true
 disallow_untyped_defs = false
+
+# Libraries with neither inline types nor a stub package.
+[[tool.mypy.overrides]]
+module = ["fsspec.*", "gcsfs.*", "impala.*", "lancedb.*", "linkml_runtime.*", "sentence_transformers.*"]
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 100

@@ -68,7 +68,8 @@ class TableProfiler:
         min and max for every column. Values are read by position: some databases change
         the case of unquoted aliases."""
         d = self.dialect
-        keys, parts = ["n_rows"], [exp.Count(this=exp.Star())]
+        keys = ["n_rows"]
+        parts: list[exp.Expr] = [exp.Count(this=exp.Star())]
         for c in columns:
             n, t = c["name"], _base_type(c["type"])
             keys += [f"{n}__nn", f"{n}__ndv"]

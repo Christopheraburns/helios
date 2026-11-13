@@ -68,7 +68,10 @@ class EvalCommand:
             raise CommandError("no LLM is configured; set [llm] provider and its key in helios.toml")
         variants = {"baseline": llm}
         if args.candidate_model:
-            variants["candidate"] = llm_from_settings(settings.llm.model_copy(update={"model": args.candidate_model}))
+            candidate = llm_from_settings(settings.llm.model_copy(update={"model": args.candidate_model}))
+            if candidate is None:
+                raise CommandError(f"no LLM client for the candidate model {args.candidate_model!r}")
+            variants["candidate"] = candidate
 
         caller = context.caller(args.caller)
         # Without --as the command's own user runs it with the configured credentials (as

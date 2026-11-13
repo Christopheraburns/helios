@@ -1,0 +1,16 @@
+# Who GitHub asks to review a pull request, by the paths it changes (burndown 8.5).
+# The last matching line wins. One owner today; give a package its own team as people join.
+
+*                           @christopheraburns
+
+/packages/helios-cortex/    @christopheraburns
+/packages/helios-model/     @christopheraburns
+/packages/helios-serve/     @christopheraburns
+/packages/helios-semantic/  @christopheraburns
+/packages/helios-mcp/       @christopheraburns
+/packages/helios-cloudera/  @christopheraburns
+
+# What every package relies on: the import contracts, the lockfile and CI.
+/pyproject.toml             @christopheraburns
+/uv.lock                    @christopheraburns
+/.github/                   @christopheraburns

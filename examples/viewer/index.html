@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helios viewer</title>
+<!-- The one dependency: Cytoscape.js, pinned and checked. No build step. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"
+        integrity="sha384-IWROdLKRsN1UuJywMlWl7/blXQ8GEooN2n7dzTxfEPd7ybYIKCUJ2Ol/1Gpf3YV4"
+        crossorigin="anonymous"></script>
+<style>
+  :root {
+    --bg: #fafaf9; --panel: #ffffff; --text: #1c1917; --muted: #78716c; --line: #e7e5e4;
+    --accent: #2563eb; --fact: #b45309; --dim: #0f766e; --faded: #d6d3d1; --edge: #a8a29e; --error: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1917; --panel: #292524; --text: #f5f5f4; --muted: #a8a29e; --line: #44403c;
+      --accent: #60a5fa; --fact: #f59e0b; --dim: #2dd4bf; --faded: #44403c; --edge: #78716c; --error: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg);
+         color: var(--text); height: 100vh; display: flex; flex-direction: column; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 10px 16px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  nav { display: flex; gap: 4px; }
+  nav button { border: 1px solid var(--line); background: transparent; color: var(--text); padding: 5px 12px;
+               border-radius: 6px; cursor: pointer; font: inherit; }
+  nav button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  label.inline { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  select, input, button.action { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+                                 border-radius: 6px; padding: 4px 8px; }
+  button.action { background: var(--accent); border-color: var(--accent); color: #fff; cursor: pointer; }
+  main { flex: 1; display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+  #graph { min-height: 0; }
+  aside { border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 14px 16px; }
+  aside h2 { font-size: 15px; margin: 0 0 4px; }
+  aside h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 16px 0 6px; }
+  aside p { margin: 4px 0; }
+  .muted { color: var(--muted); }
+  .error { color: var(--error); }
+  ul.items { list-style: none; margin: 0; padding: 0; }
+  ul.items li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+  code, pre { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .query select { width: 100%; min-height: 110px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; }
+  .legend label { display: flex; align-items: center; gap: 4px; }
+  .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  [hidden] { display: none !important; }
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 55vh auto; }
+    aside { border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Helios viewer</h1>
+  <nav role="tablist">
+    <button role="tab" data-view="model" aria-selected="true">Semantic model</button>
+    <button role="tab" data-view="query" aria-selected="false">Query path</button>
+    <button role="tab" data-view="ontology" aria-selected="false">Ontology</button>
+  </nav>
+  <label class="inline" id="model-picker">Model <select id="model"></select></label>
+  <span class="muted">Read-only</span>
+</header>
+<main>
+  <div id="graph" aria-label="graph"></div>
+  <aside id="panel"></aside>
+</main>
+
+<script>
+"use strict";
+const $ = (selector) => document.querySelector(selector);
+const el = (tag, props = {}, ...children) => {
+  const node = Object.assign(document.createElement(tag), props);
+  for (const child of children) node.append(child);
+  return node;
+};
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+async function api(path) {
+  const response = await fetch(path);
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || response.statusText);
+  return body;
+}
+
+let cy = null;
+let view = "model";
+let modelGraph = null;
+let ontology = null;
+const hiddenLabels = new Set(["Attribute", "EnumValue", "OntologyVersion"]);
+const ONTOLOGY_COLORS = { Class: "--accent", Attribute: "--muted", Enum: "--dim", EnumValue: "--dim",
+                          OssieElement: "--fact", GlossaryTerm: "--edge", OntologyVersion: "--muted" };
+
+// A star schema reads best as rings: facts inside, the datasets they join to around them.
+const RINGS = { name: "concentric", animate: false, minNodeSpacing: 40, avoidOverlap: true,
+                concentric: (node) => (node.hasClass("fact") ? 2 : 1), levelWidth: () => 1 };
+const FORCE = { name: "cose", animate: false, nodeRepulsion: 9000, idealEdgeLength: 90 };
+
+function draw(elements, layout = FORCE) {
+  if (cy) cy.destroy();
+  cy = cytoscape({
+    container: $("#graph"),
+    elements,
+    wheelSensitivity: 0.3,
+    style: [
+      { selector: "node", style: { "label": "data(label)", "background-color": "data(color)", "color": css("--text"),
+          "font-size": 11, "text-valign": "bottom", "text-margin-y": 4, "width": 18, "height": 18,
+          "min-zoomed-font-size": 6 } },
+      { selector: "node.fact", style: { "width": 28, "height": 28 } },
+      { selector: "edge", style: { "width": 1.2, "line-color": css("--edge"), "target-arrow-color": css("--edge"),
+          "target-arrow-shape": "triangle", "curve-style": "bezier", "font-size": 9, "color": css("--muted"),
+          "text-rotation": "autorotate", "min-zoomed-font-size": 7 } },
+      { selector: "edge:selected, edge.path", style: { "label": "data(label)" } },
+      { selector: ".faded", style: { "opacity": 0.25 } },
+      { selector: "edge.path", style: { "width": 3.5, "line-color": css("--accent"), "target-arrow-color": css("--accent") } },
+      { selector: ":selected", style: { "border-width": 3, "border-color": css("--accent") } },
+    ],
+    layout,
+  });
+  return cy;
+}
+
+function panel(...children) {
+  $("#panel").replaceChildren(...children);
+}
+
+// ---------------------------------------------------------------- the semantic model
+function modelElements(graph) {
+  const nodes = graph.datasets.map((d) => ({ data: { id: d.name, label: d.name, dataset: d,
+      color: css(d.kind === "fact" ? "--fact" : "--dim") }, classes: d.kind === "fact" ? "fact" : "" }));
+  const edges = graph.relationships.map((r) => ({ data: { id: "rel:" + r.name, source: r.from, target: r.to,
+      label: r.from_columns.join(", "), relationship: r } }));
+  return [...nodes, ...edges];
+}
+
+function datasetPanel(d) {
+  return [
+    el("h2", { textContent: d.name }),
+    el("p", { className: "muted" }, el("code", { textContent: d.source }), ` · ${d.kind}`),
+    d.description ? el("p", { textContent: d.description }) : "",
+    el("h3", { textContent: `Metrics (${d.metrics.length})` }),
+    d.metrics.length ? el("ul", { className: "items" }, ...d.metrics.map((m) =>
+      el("li", {}, el("strong", { textContent: m.name }),
+         m.synonyms.length ? el("span", { className: "muted", textContent: ` (${m.synonyms.join(", ")})` }) : "",
+         el("br"), el("code", { textContent: m.expression }))))
+      : el("p", { className: "muted", textContent: "None" }),
+    el("h3", { textContent: `Fields (${d.fields.length})` }),
+    el("ul", { className: "items" }, ...d.fields.map((f) =>
+      el("li", {}, el("code", { textContent: f.name }), el("span", { className: "muted", textContent: ` ${f.role} · ${f.datatype}` })))),
+  ];
+}
+
+function relationshipPanel(r) {
+  return [
+    el("h2", { textContent: r.name }),
+    el("p", {}, el("code", { textContent: `${r.from}(${r.from_columns.join(", ")})` }), " → ",
+       el("code", { textContent: `${r.to}(${r.to_columns.join(", ")})` })),
+    el("p", { className: "muted", textContent: r.default ? "The default join between them." : "Not the default join." }),
+  ];
+}
+
+function modelSummary(graph) {
+  return [
+    el("h2", { textContent: graph.name }),
+    el("p", { className: "muted", textContent:
+      `${graph.datasets.length} datasets, ${graph.relationships.length} relationships, ` +
+      `${graph.datasets.reduce((n, d) => n + d.metrics.length, 0)} metrics. Select a dataset or a relationship.` }),
+  ];
+}
+
+function showModel() {
+  draw(modelElements(modelGraph), RINGS);
+  panel(...modelSummary(modelGraph));
+  cy.on("tap", "node", (e) => panel(...datasetPanel(e.target.data("dataset"))));
+  cy.on("tap", "edge", (e) => panel(...relationshipPanel(e.target.data("relationship"))));
+}
+
+// ---------------------------------------------------------------- a query's path
+function queryForm() {
+  const metrics = modelGraph.datasets.flatMap((d) => d.metrics)
+    .map((m) => ({ value: m.name, text: m.synonyms.length ? `${m.name} (${m.synonyms[0]})` : m.name }))
+    .sort((a, b) => a.value.localeCompare(b.value));
+  const dimensions = modelGraph.datasets.flatMap((d) => d.fields.filter((f) => f.role !== "measure")
+    .map((f) => f.qualified)).sort();
+  const metricSelect = el("select", { multiple: true, id: "metrics" },
+    ...metrics.map((m) => el("option", { value: m.value, textContent: m.text })));
+  const dimensionSelect = el("select", { multiple: true, id: "dimensions" },
+    ...dimensions.map((d) => el("option", { value: d, textContent: d })));
+  const dialect = el("input", { id: "dialect", value: "duckdb", size: 10 });
+  const result = el("div", { id: "result" });
+  const compile = el("button", { className: "action", textContent: "Compile", onclick: async () => {
+    const params = new URLSearchParams();
+    for (const o of metricSelect.selectedOptions) params.append("metric", o.value);
+    for (const o of dimensionSelect.selectedOptions) params.append("dimension", o.value);
+    params.set("dialect", dialect.value || "duckdb");
+    history.replaceState(null, "", `#query?${params}`);
+    try {
+      const compiled = await api(`/api/models/${encodeURIComponent(modelGraph.name)}/compile?${params}`);
+      highlightPath(compiled);
+      result.replaceChildren(
+        el("h3", { textContent: "Path" }),
+        el("p", {}, "Fact ", el("code", { textContent: compiled.fact }),
+           compiled.joins.length ? `, joined through ${compiled.joins.length} relationship(s)` : ", no joins"),
+        el("h3", { textContent: "Columns" }),
+        el("p", {}, el("code", { textContent: compiled.columns.join(", ") })),
+        el("h3", { textContent: `SQL (${compiled.dialect})` }),
+        el("pre", { textContent: compiled.sql }));
+    } catch (error) {
+      cy.elements().removeClass("faded path");
+      result.replaceChildren(el("p", { className: "error", textContent: error.message }));
+    }
+  } });
+  const wanted = new URLSearchParams(location.hash.split("?")[1] || "");
+  for (const o of metricSelect.options) o.selected = wanted.getAll("metric").includes(o.value);
+  for (const o of dimensionSelect.options) o.selected = wanted.getAll("dimension").includes(o.value);
+  if (wanted.get("dialect")) dialect.value = wanted.get("dialect");
+  if (metricSelect.selectedOptions.length) setTimeout(() => compile.click());
+  return el("div", { className: "query" },
+    el("h2", { textContent: "A query's path" }),
+    el("p", { className: "muted", textContent: "Choose metrics and dimensions; the compiler's fact and joins are drawn over the model." }),
+    el("h3", { textContent: "Metrics" }), metricSelect,
+    el("h3", { textContent: "Dimensions" }), dimensionSelect,
+    el("div", { className: "controls", style: "margin-top:10px" }, el("label", { className: "inline" }, "Dialect", dialect), compile),
+    result);
+}
+
+function highlightPath(compiled) {
+  const onPath = new Set([compiled.fact]);
+  cy.edges().forEach((edge) => {
+    const used = compiled.joins.includes(edge.data("relationship").name);
+    edge.toggleClass("path", used);
+    if (used) { onPath.add(edge.data("source")); onPath.add(edge.data("target")); }
+  });
+  cy.nodes().forEach((node) => node.toggleClass("faded", !onPath.has(node.id())));
+  cy.edges().forEach((edge) => edge.toggleClass("faded", !edge.hasClass("path")));
+  cy.animate({ fit: { eles: cy.nodes().filter((node) => onPath.has(node.id())), padding: 80 }, duration: 300 });
+}
+
+function showQuery() {
+  draw(modelElements(modelGraph), RINGS);
+  panel(queryForm());
+}
+
+// ---------------------------------------------------------------- the ontology
+function ontologyElements() {
+  const id = (label, key) => `${label}:${key}`;
+  const nodes = ontology.nodes.filter((n) => !hiddenLabels.has(n.label)).map((n) => ({ data: {
+    id: id(n.label, n.key), label: n.key, node: n, color: css(ONTOLOGY_COLORS[n.label] || "--muted") } }));
+  const present = new Set(nodes.map((n) => n.data.id));
+  const edges = ontology.edges.map((e, i) => ({ data: { id: `e${i}`, source: id(e.from_label, e.from_key),
+    target: id(e.to_label, e.to_key), label: e.type } }))
+    .filter((e) => present.has(e.data.source) && present.has(e.data.target));
+  return [...nodes, ...edges];
+}
+
+function ontologyLegend() {
+  const labels = [...new Set(ontology.nodes.map((n) => n.label))].sort();
+  return el("div", { className: "legend" }, ...labels.map((label) => {
+    const box = el("input", { type: "checkbox", checked: !hiddenLabels.has(label), onchange: () => {
+      box.checked ? hiddenLabels.delete(label) : hiddenLabels.add(label);
+      showOntology();
+    } });
+    const count = ontology.nodes.filter((n) => n.label === label).length;
+    return el("label", {}, box, el("span", { className: "swatch", style: `background:${css(ONTOLOGY_COLORS[label] || "--muted")}` }),
+              `${label} (${count})`);
+  }));
+}
+
+function showOntology() {
+  draw(ontologyElements());
+  const summary = [
+    el("h2", { textContent: `Ontology ${ontology.version}` }),
+    el("p", { className: "muted", textContent: `${ontology.nodes.length} nodes, ${ontology.edges.length} edges. Select a node.` }),
+    el("h3", { textContent: "Show" }), ontologyLegend(),
+  ];
+  panel(...summary);
+  cy.on("tap", "node", (e) => {
+    const n = e.target.data("node");
+    panel(...summary, el("h3", { textContent: n.label }), el("h2", { textContent: n.key }),
+          el("pre", { textContent: JSON.stringify(n.properties, null, 2) }));
+  });
+}
+
+// ---------------------------------------------------------------- wiring
+async function show(next) {
+  view = next;
+  if (!location.hash.startsWith(`#${view}`)) history.replaceState(null, "", `#${view}`);
+  for (const tab of document.querySelectorAll("nav button")) tab.setAttribute("aria-selected", tab.dataset.view === view);
+  $("#model-picker").hidden = view === "ontology";
+  try {
+    if (view === "ontology") {
+      ontology = ontology || await api("/api/ontology");
+      return showOntology();
+    }
+    if (!modelGraph) return panel(el("p", { className: "muted", textContent: "No published model." }));
+    return view === "query" ? showQuery() : showModel();
+  } catch (error) {
+    if (cy) cy.destroy(), cy = null;
+    panel(el("p", { className: "error", textContent: error.message }));
+  }
+}
+
+async function loadModel(name) {
+  modelGraph = await api(`/api/models/${encodeURIComponent(name)}`);
+  return show(view);
+}
+
+// #model, #ontology, or #query?metric=..&dimension=.. (which also compiles): a view you can link to.
+view = ["model", "query", "ontology"].find((v) => location.hash.startsWith(`#${v}`)) || "model";
+for (const tab of document.querySelectorAll("nav button")) tab.addEventListener("click", () => show(tab.dataset.view));
+$("#model").addEventListener("change", (e) => loadModel(e.target.value));
+
+(async () => {
+  try {
+    const models = await api("/api/models");
+    $("#model").replaceChildren(...models.map((m) => el("option", { value: m.name,
+      textContent: m.revision_id ? `${m.name} (${m.revision_id.slice(0, 12)})` : m.name })));
+    if (models.length) await loadModel(models[0].name);
+    else show(view);
+  } catch (error) {
+    panel(el("p", { className: "error", textContent: error.message }));
+  }
+})();
+</script>
+</body>
+</html>

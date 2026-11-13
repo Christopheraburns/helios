@@ -8,11 +8,42 @@ on:
       - "docs/**"
   push:
     branches: [main]
-    tags: ["helios-cortex/v*"]
+    tags: ["helios-*/v*"]          # a release of one package: helios-<package>/vX.Y.Z
+  schedule:
+    - cron: "17 5 * * *"           # nightly: everything, plus the plugins' live jobs
+  workflow_dispatch:
+
+concurrency:
+  group: helios-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
+  # One job per package (burndown 8.5). In the workspace: ruff, mypy and the package's
+  # tests. Then from wheels: the package installed beside only the Helios packages it
+  # declares (`wheels`), its tests run again outside the workspace, and the `helios`
+  # command starts; `extra` reinstalls with an extra (and `extra_wheels`) and reruns them.
+  package:
+    name: ${{ matrix.package }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: helios-cortex            # the base install: no extras (3.2)
+            wheels: helios-cortex
+          - package: helios-model             # beside a base helios-cortex (5.1)
+            wheels: helios-cortex helios-model
+          - package: helios-serve             # no MCP SDK, no web framework (6.1)
+            wheels: helios-cortex helios-serve
+            extra: helios_cortex:llm          # the eval extra's LLM client (6.5)
+          - package: helios-semantic          # the facade without Cloudera or an LLM, then [all] (6.6)
+            wheels: helios-cortex helios-model helios-serve helios-semantic
+            extra: helios_semantic:all
+            extra_wheels: helios-cloudera
+          - package: helios-mcp               # beside helios-serve and helios-cortex alone (7.1)
+            wheels: helios-cortex helios-serve helios-mcp
+          - package: helios-cloudera          # helios-model for the two harvest tests (3.3)
+            wheels: helios-cortex helios-cloudera helios-model
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -20,24 +51,45 @@ jobs:
           python-version: "3.12" # matches the helios Workbench runtime
           enable-cache: true
       - run: uv sync --locked
-      - run: uv run ruff check packages apps/helios scripts tests
-      - run: uv run lint-imports
-      - run: uv run pytest -q
+      - run: uv run ruff check packages/${{ matrix.package }}
+      - run: uv run mypy packages/${{ matrix.package }}/src
+      - run: uv run pytest -q -rs packages/${{ matrix.package }}/tests
+      - name: Install from wheels
+        run: |
+          for p in ${{ matrix.wheels }} ${{ matrix.extra_wheels }}; do uv build --package "$p" --wheel --out-dir dist; done
+          wheels=()
+          for p in ${{ matrix.wheels }}; do wheels+=(dist/"${p//-/_}"-*.whl); done
+          uv venv "$RUNNER_TEMP/wheels"
+          uv pip install --python "$RUNNER_TEMP/wheels/bin/python" "${wheels[@]}" pytest
+      - name: Test from wheels
+        run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/wheels/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/${{ matrix.package }}/tests"
+          "$RUNNER_TEMP/wheels/bin/helios" --help
+      - name: Test from wheels with ${{ matrix.extra }}
+        if: matrix.extra != ''
+        run: |
+          extra="${{ matrix.extra }}"
+          others=()
+          for p in ${{ matrix.extra_wheels }}; do others+=(dist/"${p//-/_}"-*.whl); done
+          uv pip install --python "$RUNNER_TEMP/wheels/bin/python" "$(ls dist/"${extra%%:*}"-*.whl)[${extra#*:}]" "${others[@]}"
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/wheels/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/${{ matrix.package }}/tests"
 
-  # The base install (burndown 3.2): helios-cortex's wheel with no extras. Tests that
-  # need an extra skip and say which.
-  base-install:
+  # What crosses packages: the import contracts, the integration suite (the facade on the
+  # DuckDB TPC-DS sample, identity end to end, one helios.toml) and the crawler's tests.
+  integration:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
-      - run: uv build --package helios-cortex --wheel --out-dir dist
-      - run: uv venv "$RUNNER_TEMP/base" && uv pip install --python "$RUNNER_TEMP/base/bin/python" dist/*.whl pytest
-      - run: |
-          cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/base/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-cortex/tests"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run lint-imports
+      - run: uv run ruff check apps/helios examples scripts tests
+      - run: uv run pytest -q -rs tests/integration apps/helios/tests
 
   # The Trino engine against a real coordinator (burndown 3.8): harvest, profile,
   # a compiled metric, and impersonation on an open cluster's memory catalog.
@@ -66,7 +118,7 @@ jobs:
           HELIOS_TEST_TRINO: localhost:8080
 
   # The backend conformance suite on shared backends (burndown 4.6): the registry on
-  # Postgres and the artifact store on S3. The test job above runs the same suite on
+  # Postgres and the artifact store on S3. The package jobs run the same suite on
   # SQLite and a local directory. S3 is a moto server: MinIO no longer publishes images.
   storage:
     runs-on: ubuntu-latest
@@ -103,111 +155,55 @@ jobs:
           HELIOS_TEST_S3_KEY: helios
           HELIOS_TEST_S3_SECRET: helios-secret
 
-  # helios-cloudera installed from wheels beside a base helios-cortex (burndown 3.3):
-  # its entry points register and its tests pass without the workspace. helios-model
-  # is installed for the tests only: two of them harvest and profile through Atlas and Impala.
-  cloudera-install:
+  # helios-cloudera's live test, nightly (burndown 8.5 and 9.9): its Impala engine against
+  # a real warehouse holding TPC-DS, which the unit tests replace with a stand-in for
+  # impyla. The compiled TPC-DS metrics are checked against hand-written SQL, and
+  # impersonation when a delegate is set. Like the trino job for helios-cortex's Trino
+  # engine, it tests one plugin; a new warehouse plugin adds its own live job.
+  # Needs repository secrets HELIOS_TEST_IMPALA, HELIOS_TEST_IMPALA_USER and
+  # HELIOS_TEST_IMPALA_PASSWORD (HELIOS_TEST_IMPALA_DELEGATE optional); it fails rather
+  # than skips without them, so a nightly run never passes by testing nothing.
+  cloudera-live:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      HELIOS_TEST_IMPALA: ${{ secrets.HELIOS_TEST_IMPALA }}
+      HELIOS_TEST_IMPALA_USER: ${{ secrets.HELIOS_TEST_IMPALA_USER }}
+      HELIOS_TEST_IMPALA_PASSWORD: ${{ secrets.HELIOS_TEST_IMPALA_PASSWORD }}
+      HELIOS_TEST_IMPALA_DELEGATE: ${{ secrets.HELIOS_TEST_IMPALA_DELEGATE }}
     steps:
+      - name: Check the Impala secrets are set
+        run: test -n "$HELIOS_TEST_IMPALA" -a -n "$HELIOS_TEST_IMPALA_USER" -a -n "$HELIOS_TEST_IMPALA_PASSWORD" || { echo "set the HELIOS_TEST_IMPALA secrets"; exit 1; }
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
-      - run: uv build --package helios-cortex --wheel --out-dir dist
-      - run: uv build --package helios-cloudera --wheel --out-dir dist
-      - run: uv build --package helios-model --wheel --out-dir dist
-      - run: uv venv "$RUNNER_TEMP/cloudera" && uv pip install --python "$RUNNER_TEMP/cloudera/bin/python" dist/*.whl pytest
-      - run: |
-          cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/cloudera/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-cloudera/tests"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run pytest -q -rs packages/helios-cloudera/tests/test_impala_live.py
 
-  # helios-model installed from wheels beside a base helios-cortex (burndown 5.1).
-  model-install:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-      - run: uv build --package helios-cortex --wheel --out-dir dist
-      - run: uv build --package helios-model --wheel --out-dir dist
-      - run: uv venv "$RUNNER_TEMP/model" && uv pip install --python "$RUNNER_TEMP/model/bin/python" dist/*.whl pytest
-      - run: |
-          cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/model/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-model/tests"
-
-  # helios-serve installed from wheels beside a base helios-cortex (burndown 6.1): no
-  # MCP SDK, no web framework, no other Helios package.
-  serve-install:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-      - run: uv build --package helios-cortex --wheel --out-dir dist
-      - run: uv build --package helios-serve --wheel --out-dir dist
-      - run: uv venv "$RUNNER_TEMP/serve" && uv pip install --python "$RUNNER_TEMP/serve/bin/python" dist/*.whl pytest
-      - run: |
-          cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/serve/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-serve/tests"
-      # The eval extra (6.5): helios-cortex's LLM client, so the evaluation tests run too.
-      - run: uv pip install --python "$RUNNER_TEMP/serve/bin/python" "$(ls dist/helios_cortex-*.whl)[llm]"
-      - run: |
-          cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/serve/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-serve/tests"
-
-  # helios-semantic, the package a developer installs (burndown 6.6), from wheels: the
-  # facade and the helios command on a base install (no LLM client, no Cloudera), then
-  # every extra through [all].
-  semantic-install:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-      - run: for p in helios-cortex helios-model helios-serve helios-semantic helios-cloudera; do uv build --package "$p" --wheel --out-dir dist; done
-      - run: uv venv "$RUNNER_TEMP/semantic" && uv pip install --python "$RUNNER_TEMP/semantic/bin/python" --find-links dist helios-semantic pytest
-      - run: |
-          cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/semantic/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-semantic/tests"
-          "$RUNNER_TEMP/semantic/bin/helios" --help
-      - run: uv pip install --python "$RUNNER_TEMP/semantic/bin/python" --find-links dist "helios-semantic[all]"
-
-  # helios-mcp from wheels beside helios-serve and helios-cortex alone (burndown 7.1):
-  # the MCP SDK, no other Helios package, and `helios mcp` answering over stdio.
-  mcp-install:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-      - run: for p in helios-cortex helios-serve helios-mcp; do uv build --package "$p" --wheel --out-dir dist; done
-      - run: uv venv "$RUNNER_TEMP/mcp" && uv pip install --python "$RUNNER_TEMP/mcp/bin/python" --find-links dist helios-mcp pytest
-      - run: |
-          cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/mcp/bin/python" -m pytest -q -rs -p no:cacheprovider "$GITHUB_WORKSPACE/packages/helios-mcp/tests"
-
-  # Wheels go to the internal index on a package tag (helios-cortex/v0.1.0).
-  # Nothing installs them yet; host projects switch over in Phase 8.
+  # A tag helios-<package>/vX.Y.Z builds that package and uploads it to the internal
+  # index, once every package job and the integration suite pass. PyPI is burndown 9.5.
   # Needs repository secrets HELIOS_INDEX_URL and HELIOS_INDEX_TOKEN.
   publish:
-    if: startsWith(github.ref, 'refs/tags/helios-cortex/v')
-    needs: test
+    if: startsWith(github.ref, 'refs/tags/helios-')
+    needs: [package, integration]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
-      - name: Check tag matches package version
+      - name: Check the tag names a package and its version
+        id: tag
         run: |
-          tag="${GITHUB_REF_NAME#helios-cortex/v}"
-          version="$(python3 -c 'import tomllib; print(tomllib.load(open("packages/helios-cortex/pyproject.toml", "rb"))["project"]["version"])')"
-          test "$tag" = "$version" || { echo "tag $tag != helios-cortex $version"; exit 1; }
-      - run: uv build --package helios-cortex --out-dir dist
+          package="${GITHUB_REF_NAME%/v*}"
+          tag="${GITHUB_REF_NAME##*/v}"
+          test -f "packages/$package/pyproject.toml" || { echo "no package $package"; exit 1; }
+          version="$(python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))["project"]["version"])' "packages/$package/pyproject.toml")"
+          test "$tag" = "$version" || { echo "tag $tag != $package $version"; exit 1; }
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+      - run: uv build --package "${{ steps.tag.outputs.package }}" --out-dir dist
       - run: uv publish --publish-url "$HELIOS_INDEX_URL" --token "$HELIOS_INDEX_TOKEN" dist/*
         env:
           HELIOS_INDEX_URL: ${{ secrets.HELIOS_INDEX_URL }}

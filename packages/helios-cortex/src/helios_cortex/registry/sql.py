@@ -123,6 +123,7 @@ class SqlRegistry:
     def from_settings(cls, settings: Settings, *, upgrade: bool | None = None) -> SqlRegistry:
         """The registry at ``settings.registry_url``. ``upgrade`` defaults to True for
         SQLite (the local default, one user) and False for a shared database."""
+        assert settings.registry_url is not None  # Settings fills it in from data_dir
         url = sa.make_url(settings.registry_url.get_secret_value())
         if url.get_backend_name() == "sqlite" and url.database not in (None, "", ":memory:"):
             Path(url.database).parent.mkdir(parents=True, exist_ok=True)
@@ -158,7 +159,9 @@ class SqlRegistry:
     def head_revision(self) -> str:
         from alembic.script import ScriptDirectory
 
-        return ScriptDirectory(str(MIGRATIONS)).get_current_head()
+        head = ScriptDirectory(str(MIGRATIONS)).get_current_head()
+        assert head is not None  # the package ships its migrations
+        return head
 
     def _check_ready(self) -> None:
         if self._ready:
@@ -193,7 +196,9 @@ class SqlRegistry:
                 c.execute(data_sources.update().where(data_sources.c.id == data_source.id).values(**row))
             else:
                 c.execute(data_sources.insert().values(**row))
-        return self.data_source(data_source.id)
+        saved = self.data_source(data_source.id)
+        assert saved is not None  # just written
+        return saved
 
     def data_source(self, data_source_id: str) -> DataSource | None:
         with self._begin() as c:
@@ -237,7 +242,9 @@ class SqlRegistry:
                 {"model_id": model.id, "data_source_id": r.data_source_id, "position": i,
                  "selected_assets": list(r.selected_assets)}
                 for i, r in enumerate(model.data_sources)])
-        return self.registered_model(model.id)
+        saved = self.registered_model(model.id)
+        assert saved is not None  # just written
+        return saved
 
     def _registered(self, c: sa.Connection, rows: list[Any]) -> list[RegisteredModel]:
         if not rows:

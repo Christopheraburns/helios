@@ -16,6 +16,7 @@ helios/
 │   ├── helios-mcp/         stdio MCP         src/helios_mcp/, tests/
 │   └── helios-cloudera/    Cloudera plugins  src/helios_cloudera/, tests/
 ├── tests/integration/      tests that cross packages
+├── examples/viewer/        a read-only page for the graphs (not a package)
 └── apps/
     ├── helios/crawler/     the document crawler and its tests (apps/helios/tests), until helios-crawl (Phase 10)
     ├── helios-ds-generation/
@@ -41,9 +42,12 @@ The root's dependency groups define the development environment:
 ```bash
 uv run pytest                                      # every package, tests/integration and the crawler
 uv run pytest packages/helios-serve/tests          # one package
-uv run ruff check packages apps/helios scripts tests
+uv run ruff check packages apps/helios examples scripts tests
+uv run mypy packages/helios-serve/src              # types, one package at a time
 uv run lint-imports                                # the import contracts
 ```
+
+mypy uses the settings in the root `pyproject.toml`: pydantic's plugin, and missing imports ignored only for the libraries that ship no types (fsspec, gcsfs, impyla, lancedb, LinkML, sentence-transformers). Every package's source passes it, and CI keeps it that way.
 
 **Package boundaries.** The import-linter contracts in `pyproject.toml` keep each package to its own dependencies:
 - helios-cortex imports no other Helios package and no app code.
@@ -51,7 +55,7 @@ uv run lint-imports                                # the import contracts
 - helios-serve imports no MCP SDK or web framework.
 - helios-semantic and helios-mcp import only what they wrap.
 
-**Wheel-only installs.** The workspace installs every package, so a test can pass only because a sibling happens to be installed. CI therefore also builds each package's wheel and runs that package's tests in a virtualenv with only its declared dependencies (the `*-install` jobs). To do the same locally:
+**Wheel-only installs.** The workspace installs every package, so a test can pass only because a sibling happens to be installed. CI therefore also builds each package's wheel and runs that package's tests in a virtualenv with only its declared dependencies (the second half of each `package` job). To do the same locally:
 
 ```bash
 uv build --package helios-cortex --wheel --out-dir /tmp/dist
@@ -66,24 +70,34 @@ Pass `--refresh`: uv caches wheels by version, so a rebuilt wheel with an unchan
 
 ## CI
 
-`.github/workflows/helios.yml` runs on pull requests and on `main`:
+`.github/workflows/helios.yml` runs on pull requests, on `main`, nightly and on release tags:
 
 | Job | What it checks |
 |---|---|
-| `test` | `uv sync --locked`, ruff, import-linter, and the whole test suite |
-| `base-install` | helios-cortex's wheel with no extras |
+| `package` (one per package) | in the workspace: ruff, mypy and the package's tests; then from wheels, beside only the Helios packages it declares: its tests again and `helios --help`, and once more with its extra where it has one (helios-serve with `helios-cortex[llm]`, helios-semantic with `[all]`) |
+| `integration` | import-linter, ruff on the rest, `tests/integration` (with the viewer's smoke test) and the crawler's tests |
 | `trino`, `storage` | the Trino engine against a real coordinator; the registry on Postgres and artifacts on S3 (moto) |
-| `cloudera-install`, `model-install`, `serve-install`, `semantic-install`, `mcp-install` | each package from wheels beside only what it declares |
-| `publish` | on a `helios-cortex/v*` tag, builds and uploads to the internal index |
+| `cloudera-live` | nightly (and on demand): helios-cloudera's Impala engine against a real warehouse holding TPC-DS, from the `HELIOS_TEST_IMPALA*` secrets (it fails if they are missing). Like `trino` for the Trino engine, it is one plugin's live test; Helios itself is tested on DuckDB, and a new warehouse plugin adds its own live job |
+| `publish` | on a `helios-<package>/vX.Y.Z` tag, once the package and integration jobs pass: checks the version against the package's `pyproject.toml`, builds that package and uploads it to the internal index |
 
-`helios-ds-gen.yml` tests the Helios-DS generator. Per-package CI, `CODEOWNERS` and per-package release tags are burndown 8.5.
+`helios-ds-gen.yml` tests the Helios-DS generator. [`.github/CODEOWNERS`](.github/CODEOWNERS) names who reviews each package.
+
+## Releasing a package
+
+Each package is versioned and released on its own. Bump `version` in its `pyproject.toml`, merge, then tag the merge commit with the package and version:
+
+```bash
+git tag helios-serve/v0.2.0 && git push origin helios-serve/v0.2.0
+```
+
+A tag whose version doesn't match the package's `pyproject.toml`, or that names no package, fails the `publish` job and uploads nothing.
 
 ## Adding a package
 
 1. Create `packages/helios-<name>/` with `pyproject.toml` (hatchling, `src/` layout), `README.md` and `tests/`. The workspace picks it up through `members = ["packages/*"]`.
 2. Depend on `helios-cortex` (and siblings) by name, and add `helios-<name> = { workspace = true }` to the root's `[tool.uv.sources]`.
 3. Register its plugins as entry points: `helios.engines`, `helios.catalogs`, `helios.profiles`, `helios.commands` or `helios.tools`.
-4. Add it to `testpaths`, the `dev` dependency group and an import-linter contract, and give it a wheel-only CI job.
+4. Add it to `testpaths`, the `dev` dependency group, an import-linter contract, the `package` matrix in `helios.yml` (with the Helios wheels it needs) and `CODEOWNERS`.
 
 ## Where things go
 

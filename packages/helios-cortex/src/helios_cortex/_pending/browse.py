@@ -9,10 +9,17 @@ its tables are kept in memory; runs that are no longer the latest are dropped.
 from __future__ import annotations
 
 import posixpath
-from typing import Any
+from typing import Any, cast
 
 from helios_cortex._pending import evidence
-from helios_cortex.index.records import AssetRecord, EntityRecord, MentionRecord, RelationshipRecord, SegmentRecord
+from helios_cortex.index.records import (
+    AssetRecord,
+    EntityLinkRecord,
+    EntityRecord,
+    MentionRecord,
+    RelationshipRecord,
+    SegmentRecord,
+)
 from helios_cortex.index.store import IndexStore
 
 ASSETS = "helios_index.assets"
@@ -116,10 +123,8 @@ def entity_documents(store: IndexStore, crawl_run_id: str, entity_id: str) -> di
                     }
                 )
 
-    links = {
-        link.mention_id: link
-        for link in store.read(ENTITY_LINKS, {"crawl_run_id": crawl_run_id, "entity_id": entity_id})
-    }
+    found = store.read(ENTITY_LINKS, {"crawl_run_id": crawl_run_id, "entity_id": entity_id})
+    links = {link.mention_id: link for link in cast(list[EntityLinkRecord], found)}
     by_segment: dict[str, list[dict[str, Any]]] = {}
     for mention in _rows(store, crawl_run_id, MENTIONS):
         link = links.get(mention.mention_id) if isinstance(mention, MentionRecord) else None
@@ -150,7 +155,7 @@ def entity_documents(store: IndexStore, crawl_run_id: str, entity_id: str) -> di
                 }
             )
 
-    documents = []
+    documents: list[dict[str, Any]] = []
     for asset in _rows(store, crawl_run_id, ASSETS):
         if not isinstance(asset, AssetRecord):
             continue

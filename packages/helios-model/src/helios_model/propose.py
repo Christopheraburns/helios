@@ -86,7 +86,7 @@ class ModelProposer:
 
     @staticmethod
     def _terms_by_column(harvest: dict) -> dict:
-        out = {}
+        out: dict[str, list] = {}
         for t in harvest.get("glossary_terms", []):
             for c in t["columns"]:
                 out.setdefault(c.split("@")[0].split(".")[-1], []).append(t)

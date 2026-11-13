@@ -29,7 +29,8 @@ import logging
 import re
 import time
 import traceback
-from typing import Annotated, Any, Required, TypedDict
+from collections.abc import Mapping, Sequence
+from typing import Annotated, Any, Required, TypedDict, cast
 
 from helios_cortex.audit_sink import AuditRecord, record_safely, sql_fingerprint
 from helios_cortex.caller import (
@@ -153,7 +154,7 @@ def audited(name: str):
         @functools.wraps(function)
         def wrapped(caller: Caller | None, stores: Stores, **arguments: Any) -> Any:
             started = time.perf_counter()
-            base = {"action": name, "model": arguments.get("model"), "caller": _username(caller)}
+            base: dict[str, Any] = {"action": name, "model": arguments.get("model"), "caller": _username(caller)}
             try:
                 result = function(caller, stores, **arguments)
             except Exception as exc:
@@ -172,7 +173,7 @@ def audited(name: str):
                     **base,
                     outcome="denied" if code in DENIED else "error" if code else "success",
                     error_code=code,
-                    row_count=len(rows) if ran else None,
+                    row_count=len(rows) if ran and isinstance(rows, list) else None,
                     sql_fingerprint=sql_fingerprint(sql) if ran and isinstance(sql, str) else None,
                     duration_ms=(time.perf_counter() - started) * 1000,
                     details={"diagnostics": diagnostics} if isinstance(diagnostics, dict) else {},
@@ -185,20 +186,21 @@ def audited(name: str):
 
 
 # ---------------------------------------------------------------------------- models
-def _resolve(caller: Caller | None, stores: Stores, model: str | None) -> tuple[dict | None, SemanticModel | None, dict | None]:
+def _resolve(caller: Caller | None, stores: Stores,
+             model: str | None) -> tuple[dict[str, Any], SemanticModel] | dict[str, Any]:
     """The source and semantic model ``model`` names (the first published one the caller
-    may see when None), or the error to return."""
+    may see when None), or the error to return (a dict)."""
     try:
         if model is None:
             visible = [s for s in stores.models.sources() if stores.visibility.can_see(_hooks_caller(caller), s["name"])]
             if not visible:
-                return None, None, error("model_not_found", "no published model is available")
+                return error("model_not_found", "no published model is available")
             model = visible[0]["name"]
         require_visible(stores.visibility, _hooks_caller(caller), model)
         source, semantic_model = stores.models.load(model)
     except (ModelNotVisible, ModelNotAvailable, LookupError) as exc:
-        return None, None, error("model_not_found", str(exc.args[0]) if exc.args else str(exc))
-    return source, semantic_model, None
+        return error("model_not_found", str(exc.args[0]) if exc.args else str(exc))
+    return source, semantic_model
 
 
 def search(model: SemanticModel, question: str, limit: int = 10) -> dict[str, Any]:
@@ -237,7 +239,7 @@ def search(model: SemanticModel, question: str, limit: int = 10) -> dict[str, An
     return {"matches": [h for _, h in hits[:limit]]}
 
 
-def _semantic_request(metrics: list[str], dimensions: list[str] | None, filters: list[dict] | None,
+def _semantic_request(metrics: list[str], dimensions: list[str] | None, filters: Sequence[Mapping[str, Any]] | None,
                       limit: int) -> SemanticRequest:
     semantic_filters: list[Filter] = []
     for item in filters or []:
@@ -255,7 +257,8 @@ def _semantic_request(metrics: list[str], dimensions: list[str] | None, filters:
 
 
 def compile_semantic(model: SemanticModel, metrics: list[str], dimensions: list[str] | None,
-                     filters: list[dict] | None, limit: int, dialect: SqlDialect) -> tuple[dict[str, Any], set[str]]:
+                     filters: Sequence[Mapping[str, Any]] | None, limit: int,
+                     dialect: SqlDialect) -> tuple[dict[str, Any], set[str]]:
     """The compiled query and every table it reads."""
     compiled = Compiler(model).compile(_semantic_request(metrics, dimensions, filters, limit), dialect=dialect)
     datasets = {compiled.fact}
@@ -286,9 +289,10 @@ def list_models(caller: Caller | None, stores: Stores) -> dict[str, Any]:
 @audited("describe_model")
 def describe_model(caller: Caller | None, stores: Stores, *, model: ModelName = None) -> dict[str, Any]:
     """Datasets, fields, metrics and relationships of a model (the first one when None)."""
-    source, semantic_model, failed = _resolve(caller, stores, model)
-    if failed:
-        return failed
+    resolved = _resolve(caller, stores, model)
+    if isinstance(resolved, dict):
+        return resolved
+    source, semantic_model = resolved
     description = semantic_model.describe()
     for item in description["datasets"]:
         dataset = semantic_model.datasets[item["name"]]
@@ -306,9 +310,10 @@ def search_semantics(caller: Caller | None, stores: Stores, *,
                      limit: Annotated[int, "At most this many matches (1 to 100)."] = 10,
                      model: ModelName = None) -> dict[str, Any]:
     """The datasets, fields and metrics a natural-language question involves."""
-    _, semantic_model, failed = _resolve(caller, stores, model)
-    if failed:
-        return failed
+    resolved = _resolve(caller, stores, model)
+    if isinstance(resolved, dict):
+        return resolved
+    _, semantic_model = resolved
     return search(semantic_model, question, min(max(limit, 1), 100))
 
 
@@ -320,9 +325,10 @@ def describe(caller: Caller | None, stores: Stores, *,
              name: Annotated[str, "A dataset name or table, a database.table.column, or a metric name."],
              model: ModelName = None) -> dict[str, Any]:
     """Definition and context for one dataset, column (database.table.column) or metric."""
-    _, semantic_model, failed = _resolve(caller, stores, model)
-    if failed:
-        return failed
+    resolved = _resolve(caller, stores, model)
+    if isinstance(resolved, dict):
+        return resolved
+    _, semantic_model = resolved
     wanted = name.lower()
     for dataset in semantic_model.datasets.values():
         if wanted in {dataset.name.lower(), dataset.source.lower(), *(s.lower() for s in dataset.synonyms)}:
@@ -367,9 +373,10 @@ def compile_query(caller: Caller | None, stores: Stores, *, metrics: Metrics, di
                   model: ModelName = None) -> dict[str, Any]:
     """Compile a semantic request into SQL, in ``dialect`` (a SQLGlot dialect or an engine
     plugin's name) or, by default, the dialect of the model's own connection."""
-    source, semantic_model, failed = _resolve(caller, stores, model)
-    if failed:
-        return failed
+    resolved = _resolve(caller, stores, model)
+    if isinstance(resolved, dict):
+        return resolved
+    source, semantic_model = resolved
     try:
         target = dialect_named(dialect) if dialect else _model_dialect(stores, source["name"])
     except ValueError as exc:
@@ -415,10 +422,11 @@ def query_values(caller: Caller | None, stores: Stores, *, metrics: list[str], d
 
 
 def _run_query(caller: Caller | None, stores: Stores, *, metrics: list[str], dimensions: list[str] | None,
-               filters: list[dict] | None, limit: int, model: str | None) -> dict[str, Any]:
-    source, semantic_model, failed = _resolve(caller, stores, model)
-    if failed:
-        return failed
+               filters: Sequence[Mapping[str, Any]] | None, limit: int, model: str | None) -> dict[str, Any]:
+    resolved = _resolve(caller, stores, model)
+    if isinstance(resolved, dict):
+        return resolved
+    source, semantic_model = resolved
     registered = stores.registry.model(source["name"])
     if registered is None:
         return error("model_not_found", f"model {source['name']!r} is not registered")
@@ -518,7 +526,7 @@ def explain_lineage(caller: Caller | None, stores: Stores, *,
     parts = column.split(".")
     if len(parts) != 3:
         return error("invalid_semantic_reference", "column must be database.table.column")
-    lineage = catalog.column_lineage(*parts, depth)
+    lineage = cast(Any, catalog).column_lineage(*parts, depth)  # capabilities() checked it has lineage
     if lineage is None:
         return error("semantic_not_found", f"{column} was not found in the catalog")
     return lineage.as_dict()

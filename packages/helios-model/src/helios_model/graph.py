@@ -183,7 +183,7 @@ def navigate(
         ]
         matches.sort(key=lambda node: (node.label.casefold(), node.id))
         total_matches = len(matches)
-        selected_ids = {node.id for node in matches[:limit]}
+        selected_ids: set[str] = {node.id for node in matches[:limit]}
     else:
         if focus_node_id is not None and focus_node_id not in nodes_by_id:
             raise KeyError(focus_node_id)
@@ -212,7 +212,7 @@ def navigate(
             adjacency.setdefault(edge.source, set()).add(edge.target)
             adjacency.setdefault(edge.target, set()).add(edge.source)
 
-        selected_ids: set[str] = set()
+        selected_ids = set()
         frontier = list(roots)
         for level in range(depth + 1):
             next_frontier: list[str] = []

@@ -60,8 +60,8 @@ class WorkbenchEnvironment(PydanticBaseSettingsSource):
 
     @staticmethod
     def _data_dir() -> str | None:
-        if _env("CDSW_PROJECT_DIR"):
-            return os.path.join(_env("CDSW_PROJECT_DIR"), "helios")
+        if project := _env("CDSW_PROJECT_DIR"):
+            return os.path.join(project, "helios")
         if any(_env(name) for name in WORKBENCH_MARKERS):
             return WORKBENCH_HOME
         return None

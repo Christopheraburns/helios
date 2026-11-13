@@ -93,7 +93,7 @@ _RELATIONSHIP_FIELDS = (
 def _relationship_evidence(value: Any) -> dict | None:
     if not isinstance(value, dict):
         return None
-    projected = {}
+    projected: dict[str, Any] = {}
     for field in _RELATIONSHIP_FIELDS:
         item = value.get(field)
         if field in {"from", "from_column", "to", "to_column"}:
@@ -179,7 +179,8 @@ class RunStore:
     ``from_settings`` with ``[artifact_storage]``) keeps runs with the artifacts."""
 
     def __init__(self, runs: str | os.PathLike[str] | ArtifactStorage, *, prefix: str = ""):
-        self.storage: ArtifactStorage = runs if hasattr(runs, "create") else LocalStorage(runs)
+        self.storage: ArtifactStorage = (LocalStorage(runs) if isinstance(runs, (str, os.PathLike))
+                                         else runs)
         self.prefix = prefix.strip("/")
         local = self.storage.local_path(self.prefix)
         self.runs_dir: str | None = str(local) if local is not None else None  # None on object storage
@@ -194,6 +195,7 @@ class RunStore:
             from helios_cortex.artifacts import ArtifactStore
 
             return ArtifactStore.from_settings(settings).runs
+        assert settings.runs_dir is not None  # Settings fills it in from data_dir
         return cls(settings.runs_dir)
 
     def _key(self, run_id: str, name: str = "") -> str:
@@ -221,6 +223,7 @@ class RunStore:
         for rid in self.run_ids():
             item = self.detail(rid)
             local = self.storage.local_path(self._key(rid))
+            updated: datetime | None
             if local is not None and local.is_dir():
                 updated = datetime.fromtimestamp(os.path.getmtime(local), tz=timezone.utc)
             else:  # object storage keeps no directory times; the stages' own timestamps
@@ -256,11 +259,8 @@ class RunStore:
         tables = []
         for identity in sorted(set(harvested) | set(profiled)):
             harvested_table = harvested.get(identity, {})
-            profiled_table = (
-                profiled.get(identity)
-                if isinstance(profiled.get(identity), dict)
-                else {}
-            )
+            entry = profiled.get(identity)
+            profiled_table: dict[str, Any] = entry if isinstance(entry, dict) else {}
             stats = _as_dict(profiled_table.get("stats"))
             columns = _as_dict(stats.get("columns"))
             harvested_columns = _as_list(harvested_table.get("columns"))

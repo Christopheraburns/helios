@@ -31,7 +31,7 @@ class PreparedPublication:
 @dataclass(frozen=True)
 class PublicationResult:
     manifest: dict[str, Any]
-    yaml_path: Path
+    yaml_path: Path | str          # a URL on object storage
     document: dict[str, Any]
 
 

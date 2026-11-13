@@ -132,8 +132,9 @@ class Stores:
     visibility: ModelVisibility = field(default_factory=AllModels)
     data_policy: DataPolicy = field(default_factory=DataPolicy)
     audit: AuditSink | None = None
-    engines: Callable[[str | None], Engine | None] | None = None
-    catalogs: Callable[[], object | None] | None = None
+    # None in the constructor means the default, which __post_init__ fills in: never None after.
+    engines: Callable[[str | None], Engine | None] = None  # type: ignore[assignment]
+    catalogs: Callable[[], object | None] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.engines is None:
@@ -185,8 +186,8 @@ def model_connection(settings: Settings, registry: Registry, model: Any) -> tupl
         for reference in model.data_sources
         if (source := registry.data_source(reference.data_source_id)) is not None
     ]
-    names = {settings.resolve_connection(ref) for ref in refs} if refs else {settings.resolve_connection()}
-    names.discard(None)
+    resolved = [settings.resolve_connection(ref) for ref in refs] if refs else [settings.resolve_connection()]
+    names = {name for name in resolved if name is not None}
     if len(names) > 1:
         return None, ("the model's data sources use different connections ("
                       + ", ".join(sorted(names)) + "); a query runs on one connection")

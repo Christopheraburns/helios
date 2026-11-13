@@ -24,7 +24,7 @@ import logging
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, TextIO
+from typing import TYPE_CHECKING, Protocol, TextIO, cast
 
 from helios_cortex import plugins
 from helios_cortex.caller import Caller, IdentityError
@@ -95,7 +95,7 @@ def _commands(stderr: TextIO) -> dict[str, Command]:
         except plugins.PluginError as exc:          # one broken plugin does not take the others down
             print(f"helios: warning: {exc}", file=stderr)
             continue
-        commands[name] = command() if isinstance(command, type) else command
+        commands[name] = cast(Command, command() if isinstance(command, type) else command)
     return commands
 
 

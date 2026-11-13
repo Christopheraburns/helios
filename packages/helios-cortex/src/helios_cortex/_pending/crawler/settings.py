@@ -24,13 +24,13 @@ import json
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 import yaml
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION: Final = "2"
 PRESETS = Path(__file__).parent / "presets"
 
 
@@ -525,8 +525,8 @@ def ontology_problems(
             named.update(step.case_edge for step in role.find if isinstance(step, CaseEdge))
     for name in sorted(n for n in named if n and n not in classes):
         problems.append(f"unknown ontology class {name!r}")
-    for predicate in sorted((set(settings.claims.cues) | set(settings.claims.predicates)) - predicates):
-        problems.append(f"unknown claim predicate {predicate!r}")
+    for unknown in sorted((set(settings.claims.cues) | set(settings.claims.predicates)) - predicates):
+        problems.append(f"unknown claim predicate {unknown!r}")
     return problems
 
 

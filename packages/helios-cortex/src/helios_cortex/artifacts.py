@@ -61,7 +61,8 @@ class Activation:
 
 class ArtifactStore:
     def __init__(self, root: str | os.PathLike[str] | ArtifactStorage, **options: Any):
-        self.storage: ArtifactStorage = root if hasattr(root, "create") else storage_for(root, **options)
+        self.storage: ArtifactStorage = (storage_for(root, **options) if isinstance(root, (str, os.PathLike))
+                                         else root)
         local = self.storage.local_path("")
         self.root: Path | None = local          # None on object storage
         self.models_dir: Path | None = local / "models" if local is not None else None
@@ -81,6 +82,7 @@ class ArtifactStore:
         """``settings.artifact_storage`` when set (an object store), else ``settings.artifacts_dir``."""
         if settings.artifact_storage is not None:
             return cls(storage_for(settings.artifact_storage.location, **settings.artifact_storage.storage_options))
+        assert settings.artifacts_dir is not None  # Settings fills it in from data_dir
         return cls(settings.artifacts_dir)
 
     # ------------------------------------------------------------ keys and local paths

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
@@ -135,11 +136,11 @@ class Compiler:
         fact, joins, metrics, measures, dims, filters = self.plan(req)
         m = self.model
 
-        def table(ds: str) -> exp.Expression:
+        def table(ds: str) -> exp.Expr:
             src = m.datasets[ds].source
             return exp.to_table(src).as_(self._alias(ds))
 
-        def col(f: Field) -> exp.Expression:
+        def col(f: Field) -> exp.Expr:
             # field expressions are ANSI, relative to the dataset; qualify bare columns with the alias
             e = sqlglot.parse_one(f.expression, read=None) if f.expression != f.name else exp.column(f.name, table=self._alias(f.dataset))
             for c in e.find_all(exp.Column):
@@ -147,7 +148,7 @@ class Compiler:
                     c.set("table", exp.to_identifier(self._alias(f.dataset)))
             return e
 
-        select: list[exp.Expression] = []
+        select: list[exp.Expr] = []
         out_cols: list[str] = []
         for d in dims:
             select.append(col(d).as_(d.name))
@@ -228,12 +229,12 @@ def _literal(v):
 
 
 def _condition(
-    column: exp.Expression,
+    column: exp.Expr,
     flt: Filter,
     field: Field,
 ) -> exp.Expression:
     op = flt.op.lower()
-    v = flt.value
+    v: Any = flt.value
     if op not in {"is null", "is not null"}:
         if op in {"in", "not in"}:
             values = v if isinstance(v, (list, tuple)) else [v]

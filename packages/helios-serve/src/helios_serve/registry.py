@@ -29,7 +29,7 @@ import typing
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 LOGGER = logging.getLogger(__name__)
 
@@ -282,5 +282,5 @@ def load_registry(*, catalog_capabilities: Iterable[str] | None = None) -> Regis
                 LOGGER.info("tool %s is not offered: no installed catalog provides %s", info.name,
                             ", ".join(sorted(metadata.requires - available)))
                 continue
-        found.append(tool_from(function, name=info.name, distribution=info.distribution))
+        found.append(tool_from(cast(Callable[..., Any], function), name=info.name, distribution=info.distribution))
     return Registry(found)

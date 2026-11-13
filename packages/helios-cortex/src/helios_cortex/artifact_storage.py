@@ -207,10 +207,10 @@ class OzoneStorage(FsspecStorage):
     one onto an existing file, so exactly one racing writer wins. HttpFS has no APPEND,
     so every write is a single CREATE carrying the data."""
 
-    def _request(self, method: str, path: str, **params: str) -> Any:
+    def _request(self, method: str, path: str, *, body: bytes | None = None, **params: str) -> Any:
         from urllib.parse import quote
 
-        data = params.pop("body", None)
+        data = body
         response = self.fs.session.request(
             method, self.fs.url + quote("/" + path.lstrip("/"), safe="/="),
             params={**self.fs.pars, **params}, data=data, allow_redirects=False,

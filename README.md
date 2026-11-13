@@ -93,7 +93,7 @@ helios.search("revenue by region")
 helios.query(["revenue"], ["shop.customers.c_region"]).records()
 ```
 
-Or let a coding agent ask them: `helios mcp --print-config claude-code` prints the configuration to add to the agent ([helios-mcp's README](packages/helios-mcp/README.md)).
+Or let a coding agent ask them: `helios mcp --print-config claude-code` prints the configuration to add to the agent ([helios-mcp's README](packages/helios-mcp/README.md)). To look at a published model, a query's path over it, or the ontology, run the [viewer](examples/viewer/README.md).
 
 **Who runs the queries.** A program with no caller runs queries with the credentials it was configured with. That suits a laptop, a notebook or `helios mcp`. A host serving several people passes each request's `Caller`, and the warehouse runs the query as that person and enforces their permissions. Daedalus does this for shared deployments, and helios-serve's README shows it.
 
@@ -156,6 +156,7 @@ The full glossary is what a well-governed warehouse would have, so loading it be
 helios/
 ├── packages/           the libraries (each its own pyproject.toml, src/ and tests/)
 ├── tests/integration/  tests that cross packages (the facade on the DuckDB sample, identity end to end)
+├── examples/viewer/    a read-only page for the semantic model, a query's path and the ontology
 ├── apps/
 │   ├── helios/crawler/        the document crawler, until it becomes helios-crawl (Phase 10)
 │   ├── helios-ds-generation/  the Helios-DS synthetic data generator (outside the workspace)

@@ -83,9 +83,10 @@ def catalog_for(catalog: CatalogSettings | None) -> object | None:
     from .. import plugins
 
     plugin = plugins.load(plugins.CATALOGS, catalog.catalog)
-    if not callable(getattr(plugin, "from_catalog", None)):
+    from_catalog = getattr(plugin, "from_catalog", None)
+    if not callable(from_catalog):
         raise plugins.PluginError(f"catalog plugin {catalog.catalog!r} has no from_catalog: {plugin!r}")
-    built = plugin.from_catalog(catalog)
+    built = from_catalog(catalog)
     if not capabilities(built):
         raise plugins.PluginError(f"catalog plugin {catalog.catalog!r} offers neither a glossary nor lineage")
     return built

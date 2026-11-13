@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from functools import partial
 from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
@@ -108,7 +109,7 @@ def _probe(component_id: str, label: str, build: Callable[[], Any], what: str) -
 
 def _connections(stores: Stores) -> list[HealthComponent]:
     return [_probe(f"connection:{name}", f"Warehouse connection {name}",
-                   lambda name=name: stores.engines(name), f"The {name} warehouse connection")
+                   partial(stores.engines, name), f"The {name} warehouse connection")
             for name in sorted(stores.settings.connections)]
 
 

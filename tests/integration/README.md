@@ -14,3 +14,9 @@ the repository.
 - `test_integration_one_config.py`: one `helios init` project read by the `Helios` facade
   (helios-semantic) and by `helios mcp` (helios-mcp) launched as an agent would, from the
   project and from elsewhere with `HELIOS_CONFIG`, while the warehouse is held open.
+
+- `test_integration_viewer.py`: `examples/viewer` served on the same sample: the page, the
+  model graph, a query's path from the compiler, the ontology graph, and GET only.
+
+The DuckDB TPC-DS sample (`warehouse`, `settings`) is in `conftest.py`. CI runs this directory, with the crawler's tests and the import contracts, in the
+`integration` job of `.github/workflows/helios.yml`.

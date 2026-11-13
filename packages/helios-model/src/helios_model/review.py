@@ -16,6 +16,8 @@ overrides merged in. It never mutates the input.
 from __future__ import annotations
 
 import copy
+from collections.abc import Mapping
+from typing import Any
 import json
 import os
 from datetime import datetime, timezone
@@ -29,7 +31,7 @@ def dataset_id(d: dict) -> str:
     return d["table"]
 
 
-def field_id(d: dict, f: dict) -> str:
+def field_id(d: Mapping[str, Any], f: Mapping[str, Any]) -> str:
     return f"{d['table']}.{f['column']}"
 
 
@@ -73,7 +75,7 @@ def decide(review: dict, section: str, element_id: str, decision: str,
            overrides: dict | None = None, note: str = "") -> None:
     if section not in SECTIONS or decision not in DECISIONS:
         raise ValueError(f"bad section/decision {section}/{decision}")
-    entry = {"decision": decision}
+    entry: dict[str, Any] = {"decision": decision}
     if overrides:
         entry["overrides"] = overrides
     if note:

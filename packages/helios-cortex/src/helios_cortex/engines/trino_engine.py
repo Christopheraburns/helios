@@ -83,6 +83,7 @@ class TrinoEngine(Engine):
                       catalog=o.catalog, schema=o.schema_, http_scheme=o.http_scheme, verify=o.verify,
                       source="helios")
         if caller is not None and self.identity_mode is IdentityMode.TOKEN:
+            assert caller.token is not None  # check_caller refused a caller without one
             return trino.dbapi.connect(**common, user=caller.username,
                                        auth=trino.auth.JWTAuthentication(caller.token))
         if o.user is None:
