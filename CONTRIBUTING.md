@@ -1,125 +1,93 @@
-# Helios Monorepo Structure
+# Developing Helios
 
-This repository is a uv workspace. Helios is being split into libraries that a host project
-installs like any other package (`helios-cortex`, `helios-model`, `helios-serve`, and later
-`helios-crawl`), with `helios-semantic` as the one a developer installs; Daedalus serves the
-tools over MCP. See
-`docs/helios-decomposition-burndown.md` for progress. Today `helios-cortex` is a real
-package and the console, crawler, graph gateway and MCP server still live under
-`apps/helios/`, installed by the root project.
+This repository is a [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) of libraries. The workspace root is not a package and installs nothing of its own: each library under `packages/` is built, tested and released on its own, and a host installs the ones it needs (see [README.md](README.md)).
 
-## Directory Layout
+## Layout
 
 ```
 helios/
-├── pyproject.toml            # workspace root; also installs apps/ (until Phase 8)
-├── uv.lock                   # pins the whole tree
+├── pyproject.toml          workspace root: members, dependency groups, pytest, ruff and import-linter settings
+├── uv.lock                 pins the whole workspace
 ├── packages/
-│   └── helios-cortex/          # pyproject.toml, src/helios_cortex/
-│
-├── apps/
-│   ├── helios/               # Query runtime (console, crawler, graph, mcp_server, ui, tests)
-│   ├── helios-ds-generation/ # Synthetic data generator (outside the workspace)
-│   └── helios-ds-evaluation/ # Evaluation harness (outside the workspace)
-│
-├── jobs/                      # Workbench Job entry points
-├── scripts/                   # Utility scripts
-├── ontology/  models/  eval/  # data, versioned, not Python
-├── runtime/                   # Workbench runtime image
-└── docs/
+│   ├── helios-cortex/      the kernel        src/helios_cortex/, tests/, CONTRACTS.md
+│   ├── helios-model/       model discovery   src/helios_model/, tests/
+│   ├── helios-serve/       the tools         src/helios_serve/, tests/
+│   ├── helios-semantic/    the umbrella      src/helios_semantic/, tests/
+│   ├── helios-mcp/         stdio MCP         src/helios_mcp/, tests/
+│   └── helios-cloudera/    Cloudera plugins  src/helios_cloudera/, tests/
+├── tests/integration/      tests that cross packages
+└── apps/
+    ├── helios/crawler/     the document crawler and its tests (apps/helios/tests), until helios-crawl (Phase 10)
+    ├── helios-ds-generation/
+    └── helios-ds-evaluation/   Helios-DS: outside the workspace, with their own setup and CI
 ```
 
-## Development Setup
-
-### Query runtime and helios-cortex
+## Setup
 
 ```bash
-uv sync                      # creates .venv, installs helios-cortex and apps/ editable
-uv sync --extra evidence     # also lancedb + sentence-transformers (pulls PyTorch)
-
-uv run pytest                # apps/helios/tests
-uv run ruff check packages apps/helios jobs scripts
+uv sync                       # .venv with every package editable, all extras, the crawler's dependencies and the tools
+uv sync --group evidence      # also document search (lancedb, sentence-transformers; pulls PyTorch)
 ```
 
-No `PYTHONPATH` or `sys.path` changes are needed locally.
+The root's dependency groups define the development environment:
+- `dev`: every workspace package with its extras, plus pytest, ruff, import-linter and moto.
+- `crawler`: pypdf, rapidfuzz and reportlab.
+- `evidence`: document search.
 
-### Data generator and evaluator
+`dev` and `crawler` are installed by default. A package's own dependencies belong in its own `pyproject.toml`, never the root's. No `PYTHONPATH` changes are needed. The crawler isn't installed: its tests find `apps.helios.crawler` through pytest's `pythonpath`, and `python -m apps.helios.crawler` runs from the repository root.
 
-These apps are not workspace members yet and keep their own setup:
+## Tests and checks
 
 ```bash
-cd apps/helios-ds-generation
-PYTHONPATH=src:../../packages/helios-cortex/src pytest -q
+uv run pytest                                      # every package, tests/integration and the crawler
+uv run pytest packages/helios-serve/tests          # one package
+uv run ruff check packages apps/helios scripts tests
+uv run lint-imports                                # the import contracts
 ```
 
-## Cloudera AI Project Deployment
+**Package boundaries.** The import-linter contracts in `pyproject.toml` keep each package to its own dependencies:
+- helios-cortex imports no other Helios package and no app code.
+- helios-model, helios-serve and helios-cloudera import only helios-cortex.
+- helios-serve imports no MCP SDK or web framework.
+- helios-semantic and helios-mcp import only what they wrap.
 
-### Three Independent Projects
+**Wheel-only installs.** The workspace installs every package, so a test can pass only because a sibling happens to be installed. CI therefore also builds each package's wheel and runs that package's tests in a virtualenv with only its declared dependencies (the `*-install` jobs). To do the same locally:
 
-Each Cloudera AI project pulls from this single Git repo:
-
-| Project | Directory | Runtime | Purpose |
-|---------|-----------|---------|---------|
-| **helios-query** | `apps/helios/` | helios-runtime | Query execution & console |
-| **helios-ds-generation** | `apps/helios-ds-generation/` | helios-ds-runtime | Synthetic data generation |
-| **helios-ds-evaluation** | `apps/helios-ds-evaluation/` | helios-ds-eval-runtime | Evaluation (separate project!) |
-
-### Deployment Notes
-
-- **helios-cortex** (`packages/helios-cortex/src/helios_cortex/`): used by all 3 projects
-- **`apps/helios` is scaffolding, not a deployment target.** Its tests protect the logic while
-  it moves into the packages; it is deleted in burndown Phase 8. Helios reaches Workbench through
-  a separate host application that pip-installs the libraries.
-- **Generation Project**: Separate credentials and runtime from query runtime
-- **Evaluation Project**: Separate Cloudera project entirely (ground-truth isolation)
-- **Git**: All projects pull from `main` branch; no project-specific branches needed
-
-## CI/CD Workflows
-
-Located in `.github/workflows/`:
-
-- `helios.yml`: `uv sync`, ruff and pytest for helios-cortex and `apps/helios/`
-- `helios-ds-gen.yml`: Tests only `apps/helios-ds-generation/`
-
-## Python Imports
-
-All code imports from `helios_cortex` directly:
-
-```python
-from helios_cortex import __version__
-from helios_cortex.compiler import compile_query
-from helios_cortex.metadata import SQLiteMetadataRepository
+```bash
+uv build --package helios-cortex --wheel --out-dir /tmp/dist
+uv build --package helios-serve --wheel --out-dir /tmp/dist
+uv venv /tmp/serve && uv pip install --refresh --python /tmp/serve/bin/python /tmp/dist/*.whl pytest
+/tmp/serve/bin/python -m pytest -q packages/helios-serve/tests
 ```
 
-Workspace members depend on `helios-cortex` by name; the root `pyproject.toml` resolves it
-to the workspace copy:
+Pass `--refresh`: uv caches wheels by version, so a rebuilt wheel with an unchanged version is otherwise ignored. A test that needs an optional extra skips and names the extra (`pytest.importorskip(..., reason="needs helios-cortex[llm]")`).
 
-```toml
-[tool.uv.sources]
-helios-cortex = { workspace = true }
-```
+**Test file names** must be unique across the workspace, because pytest imports test modules by basename. Prefix them with the package's topic (`test_serve_health.py`, not `test_health.py`).
 
-## Dependency Management
+## CI
 
-- **`packages/helios-cortex/pyproject.toml`**: Core dependencies; `evidence` extra for document search
-- **`pyproject.toml`** (root): console, crawler, graph and MCP server dependencies + core
-- **`apps/helios/console/requirements.txt` / `.lock`**: what Workbench installs into `.helios-python`;
-  keep in step with the root `pyproject.toml`
-- **`apps/helios-ds-generation/pyproject.toml`**: Generator deps (reportlab, pillow) + core
-- **`apps/helios-ds-evaluation/pyproject.toml`**: Evaluator deps (minimal) + core
+`.github/workflows/helios.yml` runs on pull requests and on `main`:
 
-## State Directories (Not Code)
+| Job | What it checks |
+|---|---|
+| `test` | `uv sync --locked`, ruff, import-linter, and the whole test suite |
+| `base-install` | helios-cortex's wheel with no extras |
+| `trino`, `storage` | the Trino engine against a real coordinator; the registry on Postgres and artifacts on S3 (moto) |
+| `cloudera-install`, `model-install`, `serve-install`, `semantic-install`, `mcp-install` | each package from wheels beside only what it declares |
+| `publish` | on a `helios-cortex/v*` tag, builds and uploads to the internal index |
 
-These are runtime state and artifacts; not part of the codebase:
+`helios-ds-gen.yml` tests the Helios-DS generator. Per-package CI, `CODEOWNERS` and per-package release tags are burndown 8.5.
 
-- `state/` - Current runtime state (ignored)
-- `runs/` - Execution history (ignored)
-- `run_archive/` - Archived runs (ignored)
-- `models/` - Model artifacts
-- `jobs/` - Job definitions
+## Adding a package
 
-## Documentation
+1. Create `packages/helios-<name>/` with `pyproject.toml` (hatchling, `src/` layout), `README.md` and `tests/`. The workspace picks it up through `members = ["packages/*"]`.
+2. Depend on `helios-cortex` (and siblings) by name, and add `helios-<name> = { workspace = true }` to the root's `[tool.uv.sources]`.
+3. Register its plugins as entry points: `helios.engines`, `helios.catalogs`, `helios.profiles`, `helios.commands` or `helios.tools`.
+4. Add it to `testpaths`, the `dev` dependency group and an import-linter contract, and give it a wheel-only CI job.
 
-- `docs/` - Architecture, design docs
-- `README.md` - Project overview
-- This file - Monorepo structure and workflow
+## Where things go
+
+- **Library code** goes in a package; anything Cloudera-specific goes in helios-cloudera. importing helios-cortex reads no environment variables and touches no files (tested); only building `Settings` does, and its stable surface is listed in [CONTRACTS.md](packages/helios-cortex/CONTRACTS.md).
+- **Tests** go in their package's `tests/`. Only a test that needs several packages together goes in `tests/integration`.
+- **Data** isn't Python and isn't installed: the published TPC-DS model (`models/`), the ontology (`ontology/`), the sample warehouse scripts (`setup/`) and the Atlas glossary (`Atlas_Glossary/`).
+- **Runtime state** goes under each deployment's `data_dir`, never in the repository.

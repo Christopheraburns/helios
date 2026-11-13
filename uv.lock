@@ -11,7 +11,6 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "helios-apps",
     "helios-cloudera",
     "helios-cortex",
     "helios-mcp",
@@ -19,6 +18,26 @@ members = [
     "helios-semantic",
     "helios-serve",
 ]
+
+[manifest.dependency-groups]
+crawler = [
+    { name = "pypdf", specifier = ">=6.0.0" },
+    { name = "rapidfuzz", specifier = ">=3.14.0" },
+    { name = "reportlab", specifier = ">=4.0" },
+]
+dev = [
+    { name = "helios-cloudera", editable = "packages/helios-cloudera" },
+    { name = "helios-cortex", extras = ["azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"], editable = "packages/helios-cortex" },
+    { name = "helios-mcp", editable = "packages/helios-mcp" },
+    { name = "helios-model", editable = "packages/helios-model" },
+    { name = "helios-semantic", editable = "packages/helios-semantic" },
+    { name = "helios-serve", editable = "packages/helios-serve" },
+    { name = "import-linter", specifier = ">=2.15" },
+    { name = "moto", extras = ["server"], specifier = ">=5.0" },
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "ruff", specifier = ">=0.6.0" },
+]
+evidence = [{ name = "helios-cortex", extras = ["evidence"], editable = "packages/helios-cortex" }]
 
 [[package]]
 name = "adlfs"
@@ -1651,60 +1670,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/54/66/3a649ce125e03d1d43727a8b833cd211f0b9fe54a7e5be326f50d6f1d951/hbreader-0.9.1.tar.gz", hash = "sha256:d2c132f8ba6276d794c66224c3297cec25c8079d0a4cf019c061611e0a3b94fa", size = 19016, upload-time = "2021-02-25T19:22:32.799Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7b/24/61844afbf38acf419e01ca2639f7bd079584523d34471acbc4152ee991c5/hbreader-0.9.1-py3-none-any.whl", hash = "sha256:9a6e76c9d1afc1b977374a5dc430a1ebb0ea0488205546d4678d6e31cc5f6801", size = 7595, upload-time = "2021-02-25T19:22:31.944Z" },
-]
-
-[[package]]
-name = "helios-apps"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "helios-cloudera" },
-    { name = "helios-cortex", extra = ["azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"] },
-    { name = "helios-mcp" },
-    { name = "helios-model" },
-    { name = "helios-semantic" },
-    { name = "helios-serve" },
-    { name = "httpx" },
-    { name = "pypdf" },
-    { name = "rapidfuzz" },
-]
-
-[package.optional-dependencies]
-evidence = [
-    { name = "helios-cortex", extra = ["evidence"] },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "import-linter" },
-    { name = "moto", extra = ["server"] },
-    { name = "pytest" },
-    { name = "reportlab" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "helios-cloudera", editable = "packages/helios-cloudera" },
-    { name = "helios-cortex", extras = ["azure", "gcs", "llm", "ontology", "ozone", "postgres", "s3", "trino"], editable = "packages/helios-cortex" },
-    { name = "helios-cortex", extras = ["evidence"], marker = "extra == 'evidence'", editable = "packages/helios-cortex" },
-    { name = "helios-mcp", editable = "packages/helios-mcp" },
-    { name = "helios-model", editable = "packages/helios-model" },
-    { name = "helios-semantic", editable = "packages/helios-semantic" },
-    { name = "helios-serve", editable = "packages/helios-serve" },
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "pypdf", specifier = ">=6.0.0" },
-    { name = "rapidfuzz", specifier = ">=3.14.0" },
-]
-provides-extras = ["evidence"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "import-linter", specifier = ">=2.15" },
-    { name = "moto", extras = ["server"], specifier = ">=5.0" },
-    { name = "pytest", specifier = ">=8.0" },
-    { name = "reportlab", specifier = ">=4.0" },
-    { name = "ruff", specifier = ">=0.6.0" },
 ]
 
 [[package]]

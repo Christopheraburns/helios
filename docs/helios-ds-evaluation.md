@@ -48,5 +48,5 @@ pytest apps/helios-ds-evaluation/tests -v
 ## Related documentation
 
 - [Helios Query evaluation (README)](../README.md#evaluation) — glossary, semantic layer, and TPC-DS QA scoring for the query runtime
-- [Monorepo structure](../MONOREPO.md) — deployment and CI layout
+- [Contributing](../CONTRIBUTING.md) — developing Helios: the workspace, tests and CI
 - [Helios-DS-Generation burndown](./helios-ds-burndown.md) — generator milestones and handoffs

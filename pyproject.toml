@@ -1,45 +1,33 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+# The uv workspace root. It is not a package and installs nothing of its own
+# (burndown 8.4): the libraries are the members under packages/, each built and
+# published on its own. The dependency groups make the development environment that
+# `uv sync` creates: every member with its extras, the crawler's few dependencies (it
+# stays in apps/helios/crawler until helios-crawl, Phase 10), and the tools.
 
-# Workspace root. Until helios-crawl takes the crawler (Phase 10), the root project
-# also installs the `apps` namespace, which now holds only apps/helios/crawler, so
-# `apps.helios.crawler` imports resolve without PYTHONPATH (burndown 8.2; 8.4 makes
-# this a plain workspace root).
-[project]
-name = "helios-apps"
-version = "0.1.0"
-description = "The Helios crawler, until helios-crawl (Phase 10), and the workspace's development environment"
-authors = [{name = "Helios Team"}]
-license = "Apache-2.0"
-requires-python = ">=3.11"
-classifiers = ["Private :: Do Not Upload"]
-dependencies = [
+[dependency-groups]
+dev = [
     "helios-cloudera",
     "helios-model",
     "helios-serve",
     "helios-semantic",
     "helios-mcp",
     "helios-cortex[azure,gcs,llm,ontology,ozone,postgres,s3,trino]",
-    "httpx>=0.27.0",
-    "pypdf>=6.0.0",  # crawler: PDF text extraction
-    "rapidfuzz>=3.14.0",  # crawler: typo-tolerant name matching
-]
-
-[project.optional-dependencies]
-evidence = ["helios-cortex[evidence]"]
-
-[dependency-groups]
-dev = [
     "import-linter>=2.15",
     "moto[server]>=5.0", # an in-process S3 server for the artifact storage tests
     "pytest>=8.0",
-    "reportlab>=4.0", # crawler test fixtures render PDFs
     "ruff>=0.6.0",
 ]
+# apps/helios/crawler and its tests, until helios-crawl (Phase 10).
+crawler = [
+    "pypdf>=6.0.0",  # PDF text extraction
+    "rapidfuzz>=3.14.0",  # typo-tolerant name matching
+    "reportlab>=4.0", # test fixtures render PDFs
+]
+# Document search (lancedb + sentence-transformers, which pull PyTorch): `uv sync --group evidence`.
+evidence = ["helios-cortex[evidence]"]
 
 [tool.uv]
-default-groups = ["dev"]
+default-groups = ["dev", "crawler"]
 
 [tool.uv.workspace]
 members = ["packages/*"]
@@ -52,10 +40,10 @@ helios-serve = { workspace = true }
 helios-semantic = { workspace = true }
 helios-mcp = { workspace = true }
 
-[tool.hatch.build.targets.wheel]
-packages = ["apps"]
-
 [tool.pytest.ini_options]
+# The crawler is not installed (the root is not a package), so its tests find
+# `apps.helios.crawler` from the repository root.
+pythonpath = ["."]
 testpaths = [
     "packages/helios-cortex/tests",
     "packages/helios-cloudera/tests",
