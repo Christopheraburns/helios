@@ -11,7 +11,7 @@ BASE = Path("/project")
 
 def test_each_kind_of_path_is_anchored_to_the_file():
     values = anchored({
-        "data_dir": "helios-data", "artifacts_dir": "~/artifacts", "runs_dir": "/abs/runs", "metadata_db": "m.db",
+        "data_dir": "helios-data", "artifacts_dir": "~/artifacts", "runs_dir": "/abs/runs",
         "evidence": {"index": "evidence.lance", "embedding_model": "x"},
         "connections": {"default": {"engine": "duckdb", "path": "warehouse.duckdb"},
                         "scratch": {"engine": "duckdb", "path": ":memory:"},
@@ -22,7 +22,7 @@ def test_each_kind_of_path_is_anchored_to_the_file():
     }, BASE)
     assert values["data_dir"] == "/project/helios-data"
     assert values["artifacts_dir"] == str(Path("~/artifacts").expanduser())
-    assert values["runs_dir"] == "/abs/runs" and values["metadata_db"] == "/project/m.db"
+    assert values["runs_dir"] == "/abs/runs"
     assert values["evidence"] == {"index": "/project/evidence.lance", "embedding_model": "x"}
     assert values["connections"]["default"]["path"] == "/project/warehouse.duckdb"
     assert values["connections"]["scratch"]["path"] == ":memory:"

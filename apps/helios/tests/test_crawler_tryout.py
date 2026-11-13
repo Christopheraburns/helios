@@ -3,10 +3,6 @@
 import pytest
 from apps.helios.crawler import tryout
 from crawler_samples import RETAIL_SETTINGS
-from helios_cortex.index import runs
-from helios_cortex._pending import browse
-from helios_cortex.index.records import SegmentRecord
-from helios_cortex.index.store import duckdb_index_store
 
 TEXT = (
     "Return # RMA-3056773 and RMA-3056773 again. The refund was not approved. "
@@ -74,53 +70,3 @@ def test_long_passages_are_cut_and_only_the_first_few_are_returned():
     first = found["passages"][0]
     assert first["truncated"] and len(first["text"]) == tryout.MAX_TEXT and len(first["matches"]) == 1
     assert found["distinct_values"] == 40 and len(found["values"]) == tryout.MAX_VALUES  # two repeat
-
-
-@pytest.fixture
-def client(monkeypatch):
-    from apps.helios.console import crawler, ontology
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    index = duckdb_index_store()
-    index.ensure_tables()
-    browse._tables.clear()
-    monkeypatch.setitem(ontology._index, "store", index)
-    app = FastAPI()
-    app.include_router(crawler.crawler_router)
-    return TestClient(app), index
-
-
-def test_the_api_tries_pasted_text_or_the_latest_crawl_and_says_when_there_is_none(client):
-    api, index = client
-    url = "/api/v1/crawler/settings:try"
-    settings = RETAIL_SETTINGS.model_dump(mode="json")
-    rule = {"type": "pattern", "name": "return_authorization"}
-
-    nothing = api.post(url, json={"settings": settings, "rule": rule}).json()
-    assert nothing["sample"]["kind"] == "none" and "even with no rules" in nothing["sample"]["reason"]
-    assert nothing["scanned"] == 0
-
-    pasted = api.post(url, json={"settings": settings, "rule": rule, "text": "RMA-1234567"}).json()
-    assert pasted["sample"] == {"kind": "text"} and pasted["matches"] == 1
-
-    # A crawl that ran with no rules at all still gives passages to try rules on.
-    run = runs.start(index, connector="helios_ds", source="src-1", ontology_version="0.2.0", crawler_version="t", actor="t")
-    index.append(
-        browse.SEGMENTS,
-        [SegmentRecord(crawl_run_id=run.crawl_run_id, segment_id="s1", asset_id="a", segment_type="email_body",
-                       ordinal=0, locator={"part": "body"}, text="About RMA-7654321.")],
-    )
-    runs.finish(index, run, {"segments": 1, "mentions": 0})
-    crawled = api.post(url, json={"settings": settings, "rule": rule}).json()
-    assert crawled["sample"]["kind"] == "crawl" and crawled["sample"]["crawl_runs"][0]["source"] == "src-1"
-    assert crawled["values"] == [{"text": "RMA-7654321", "count": 1}]
-    assert api.post(url, json={"settings": settings, "rule": rule, "source": "other"}).json()["sample"]["kind"] == "none"
-
-    broken = {**settings, "patterns": [{"name": "x", "regex": "(", "kind": "value"}]}
-    refused = api.post(url, json={"settings": broken, "rule": rule})
-    assert refused.status_code == 422 and "not a valid regular expression" in refused.json()["detail"]["problems"][0]
-    assert api.post(url, json={"settings": settings, "rule": {"type": "nonsense"}}).status_code == 422
-
-    listed = api.get("/api/v1/crawler/settings").json()
-    assert listed["vocabulary"] is None  # no ontology version is active in this index

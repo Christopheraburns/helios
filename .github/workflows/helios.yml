@@ -5,7 +5,6 @@ on:
     paths-ignore:
       - "apps/helios-ds-generation/**"
       - "apps/helios-ds-evaluation/**"
-      - "apps/helios/ui/**"
       - "docs/**"
   push:
     branches: [main]
@@ -21,7 +20,7 @@ jobs:
           python-version: "3.12" # matches the helios Workbench runtime
           enable-cache: true
       - run: uv sync --locked
-      - run: uv run ruff check packages apps/helios jobs scripts tests
+      - run: uv run ruff check packages apps/helios scripts tests
       - run: uv run lint-imports
       - run: uv run pytest -q
 

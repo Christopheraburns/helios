@@ -17,14 +17,6 @@ if TYPE_CHECKING:
 
 STAGES = ("harvest", "profile", "propose")
 DOCUMENTS = (*STAGES, "review")  # what a run directory may hold
-LIFECYCLE_STATUSES = (
-    "queued",
-    "running",
-    "completed",
-    "completed_with_warnings",
-    "failed",
-    "cancelled",
-)
 
 _STAGE_TIMESTAMPS = {
     "harvest": "harvested_at",

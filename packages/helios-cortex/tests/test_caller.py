@@ -15,7 +15,7 @@ from helios_cortex.data_authorization import (
 )
 
 SOURCE = Path(__file__).resolve().parents[1] / "src" / "helios_cortex"
-# Helios's own identity code, moved to apps/helios/console in 2.6.
+# Helios's own identity code: moved to the old console in 2.6, deleted with it in 8.2.
 IDENTITY_MODULES = ("authz", "authorization", "rbac", "identity", "delegation", "metadata", "tracing", "audit")
 
 

@@ -25,7 +25,7 @@ What already exists and should be reused:
 | Grounded LLM extraction with a reply cache | `apps/helios/crawler/llm_arm.py` | Evidence gathering, caching, provenance |
 | Tool-calling assistant loop with traces | `console/assistant.py` | The authoring copilot |
 | Crawl index and scoring harness | `helios_index.*`, `crawler/evaluate.py` | Evidence for proposals; measuring a draft |
-| Job launch from the API | `console/crawl_jobs.py` | The proposal Job and trial crawls |
+| Job launch from the API | `crawler/crawl_jobs.py` | The proposal Job and trial crawls |
 | Permissions and audit | `authz` (`ontology.read`, `ontology.edit`), `audit` | As is |
 
 ## Who the user is

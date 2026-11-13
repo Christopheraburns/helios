@@ -1,7 +1,7 @@
 """Compile a semantic request from the command line.
 
   uv run python scripts/compile.py tpcds '{"metrics":["Store Sales Revenue"],"dimensions":["s_state","d_year"],"filters":[["d_year","=",2001]],"limit":20}'
-  uv run python scripts/compile.py tpcds request.json --dialect duckdb --run   # --run executes against the configured Impala engine
+  uv run python scripts/compile.py tpcds request.json --dialect duckdb --run   # --run executes on the default connection
 """
 import argparse
 import json
@@ -22,8 +22,13 @@ model = SemanticModel.load_published(a.model, Settings().artifacts_dir)
 out = Compiler(model).compile(req, dialect=IMPALA if a.dialect in ("impala", "hive") else a.dialect)
 print(f"-- fact: {out.fact}; joins: {', '.join(out.joins) or 'none'}\n{out.sql}")
 if a.run:
-    from jobs._common import engine
-    res = engine().query(out.sql, limit=200)
+    from helios_cortex.engines import engine_for
+
+    connection = Settings().connection()
+    if connection is None:
+        raise SystemExit("--run needs a connection: set IMPALA_HOST, WORKLOAD_USER and WORKLOAD_PASSWORD, "
+                         "or a [connections.default] in helios.toml")
+    res = engine_for(connection).query(out.sql, limit=200)
     print("\n" + " | ".join(res.columns))
     for r in res.rows:
         print(" | ".join(str(x) for x in r))

@@ -1,16 +1,15 @@
 """Run the crawler (a Workbench Job in the Helios project).
 
-    python -m apps.helios.crawler crawl --source <data_source_id> [--full]
     python -m apps.helios.crawler crawl --dataset <helios_ds_dataset_id> [--full]
     python -m apps.helios.crawler evaluate --run <crawl_run_id> --dataset <dataset_id>
                                            [--index-duckdb <path>]
     python -m apps.helios.crawler baseline record|check <file> [--run <crawl_run_id>]
                                            [--source <id>] [--dataset <dataset_id>]
 
-``--source`` crawls a data source registered in Helios (Data Sources page), with
-its connector, scope and crawl settings. ``--dataset`` is a shortcut for a
-Helios-DS dataset that isn't registered (artifacts read through the
-``--s3-connection`` data connection).
+``--dataset`` crawls a Helios-DS dataset (artifacts read through the
+``--s3-connection`` data connection). Crawling a data source registered in Helios
+(``--source``) went with the old console's metadata database (burndown 8.2);
+helios-crawl (Phase 10) decides where crawl sources are registered.
 
 Runs as the crawler identity (WORKLOAD_USER / WORKLOAD_PASSWORD for Impala),
 with the active ontology version and the crawler settings version the source
@@ -28,11 +27,28 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from apps.helios.runtime import REPO as REPO_ROOT
 from helios_cloudera.workbench import WorkbenchSettings as HeliosSettings
+
+REPO_ROOT = Path(__file__).resolve().parents[3]  # the ontology the LLM crawler reads ships here
+
+
+@dataclass(frozen=True)
+class CrawlSource:
+    """What one crawl reads: a Helios-DS dataset, until helios-crawl (Phase 10) decides
+    where crawl sources are registered. Registered sources lived in the old console's
+    metadata database, which went with it (burndown 8.2)."""
+
+    id: str
+    name: str
+    connector: str
+    connection_ref: str
+    scope: dict[str, Any] = field(default_factory=dict)
+    crawl: dict[str, Any] = field(default_factory=dict)
+    organization_id: str = "unregistered"   # kept so crawl records keep their shape
 
 
 def source_snapshot(source: Any) -> dict[str, Any]:
@@ -111,9 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m apps.helios.crawler")
     commands = parser.add_subparsers(dest="command", required=True)
     crawl_cmd = commands.add_parser("crawl", help="crawl one data source")
-    which = crawl_cmd.add_mutually_exclusive_group(required=True)
-    which.add_argument("--source", help="a data source ID registered in Helios")
-    which.add_argument("--dataset", help="a READY Helios-DS dataset ID (unregistered)")
+    crawl_cmd.add_argument("--dataset", required=True, help="a READY Helios-DS dataset ID")
     crawl_cmd.add_argument("--full", action="store_true", help="re-fetch and re-analyze everything")
     crawl_cmd.add_argument(
         "--strategy",
@@ -161,8 +175,6 @@ def main(argv: list[str] | None = None) -> int:
         return baseline_main(args)
 
     from helios_cloudera.impala import impala_config
-    from helios_cortex._pending.crawler.sources import is_crawlable
-    from apps.helios.console.domain import DataSource
     from helios_cloudera.impala import ImpalaEngine
     from helios_cloudera.index import impala_index_store
     from helios_cortex.index import ontology_versions
@@ -174,30 +186,13 @@ def main(argv: list[str] | None = None) -> int:
     from .crawl import crawl
     from .gazetteer import Gazetteer
 
-    if args.source:
-        from apps.helios.console.metadata import SQLiteMetadataRepository
-
-        source = SQLiteMetadataRepository.from_settings(HeliosSettings()).data_source(args.source)
-        if source is None:
-            print(f"No data source {args.source!r} in the Helios metadata store.")
-            return 2
-        if not is_crawlable(source.connector):
-            print(
-                f"Data source {source.name!r} uses connector {source.connector!r}, which isn't crawlable."
-            )
-            return 2
-        if not source.crawl.get("enabled", True):
-            print(f"Crawling is disabled for data source {source.name!r}.")
-            return 2
-    else:
-        source = DataSource(
-            id=args.dataset,
-            organization_id="unregistered",
-            name=f"Helios-DS dataset {args.dataset}",
-            connector="helios_ds",
-            connection_ref=args.s3_connection,
-            scope={"dataset_id": args.dataset},
-        )
+    source = CrawlSource(
+        id=args.dataset,
+        name=f"Helios-DS dataset {args.dataset}",
+        connector="helios_ds",
+        connection_ref=args.s3_connection,
+        scope={"dataset_id": args.dataset},
+    )
 
     config = impala_config(HeliosSettings())
     catalog = impala_index_store(HeliosSettings())  # ontology versions and crawler settings
@@ -226,8 +221,8 @@ def main(argv: list[str] | None = None) -> int:
     if settings.is_empty():
         print(
             "warning: no crawler settings are active, and the engine has no rules of its own "
-            "(no patterns, labels, phrases or claim cues). Load a preset on the Crawler page's "
-            "Settings tab, save it and activate it."
+            "(no patterns, labels, phrases or claim cues). Save a preset and activate it "
+            "(helios_cortex._pending.crawler_settings.save and activate)."
         )
     ontology = ontology_versions.active(catalog)
     ontology_version = ontology.version if ontology else "unpublished"
@@ -278,15 +273,14 @@ def main(argv: list[str] | None = None) -> int:
 def resolution_for(ontology_version: str, catalog: Any) -> tuple[Any, dict[str, Any] | None]:
     """(the resolver's view of the active mapping for ``ontology_version``, what to
     record about it on the run), from ``helios_index`` (CG-6). The repository's
-    mapping files are not read here: they are shipped examples, imported once
-    through the API."""
+    mapping files are not read here: they are shipped examples, saved to the index once."""
     from helios_cortex.index import mappings as stored
     from helios_cortex.ontology.mapping import resolution_config
 
     if not stored.active(catalog):
         print(
-            "warning: no mapping is active, so mentions are not extracted. Import or save one "
-            "and activate it: POST /api/v1/ontology/mappings, then /mappings/{version}:activate."
+            "warning: no mapping is active, so mentions are not extracted. Save one and activate "
+            "it (helios_cortex.index.mappings.save and activate)."
         )
         return None, None
     chosen = stored.choose(catalog, ontology_version)

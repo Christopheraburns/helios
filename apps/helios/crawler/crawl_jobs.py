@@ -1,11 +1,12 @@
 """Starting crawls as runs of a Workbench Job.
 
-The API never crawls in its own process: it starts a run of the ``helios-crawl``
-Job through the Cloudera AI API, passing what to crawl in the run's environment.
-Workbench gives the crawl its own container, keeps its log and can stop it; the
-crawl records itself in ``helios_index.crawl_runs`` as before.
+A crawl never runs in the caller's process: ``launch`` starts a run of the
+``helios-crawl`` Job (``crawler/job.py``) through the Cloudera AI API, passing what
+to crawl in the run's environment. Workbench gives the crawl its own container,
+keeps its log and can stop it; the crawl records itself in ``helios_index.crawl_runs``.
+Moved here from the old console (burndown 8.2), which started crawls through its API.
 
-The Job is created on first use, with the API Application's runtime. A crawl
+The Job is created on first use, with the runtime ``HELIOS_CRAWL_JOB_RUNTIME`` names. A crawl
 connects as the Job's WORKLOAD_USER: to run crawls as the crawler machine user,
 set WORKLOAD_USER and WORKLOAD_PASSWORD in the Job's environment in Workbench.
 """
@@ -16,8 +17,7 @@ import json
 import os
 from typing import Any
 
-JOB_SCRIPT = "helios/jobs/crawl.py"
-API_SCRIPT = "helios/apps/helios/console/app.py"
+JOB_SCRIPT = "helios/apps/helios/crawler/job.py"
 # Workbench run statuses after which a run will not change again.
 FINISHED_SUFFIXES = ("SUCCEEDED", "FAILED", "STOPPED", "TIMEDOUT", "KILLED")
 
@@ -57,17 +57,11 @@ def _find_job(client: Any, project_id: str) -> Any | None:
     return next((job for job in jobs if job.name == job_name()), None)
 
 
-def _runtime(client: Any, project_id: str) -> str:
+def _runtime() -> str:
     configured = os.environ.get("HELIOS_CRAWL_JOB_RUNTIME")
-    if configured:
-        return configured
-    applications = client.list_applications(project_id, page_size=200).applications or []
-    runtime = next((a.runtime_identifier for a in applications if a.script == API_SCRIPT), None)
-    if not runtime:
-        raise WorkbenchUnavailable(
-            "cannot tell which runtime the crawl Job should use; set HELIOS_CRAWL_JOB_RUNTIME"
-        )
-    return runtime
+    if not configured:
+        raise WorkbenchUnavailable("cannot tell which runtime the crawl Job should use; set HELIOS_CRAWL_JOB_RUNTIME")
+    return configured
 
 
 def ensure_job(client: Any, project_id: str) -> Any:
@@ -85,7 +79,7 @@ def ensure_job(client: Any, project_id: str) -> Any:
             "kernel": "python3",
             "cpu": float(os.environ.get("HELIOS_CRAWL_JOB_CPU", "4")),
             "memory": float(os.environ.get("HELIOS_CRAWL_JOB_MEMORY", "16")),
-            "runtime_identifier": _runtime(client, project_id),
+            "runtime_identifier": _runtime(),
         },
         project_id,
     )
@@ -118,7 +112,6 @@ def launch_view(run: Any) -> dict[str, Any]:
         "active": not status.upper().endswith(FINISHED_SUFFIXES),
         "created_at": _time(getattr(run, "created_at", None)),
         "finished_at": _time(getattr(run, "finished_at", None)),
-        "source_id": environment.get("HELIOS_CRAWL_SOURCE") or None,
         "dataset_id": environment.get("HELIOS_CRAWL_DATASET") or None,
         "full": environment.get("HELIOS_CRAWL_FULL") == "1",
         "requested_by": environment.get("HELIOS_CRAWL_REQUESTED_BY") or None,
@@ -140,8 +133,7 @@ def launch(
     client: Any,
     project_id: str,
     *,
-    source_id: str | None,
-    dataset_id: str | None,
+    dataset_id: str,
     full: bool,
     requested_by: str,
     note: str | None = None,
@@ -151,8 +143,7 @@ def launch(
     environment = {
         "HELIOS_CRAWL_REQUESTED_BY": requested_by,
         "HELIOS_CRAWL_FULL": "1" if full else "0",
-        **({"HELIOS_CRAWL_SOURCE": source_id} if source_id else {}),
-        **({"HELIOS_CRAWL_DATASET": dataset_id} if dataset_id else {}),
+        "HELIOS_CRAWL_DATASET": dataset_id,
         **({"HELIOS_CRAWL_NOTE": note} if note else {}),
         **({"HELIOS_CRAWL_STRATEGY": strategy} if strategy != "deterministic" else {}),
     }
@@ -165,7 +156,6 @@ def launch(
     # The create response may not echo the environment back.
     return {
         **view,
-        "source_id": source_id,
         "dataset_id": dataset_id,
         "full": full,
         "requested_by": requested_by,

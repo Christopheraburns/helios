@@ -32,33 +32,33 @@ def test_defaults_live_in_the_user_data_directory():
     assert s.data_dir == root
     assert s.artifacts_dir == root
     assert s.runs_dir == root / "runs"
-    assert s.metadata_db == root / "state" / "helios.db"
     assert s.evidence.index == root / "state" / "evidence.lance"
     assert s.connections == {} and s.catalogs == {} and s.llm.provider is None
-    assert s.sqlite_journal_mode == "DELETE" and s.audit_retention_days == 30
+    assert s.llm.timeout_seconds == 30
 
 
 def test_paths_follow_data_dir_unless_set(monkeypatch, tmp_path):
     monkeypatch.setenv("HELIOS_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("HELIOS_RUNS_DIR", str(tmp_path / "elsewhere"))
     s = Settings()
-    assert s.metadata_db == tmp_path / "data" / "state" / "helios.db"
+    assert s.artifacts_dir == tmp_path / "data"
+    assert s.evidence.index == tmp_path / "data" / "state" / "evidence.lance"
     assert s.runs_dir == tmp_path / "elsewhere"
 
 
 def test_resolution_order(monkeypatch, tmp_path):
     (tmp_path / "helios.toml").write_text(
-        'sqlite_journal_mode = "TRUNCATE"\naudit_retention_days = 10\nruns_dir = "/file"\n'
-        'data_dir = "/file-data"\n'
+        'artifacts_dir = "/file-artifacts"\nruns_dir = "/file"\ndata_dir = "/file-data"\n'
+        '[llm]\ntimeout_seconds = 10\n'
     )
     monkeypatch.setenv("HELIOS_ROOT", "/conventional")   # conventional environment
     monkeypatch.setenv("HELIOS_RUNS_DIR", "/env")         # HELIOS_* environment
-    monkeypatch.setenv("HELIOS_AUDIT_RETENTION_DAYS", "20")
-    s = Settings(audit_retention_days=40)                  # argument
-    assert s.audit_retention_days == 40          # argument beats HELIOS_*
+    monkeypatch.setenv("HELIOS_LLM__TIMEOUT_SECONDS", "20")
+    s = Settings(llm={"timeout_seconds": 40})            # argument
+    assert s.llm.timeout_seconds == 40           # argument beats HELIOS_*
     assert s.runs_dir == Path("/env")            # HELIOS_* beats the file
     assert s.data_dir == Path("/conventional")   # conventional beats the file
-    assert s.sqlite_journal_mode == "TRUNCATE"   # file beats the default
+    assert s.artifacts_dir == Path("/file-artifacts")   # file beats the default
 
 
 def test_core_reads_no_workbench_variables(monkeypatch):
@@ -81,23 +81,23 @@ def test_a_profile_source_sits_between_the_environment_and_the_config_file(monke
             return None, field_name, False
 
         def __call__(self):
-            return {"data_dir": "/profile", "audit_retention_days": 7, "connections": {"default": {"engine": "duckdb"}}}
+            return {"data_dir": "/profile", "runs_dir": "/profile-runs", "connections": {"default": {"engine": "duckdb"}}}
 
     class ProfileSettings(Settings):
         @classmethod
         def profile_sources(cls, settings_cls):
             return (Profile(settings_cls),)
 
-    Path("helios.toml").write_text('audit_retention_days = 99\nsqlite_journal_mode = "WAL"\n')
+    Path("helios.toml").write_text('runs_dir = "/file-runs"\nartifacts_dir = "/file-artifacts"\n')
     monkeypatch.setenv("HELIOS_ROOT", "/root")                                 # conventional beats the profile
     monkeypatch.setenv("HELIOS_CONNECTIONS__DEFAULT__PATH", "/x.duckdb")       # HELIOS_* merges into it
     s = ProfileSettings()
     assert s.data_dir == Path("/root")
-    assert s.audit_retention_days == 7                                          # the profile beats the file
-    assert s.sqlite_journal_mode == "WAL"                                       # the file still applies
+    assert s.runs_dir == Path("/profile-runs")                                  # the profile beats the file
+    assert s.artifacts_dir == Path("/file-artifacts")                           # the file still applies
     assert (s.connections["default"].engine, s.connections["default"].options) == ("duckdb", {"path": "/x.duckdb"})
     monkeypatch.delenv("HELIOS_CONNECTIONS__DEFAULT__PATH")
-    assert Settings().audit_retention_days == 99                                # plain Settings has no profile
+    assert Settings().runs_dir == Path("/file-runs")                            # plain Settings has no profile
 
 
 def test_connections_of_any_engine_from_a_file(tmp_path):
@@ -165,16 +165,21 @@ def test_unrelated_helios_variables_are_ignored(monkeypatch):
     Settings()
 
 
-@pytest.mark.parametrize(("raw", "days"), [("45", 45), ("0", 1), ("99999", 3650), ("soon", 30)])
-def test_audit_retention_is_clamped_like_before(monkeypatch, raw, days):
-    monkeypatch.setenv("HELIOS_AUDIT_RETENTION_DAYS", raw)
-    assert Settings().audit_retention_days == days
+def test_the_old_consoles_backend_settings_are_not_core_settings(monkeypatch, tmp_path):
+    """Its SQLite metadata database, journal mode and audit retention left core (burndown
+    8.3): their variables are ignored, and in a config file they are unknown keys."""
+    monkeypatch.setenv("HELIOS_METADATA_DB", "/var/lib/helios.db")
+    monkeypatch.setenv("HELIOS_SQLITE_JOURNAL_MODE", "WAL")
+    monkeypatch.setenv("HELIOS_AUDIT_RETENTION_DAYS", "90")
+    s = Settings()
+    assert not {"metadata_db", "sqlite_journal_mode", "audit_retention_days"} & set(type(s).model_fields)
+    for line in ('metadata_db = "m.db"', 'sqlite_journal_mode = "WAL"', "audit_retention_days = 9"):
+        (tmp_path / "helios.toml").write_text(line + "\n")
+        with pytest.raises(ValidationError):
+            Settings()
 
 
-def test_journal_mode_and_timeout_are_validated():
-    assert Settings(sqlite_journal_mode="wal").sqlite_journal_mode == "WAL"
-    with pytest.raises(ValidationError):
-        Settings(sqlite_journal_mode="MEMORY")
+def test_the_llm_timeout_is_validated():
     with pytest.raises(ValidationError):
         Settings(llm={"timeout_seconds": 0})
 

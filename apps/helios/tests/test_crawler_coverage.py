@@ -1,6 +1,5 @@
 """Coverage signals (CG-10): what a crawl could not explain, without ground truth."""
 
-import pytest
 from apps.helios.crawler import coverage
 from apps.helios.crawler.crawl import crawl
 from crawler_samples import RETAIL_SETTINGS
@@ -116,28 +115,3 @@ def test_only_the_commonest_examples_are_kept_and_a_mention_covers_its_text():
                             surface_form="ORD-4410", locator={}, extractor="pattern", start_offset=6, end_offset=14)
     counts, rows = coverage.measure(run, [covered], [mention], [], RETAIL_SETTINGS)
     assert rows == [] and counts["unmatched_identifiers"] == 0 and counts["segments_without_mentions"] == 0
-
-
-@pytest.fixture
-def client(monkeypatch):
-    from apps.helios.console import crawler, ontology
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    def make(index):
-        monkeypatch.setitem(ontology._index, "store", index)
-        app = FastAPI()
-        app.include_router(crawler.crawler_router)
-        return TestClient(app)
-
-    return make
-
-
-def test_the_run_detail_carries_the_examples(tmp_path, warehouse, gazetteer, client):  # noqa: F811
-    index, run, _ = _crawl(tmp_path, warehouse, gazetteer, _without(patterns={"return_authorization"}))
-    detail = client(index).get(f"/api/v1/crawler/runs/{run.crawl_run_id}").json()
-    shapes = [c for c in detail["coverage"] if c["signal"] == "unmatched_identifier"]
-    assert shapes[0]["count"] >= shapes[-1]["count"]  # commonest first
-    assert any(c["value"] == "AAA-9999999" and c["example"].startswith("RMA-") for c in shapes)
-    assert detail["counts"]["unmatched_identifiers"] == run.counts["unmatched_identifiers"]
-    assert detail["mapping"] is None  # this test crawl was not given one to record

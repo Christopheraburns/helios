@@ -88,6 +88,9 @@ def test_the_legacy_impala_user_variables_are_not_credentials(monkeypatch):
 # Parity: in the environments Helios runs in today, the stores and clients built from
 # Settings resolve exactly what the code before Settings resolved. EXPECTED was
 # recorded by running that code (commit ef2b6f5 plus 1.3) in each environment.
+# The old console's metadata database and audit retention left Settings in 8.3, so
+# their recorded values are no longer asserted; their variables stay in the
+# environments above, where Settings now ignores them.
 ENVIRONMENTS = {
     "workbench": {
         "CDSW_PROJECT_DIR": "/home/cdsw",
@@ -130,11 +133,10 @@ ENVIRONMENTS = {
 }
 
 
-EXPECTED = {'workbench': {'metadata_db': '/home/cdsw/helios/state/helios.db',
+EXPECTED = {'workbench': {
                'runs_dir': '/home/cdsw/helios/runs',
                'artifacts_dir': '/home/cdsw/helios',
                'evidence_index': '/home/cdsw/helios/state/evidence.lance',
-               'audit_retention_days': 90,
                'impala': ['vw.example.com',
                           443,
                           'svc-helios',
@@ -144,35 +146,31 @@ EXPECTED = {'workbench': {'metadata_db': '/home/cdsw/helios/state/helios.db',
                           'impersonate'],
                'atlas': ['https://dl.example.com/atlas/api/atlas/v2', 'atlas', 'pw', False],
                'llm': ['openai', 'llama', 'jwt', 'https://caii.example.com/v1', 30.0]},
- 'workbench-without-project-dir': {'metadata_db': '/home/cdsw/helios/state/helios.db',
+ 'workbench-without-project-dir': {
                                    'runs_dir': '/home/cdsw/helios/runs',
                                    'artifacts_dir': '/home/cdsw/helios',
                                    'evidence_index': '/home/cdsw/helios/state/evidence.lance',
-                                   'audit_retention_days': 30,
                                    'impala': None,
                                    'atlas': None,
                                    'llm': None},
- 'local': {'metadata_db': '/var/lib/helios.db',
+ 'local': {
            'runs_dir': '/var/runs',
            'artifacts_dir': '/srv/helios',
            'evidence_index': '/var/evidence.lance',
-           'audit_retention_days': 30,
            'impala': ['vw.example.com', 28000, 'me', 'pw', 'tpcds', 'cliservice', 'service'],
            'atlas': None,
            'llm': ['anthropic', 'claude-sonnet-5', 'sk-ant', None, 45.0]},
- 'mistral': {'metadata_db': '/srv/helios/state/helios.db',
+ 'mistral': {
              'runs_dir': '/srv/helios/runs',
              'artifacts_dir': '/srv/helios',
              'evidence_index': '/srv/helios/state/evidence.lance',
-             'audit_retention_days': 30,
              'impala': None,
              'atlas': None,
              'llm': ['mistral', 'mistral-large', 'mk', 'https://api.mistral.ai/v1', 30.0]},
- 'provider-without-key': {'metadata_db': '/srv/helios/state/helios.db',
+ 'provider-without-key': {
                           'runs_dir': '/srv/helios/runs',
                           'artifacts_dir': '/srv/helios',
                           'evidence_index': '/srv/helios/state/evidence.lance',
-                          'audit_retention_days': 30,
                           'impala': None,
                           'atlas': None,
                           'llm': None}}
@@ -188,11 +186,9 @@ def test_parity_with_the_code_before_settings(monkeypatch, name):
     s = WorkbenchSettings()
     expected = EXPECTED[name]
 
-    assert str(s.metadata_db) == expected["metadata_db"]
     assert RunStore.from_settings(s).runs_dir == expected["runs_dir"]
     assert ArtifactStore.from_settings(s).root == Path(expected["artifacts_dir"])
     assert str(s.evidence.index) == expected["evidence_index"]
-    assert s.audit_retention_days == expected["audit_retention_days"]
 
     if expected["impala"] is None:
         assert "default" not in s.connections

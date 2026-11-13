@@ -141,42 +141,6 @@ def test_empty_settings_with_a_mapping_find_only_what_the_dictionary_names(
     assert empty.counts["cases"] == 4 and full.counts["cases"] == 4  # four readable documents, unlinked
 
 
-@pytest.fixture
-def client(monkeypatch):
-    from apps.helios.console import crawler, ontology
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    index = duckdb_index_store()
-    index.ensure_tables()
-    monkeypatch.setitem(ontology._index, "store", index)
-    monkeypatch.setattr(ontology, "_actor", lambda request: "cloudera-workbench:alice")
-    app = FastAPI()
-    app.include_router(crawler.crawler_router)
-    return TestClient(app)
-
-
-def test_the_api_offers_presets_and_says_when_nothing_is_configured(client):
-    current = client.get("/api/v1/crawler/settings").json()
-    assert current["using_defaults"] and current["empty"] is True
-    assert current["settings"]["patterns"] == []
-    assert client.get("/api/v1/crawler/settings/defaults").json()["settings"] == current["settings"]
-
-    [listed] = client.get("/api/v1/crawler/settings/presets").json()
-    assert (listed["name"], listed["title"]) == ("retail-returns", "Retail returns")
-    preset = client.get("/api/v1/crawler/settings/presets/retail-returns").json()
-    assert preset["settings"] == RETAIL_SETTINGS.model_dump(mode="json")
-    assert preset["content_hash"] == RETAIL_SETTINGS.content_hash()
-    assert client.get("/api/v1/crawler/settings/presets/unknown").status_code == 404
-
-    saved = client.post("/api/v1/crawler/settings", json={"settings": preset["settings"], "note": "preset"})
-    assert saved.status_code in (200, 201)
-    version = saved.json()["version"]
-    assert client.post(f"/api/v1/crawler/settings/{version}:activate").status_code == 200
-    active = client.get("/api/v1/crawler/settings").json()
-    assert active["empty"] is False and active["active_version"] == version
-
-
 # --- CG-2 and CG-3: mention and identity rules are settings, not code ---------------
 
 

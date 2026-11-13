@@ -19,7 +19,6 @@ environment and the config file once.
 """
 from __future__ import annotations
 
-import logging
 import math
 import os
 import tomllib
@@ -38,12 +37,8 @@ from pydantic_settings import (
 
 from helios_cortex.caller import IdentityMode
 
-LOGGER = logging.getLogger(__name__)
-
-JournalMode = Literal["DELETE", "TRUNCATE", "PERSIST", "WAL"]
 LLMProvider = Literal["anthropic", "openai", "mistral"]
 
-DEFAULT_AUDIT_RETENTION_DAYS = 30
 DEFAULT_LLM_MODELS = {"anthropic": "claude-sonnet-5", "mistral": "mistral-small-latest", "openai": ""}
 DEFAULT_MISTRAL_BASE_URL = "https://api.mistral.ai/v1"
 DEFAULT = "default"  # the connection / catalog used when nothing names one
@@ -164,17 +159,14 @@ class Settings(BaseSettings):
     )
 
     # Where Helios keeps its files. The others default to places inside it:
-    # <data_dir>/models (artifacts), <data_dir>/runs, <data_dir>/state/helios.db,
+    # <data_dir> (artifacts), <data_dir>/runs, <data_dir>/state/evidence.lance,
     # and the model registry at sqlite:///<data_dir>/state/registry.db.
     data_dir: Path = Field(default_factory=lambda: platformdirs.user_data_path("helios"))
     artifacts_dir: Path | None = None
     runs_dir: Path | None = None
-    metadata_db: Path | None = None
     # The model registry's database (helios_cortex.registry.SqlRegistry), any SQLAlchemy URL.
     # Secret because a URL may carry a password.
     registry_url: SecretStr | None = None
-    sqlite_journal_mode: JournalMode = "DELETE"
-    audit_retention_days: int = DEFAULT_AUDIT_RETENTION_DAYS
 
     connections: dict[str, ConnectionSettings] = {}
     catalogs: dict[str, CatalogSettings] = {}
@@ -208,27 +200,12 @@ class Settings(BaseSettings):
         finally:
             _config_file.reset(token)
 
-    @field_validator("sqlite_journal_mode", mode="before")
-    @classmethod
-    def _upper(cls, value: Any) -> Any:
-        return value.strip().upper() if isinstance(value, str) else value
-
-    @field_validator("audit_retention_days", mode="before")
-    @classmethod
-    def _clamp_retention(cls, value: Any) -> int:
-        try:
-            return min(max(int(value), 1), 3650)
-        except (TypeError, ValueError):
-            LOGGER.warning("invalid audit_retention_days %r; using %d", value, DEFAULT_AUDIT_RETENTION_DAYS)
-            return DEFAULT_AUDIT_RETENTION_DAYS
-
     @model_validator(mode="after")
     def _derived_paths(self) -> Settings:
         state = self.data_dir / "state"
         defaults = {
             "artifacts_dir": self.data_dir,
             "runs_dir": self.data_dir / "runs",
-            "metadata_db": state / "helios.db",
         }
         updates: dict[str, Any] = {k: v for k, v in defaults.items() if getattr(self, k) is None}
         if self.registry_url is None:
@@ -285,14 +262,14 @@ def _config_file_source(settings_cls: type[BaseSettings]) -> PydanticBaseSetting
     return InitSettingsSource(settings_cls, init_kwargs=values)
 
 
-FILE_SETTINGS = ("data_dir", "artifacts_dir", "runs_dir", "metadata_db")
+FILE_SETTINGS = ("data_dir", "artifacts_dir", "runs_dir")
 
 
 def anchored(values: dict[str, Any], base: Path) -> dict[str, Any]:
     """A config file's values with its relative file paths made relative to the file's own
     directory, so a file means the same wherever the process starts (an agent launching
     ``helios mcp --config /project/helios.toml`` from elsewhere, a notebook in a subfolder).
-    The paths: ``data_dir``, ``artifacts_dir``, ``runs_dir``, ``metadata_db``,
+    The paths: ``data_dir``, ``artifacts_dir``, ``runs_dir``,
     ``evidence.index``, each connection's ``path`` (DuckDB's database file), a relative
     SQLite ``registry_url`` and a local ``artifact_storage.location``. ``~`` expands.
     Environment variables and values passed in code keep meaning the working directory."""

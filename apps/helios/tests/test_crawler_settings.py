@@ -1,21 +1,15 @@
 """CR-0e: crawler settings, validated, versioned in helios_index, edited by API."""
 
 import itertools
-from pathlib import Path
 
 import pytest
-import yaml
 from helios_cortex._pending.crawler.settings import CrawlerSettings, ontology_problems
 from helios_cortex._pending import crawler_settings as versions
-from helios_cortex.index import ontology_versions, runs
+from helios_cortex.index import runs
 from helios_cortex.index.store import duckdb_index_store
-from helios_cortex.ontology.mapping import load_mappings
-from helios_cortex.ontology.parser import parse
 from pydantic import ValidationError
 from crawler_samples import RETAIL_SETTINGS
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-EXTENSION = REPO_ROOT / "ontology/customers/example-tenant/extension.yaml"
 
 
 @pytest.fixture
@@ -174,114 +168,3 @@ def test_crawl_runs_record_the_settings_version_and_hash(index):
 
 
 # --- the API --------------------------------------------------------------------------
-
-
-@pytest.fixture
-def client(index, monkeypatch):
-    from apps.helios.console import crawler, ontology
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    monkeypatch.setitem(ontology._index, "store", index)
-    monkeypatch.setattr(ontology, "_actor", lambda request: "cloudera-workbench:alice")
-    app = FastAPI()
-    app.include_router(crawler.crawler_router)
-    return TestClient(app)
-
-
-def _activate_ontology(index):
-    graph = parse(
-        str(EXTENSION),
-        version="0.2.0",
-        mappings=load_mappings(REPO_ROOT / "ontology/mappings/ossie"),
-        ossie_model=yaml.safe_load((REPO_ROOT / "models/published/tpcds.ossie.yaml").read_text()),
-    ).graph
-    ontology_versions.publish(index, graph, "x.yaml", "alice")
-    ontology_versions.activate(index, "0.2.0", "alice")
-
-
-def test_api_shows_defaults_until_a_version_is_activated(client):
-    body = client.get("/api/v1/crawler/settings").json()
-    assert body["using_defaults"] and body["active_version"] is None and body["versions"] == []
-    assert body["settings"] == client.get("/api/v1/crawler/settings/defaults").json()["settings"]
-
-
-def test_api_saves_validates_and_activates(client, index):
-    _activate_ontology(index)
-    doc = _doc()
-    doc["analyzers"]["pdf"]["max_pages"] = 10
-    saved = client.post("/api/v1/crawler/settings", json={"settings": doc, "note": "fewer pages"})
-    assert saved.status_code == 200, saved.text
-    assert (
-        saved.json()["version"] == 1 and saved.json()["created"] and saved.json()["warnings"] == []
-    )
-
-    bad = _doc(patterns=[{"name": "x", "regex": "(", "kind": "value"}])
-    rejected = client.post("/api/v1/crawler/settings", json={"settings": bad})
-    assert rejected.status_code == 422
-    assert any("regular expression" in p for p in rejected.json()["detail"]["problems"])
-
-    unknown = _doc()
-    unknown["claims"]["cues"]["TELEPORTED"] = ["beamed"]
-    rejected = client.post("/api/v1/crawler/settings", json={"settings": unknown})
-    assert rejected.status_code == 422
-    assert rejected.json()["detail"]["problems"] == ["unknown claim predicate 'TELEPORTED'"]
-
-    assert client.post("/api/v1/crawler/settings/9:activate").status_code == 404
-    assert client.post("/api/v1/crawler/settings/1:activate").status_code == 200
-    body = client.get("/api/v1/crawler/settings").json()
-    assert body["active_version"] == 1 and body["settings"]["analyzers"]["pdf"]["max_pages"] == 10
-    assert body["versions"][0]["active"] is True
-    assert client.get("/api/v1/crawler/settings/versions/1").json()["note"] == "fewer pages"
-
-
-def test_api_warns_when_no_ontology_is_active(client):
-    saved = client.post("/api/v1/crawler/settings", json={"settings": _doc()})
-    assert saved.status_code == 200
-    assert "not checked" in saved.json()["warnings"][0]
-
-
-def test_api_lists_runs_and_shows_one_with_its_assets(client, index):
-    from helios_cortex.index.records import AssetRecord
-
-    run = runs.start(
-        index,
-        connector="helios_ds_s3",
-        source="ds1",
-        ontology_version="0.2.0",
-        crawler_version="0.1.0",
-        actor="srv",
-        settings_version=None,
-        settings_hash="h",
-    )
-    index.append(
-        "helios_index.assets",
-        [
-            AssetRecord(
-                crawl_run_id=run.crawl_run_id,
-                asset_id=a,
-                asset_version_id="v",
-                connector="helios_ds_s3",
-                source="ds1",
-                ontology_class=c,
-                mime_type="application/pdf",
-                source_locator={"key": f"k/{a}"},
-                size_bytes=1,
-                ontology_version="0.2.0",
-                status=s,
-            )
-            for a, c, s in [("a1", "Document", "fetched"), ("a2", "Message", "fetch_failed")]
-        ],
-    )
-    runs.finish(index, run, {"listed": 2, "fetched": 1, "fetch_failed": 1})
-    [listed] = client.get("/api/v1/crawler/runs").json()
-    assert listed["status"] == "SUCCEEDED" and listed["counts"]["listed"] == 2
-    assert client.get("/api/v1/crawler/runs", params={"source": "other"}).json() == []
-    detail = client.get(f"/api/v1/crawler/runs/{run.crawl_run_id}").json()
-    assert detail["asset_counts"] == {
-        "by_status": {"fetched": 1, "fetch_failed": 1},
-        "by_class": {"Document": 1, "Message": 1},
-    }
-    assert [a["asset_id"] for a in detail["assets"]] == ["a1", "a2"]
-    assert detail["assets"][1]["object_key"] == "k/a2"
-    assert client.get("/api/v1/crawler/runs/nope").status_code == 404
