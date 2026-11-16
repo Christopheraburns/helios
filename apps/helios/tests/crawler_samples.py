@@ -2,6 +2,7 @@
 
 import io
 import json
+from pathlib import Path
 
 REPORT_LINES = [
     "Helios Retail",
@@ -97,11 +98,12 @@ def chat_bytes(schema: str = "helios-ds/chat-thread/1.0") -> bytes:
     ).encode()
 
 
-# The rules the sample documents were written for: the shipped "retail returns"
-# preset (until settings schema 2, the crawler's built-in defaults).
+# The rules the sample documents were written for: the "retail returns" example preset
+# (until settings schema 2, the crawler's built-in defaults), in examples/crawler-presets.
 from helios_cortex._pending.crawler.settings import load_preset  # noqa: E402
 
-RETAIL_SETTINGS = load_preset("retail-returns")
+PRESETS = Path(__file__).resolve().parents[3] / "examples/crawler-presets"
+RETAIL_SETTINGS = load_preset(PRESETS / "retail-returns.yaml")
 
 
 COVERAGE_COUNTS = {

@@ -11,10 +11,11 @@ not here: they belong to the published ontology mapping.
 
 **Schema 2 (CG-1): the engine has no rules of its own.** ``CrawlerSettings()`` is
 an empty document: no patterns, labels, phrases, case identifiers or claim cues.
-Rules for a kind of data come from a *preset* (``presets/*.yaml``), which is a
-complete settings document a user loads, edits and saves as a version. Until
-schema 2 one such set was built in; a stored schema 1 document is read as that
-set plus whatever the document itself says.
+Rules for a kind of data come from a *preset*, a complete settings document a user
+loads (``load_preset(path)``), edits and saves as a version. None ships in the library:
+the retail-returns example is in the repository's ``examples/crawler-presets``
+(burndown 9.3). Until schema 2 one such set was built in; a stored schema 1 document is
+read as that set (``schema_1_defaults.yaml``, frozen) plus whatever the document itself says.
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 SCHEMA_VERSION: Final = "2"
-PRESETS = Path(__file__).parent / "presets"
+SCHEMA_1_DEFAULTS = Path(__file__).parent / "schema_1_defaults.yaml"
 
 
 class _Model(BaseModel):
@@ -531,36 +532,38 @@ def ontology_problems(
 
 
 # --- presets ------------------------------------------------------------------------
-# Rules for a kind of data, shipped as data. The engine names none of them.
+# Rules for a kind of data, kept as data outside the library. The engine names none of them.
 
 
-@lru_cache(maxsize=1)
-def _preset_index() -> dict[str, Any]:
-    return yaml.safe_load((PRESETS / "index.yaml").read_text()) or {}
-
-
-def presets() -> dict[str, dict[str, str]]:
-    """name -> {title, description} of each shipped preset."""
+def presets(directory: str | Path) -> dict[str, dict[str, str]]:
+    """name -> {title, description} of each preset ``directory``'s index.yaml lists and
+    the directory holds (as ``<name>.yaml``)."""
+    directory = Path(directory)
+    index = yaml.safe_load((directory / "index.yaml").read_text()) or {}
     return {
         name: {"title": str(info.get("title", name)), "description": str(info.get("description", ""))}
-        for name, info in sorted((_preset_index().get("presets") or {}).items())
-        if (PRESETS / f"{name}.yaml").is_file()
+        for name, info in sorted((index.get("presets") or {}).items())
+        if (directory / f"{name}.yaml").is_file()
     }
 
 
-def preset_document(name: str) -> dict[str, Any]:
-    if name not in presets():
-        raise KeyError(name)
-    return yaml.safe_load((PRESETS / f"{name}.yaml").read_text())
+def preset_document(path: str | Path) -> dict[str, Any]:
+    """The settings document in the preset file ``path``; FileNotFoundError when there is none."""
+    return yaml.safe_load(Path(path).read_text())
 
 
-def load_preset(name: str) -> CrawlerSettings:
-    return CrawlerSettings.model_validate(preset_document(name))
+def load_preset(path: str | Path) -> CrawlerSettings:
+    return CrawlerSettings.model_validate(preset_document(path))
+
+
+@lru_cache(maxsize=1)
+def _schema_1_defaults() -> dict[str, Any]:
+    return yaml.safe_load(SCHEMA_1_DEFAULTS.read_text())
 
 
 def schema_1_defaults() -> dict[str, Any]:
-    """The rules that were built in before schema 2, as a document."""
-    return dict(preset_document(str(_preset_index()["schema_1_defaults"])))
+    """The rules that were built in before schema 2, as a document (frozen)."""
+    return dict(_schema_1_defaults())
 
 
 EMPTY_SETTINGS = CrawlerSettings()

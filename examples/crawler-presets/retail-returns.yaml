@@ -4,8 +4,9 @@
 # built-in defaults; they are now one preset among others, and the engine's own
 # defaults are empty.
 #
-# A preset is a complete crawler settings document. Load it on the Crawler
-# page's Settings tab, edit it there, and save it as a version.
+# A preset is a complete crawler settings document: load it with
+# helios_cortex._pending.crawler.settings.load_preset(path), adjust it, and save it as a
+# version (crawler_settings.save). An example, not part of any package (burndown 9.3).
 schema_version: '2'
 analyzers:
   pdf:

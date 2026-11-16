@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from apps.helios.crawler.crawl import crawl
-from crawler_samples import RETAIL_SETTINGS, found
+from crawler_samples import PRESETS, RETAIL_SETTINGS, found
 from helios_cortex._pending.crawler.settings import (
     EMPTY_SETTINGS,
     SCHEMA_VERSION,
@@ -13,6 +13,7 @@ from helios_cortex._pending.crawler.settings import (
     load_preset,
     preset_document,
     presets,
+    schema_1_defaults,
 )
 from helios_cortex._pending import crawler_settings as versions
 from helios_cortex.index.store import duckdb_index_store
@@ -33,8 +34,8 @@ def test_the_engine_default_is_an_empty_document():
 
 
 def test_the_preset_is_exactly_the_rules_that_used_to_be_built_in():
-    assert presets()["retail-returns"]["title"] == "Retail returns"
-    assert RETAIL_SETTINGS == load_preset("retail-returns")
+    assert presets(PRESETS)["retail-returns"]["title"] == "Retail returns"
+    assert RETAIL_SETTINGS == load_preset(PRESETS / "retail-returns.yaml")
     # Every section schema 1 had is unchanged; what was in code then is now beside it.
     now = RETAIL_SETTINGS.model_dump(mode="json")
     for section, before in SCHEMA_1.items():
@@ -58,9 +59,19 @@ def test_the_preset_is_exactly_the_rules_that_used_to_be_built_in():
         "class_cues", "cue_window", "header_rules", "dictionary", "date_formats", "about", "resolution",
         "evaluation",
     }
-    assert preset_document("retail-returns")["schema_version"] == "2"
-    with pytest.raises(KeyError):
-        load_preset("no-such-preset")
+    assert preset_document(PRESETS / "retail-returns.yaml")["schema_version"] == "2"
+    with pytest.raises(FileNotFoundError):
+        load_preset(PRESETS / "no-such-preset.yaml")
+
+
+def test_no_preset_ships_in_the_library_but_the_schema_1_rules_stay_frozen_there():
+    """Presets are example data (9.3); the library keeps only what reading old documents needs."""
+    import helios_cortex._pending.crawler as crawler
+
+    package = Path(crawler.__file__).parent
+    assert not (package / "presets").exists() and not list(package.glob("*preset*"))
+    # Frozen: the example preset may evolve, the rules a schema 1 document was saved against may not.
+    assert schema_1_defaults() == preset_document(PRESETS / "retail-returns.yaml")
 
 
 def test_a_stored_schema_1_document_is_read_as_those_rules_plus_its_own_sections():

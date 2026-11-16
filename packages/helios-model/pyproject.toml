@@ -4,14 +4,34 @@ build-backend = "hatchling.build"
 
 [project]
 name = "helios-model"
-version = "0.1.0"
+version = "0.2.0"
 description = "Helios model discovery: harvest, profile, propose and publish semantic models"
+readme = "README.md"
 authors = [{name = "Helios Team"}]
 license = "Apache-2.0"
 requires-python = ">=3.11"
-dependencies = [
-    "helios-cortex",
+keywords = ["semantic model", "data discovery", "ossie", "llm", "metadata"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Typing :: Typed",
 ]
+dependencies = [
+    "helios-cortex>=0.2.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/christopheraburns/helios"
+Documentation = "https://github.com/christopheraburns/helios/tree/main/packages/helios-model#readme"
+Repository = "https://github.com/christopheraburns/helios"
+Issues = "https://github.com/christopheraburns/helios/issues"
 
 [project.entry-points."helios.commands"]
 harvest = "helios_model.commands:HarvestCommand"

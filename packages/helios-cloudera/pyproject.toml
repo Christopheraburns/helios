@@ -4,17 +4,37 @@ build-backend = "hatchling.build"
 
 [project]
 name = "helios-cloudera"
-version = "0.1.0"
+version = "0.2.0"
 description = "Helios plugins for Cloudera: the Impala engine and the Atlas catalog"
+readme = "README.md"
 authors = [{name = "Helios Team"}]
 license = "Apache-2.0"
 requires-python = ">=3.11"
+keywords = ["cloudera", "impala", "atlas", "semantic layer"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Typing :: Typed",
+]
 dependencies = [
-    "helios-cortex",
+    "helios-cortex>=0.2.0",
     "impyla>=0.20.0",
     "pydantic-settings>=2.6",
     "requests>=2.32.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/christopheraburns/helios"
+Documentation = "https://github.com/christopheraburns/helios/tree/main/packages/helios-cloudera#readme"
+Repository = "https://github.com/christopheraburns/helios"
+Issues = "https://github.com/christopheraburns/helios/issues"
 
 [project.entry-points."helios.engines"]
 impala = "helios_cloudera.impala:ImpalaEngine"

@@ -4,37 +4,58 @@ build-backend = "hatchling.build"
 
 [project]
 name = "helios-semantic"
-version = "0.1.0"
+version = "0.2.0"
 description = "Helios: build semantic models of your data and query them; the package a developer installs"
 readme = "README.md"
 authors = [{name = "Helios Team"}]
 license = "Apache-2.0"
 requires-python = ">=3.11"
+keywords = ["semantic layer", "semantic model", "text-to-sql", "ossie", "llm", "duckdb"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Typing :: Typed",
+]
 # The Helios libraries a developer needs on a laptop. The `helios` command comes with
 # helios-cortex; helios-model adds harvest/profile/propose/publish, helios-serve eval.
 dependencies = [
-    "helios-cortex",
-    "helios-model",
-    "helios-serve",
+    "helios-cortex>=0.2.0",
+    "helios-model>=0.2.0",
+    "helios-serve>=0.2.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/christopheraburns/helios"
+Documentation = "https://github.com/christopheraburns/helios/tree/main/packages/helios-semantic#readme"
+Repository = "https://github.com/christopheraburns/helios"
+Issues = "https://github.com/christopheraburns/helios/issues"
 
 [project.optional-dependencies]
 # Cloudera: the Impala engine, the Atlas catalog and the Workbench settings profile.
-cloudera = ["helios-cloudera"]
+cloudera = ["helios-cloudera>=0.2.0"]
 # An LLM provider, to propose models and run evaluations.
-llm = ["helios-cortex[llm]", "helios-serve[eval]"]
+llm = ["helios-cortex[llm]>=0.2.0", "helios-serve[eval]>=0.2.0"]
 # Databases and engines beyond DuckDB and SQLite.
-postgres = ["helios-cortex[postgres]"]
-trino = ["helios-cortex[trino]"]
+postgres = ["helios-cortex[postgres]>=0.2.0"]
+trino = ["helios-cortex[trino]>=0.2.0"]
 # Object storage for published models.
-s3 = ["helios-cortex[s3]"]
-azure = ["helios-cortex[azure]"]
-gcs = ["helios-cortex[gcs]"]
-ozone = ["helios-cortex[ozone]"]
+s3 = ["helios-cortex[s3]>=0.2.0"]
+azure = ["helios-cortex[azure]>=0.2.0"]
+gcs = ["helios-cortex[gcs]>=0.2.0"]
+ozone = ["helios-cortex[ozone]>=0.2.0"]
 # LinkML ontology parsing.
-ontology = ["helios-cortex[ontology]"]
+ontology = ["helios-cortex[ontology]>=0.2.0"]
+# helios mcp: the tools over MCP on stdio, for one developer's local agent.
+mcp = ["helios-mcp>=0.2.0"]
 # Everything above.
-all = ["helios-semantic[cloudera,llm,postgres,trino,s3,azure,gcs,ozone,ontology]"]
+all = ["helios-semantic[cloudera,llm,mcp,postgres,trino,s3,azure,gcs,ozone,ontology]"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/helios_semantic"]

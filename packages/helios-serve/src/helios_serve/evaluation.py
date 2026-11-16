@@ -18,9 +18,10 @@ without regard to row order, column-name case or value types. Path metrics (tool
 excess, invalid and redundant calls, recovery, grounding, tokens, time) say how it got
 there; ``aggregate`` sums them per variant.
 
-The built-in suite (``tpcds`` 1.0.0, for the TPC-DS sample model) ships in the package;
-a deployment's own suites live in ``<data_dir>/state/eval-suites``. ``helios eval`` is
-the command line.
+No suite ships in the package: a deployment's suites live in ``<data_dir>/state/eval-suites``
+(``save_suite``), or a suite is read from its file (``read_suite``). ``helios init --sample``
+writes one for the sample, and ``examples/eval`` in the repository holds the full TPC-DS
+suite (burndown 9.3). ``helios eval`` is the command line.
 """
 from __future__ import annotations
 
@@ -30,7 +31,6 @@ import time
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass, field
-from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -70,9 +70,6 @@ class EvaluationError(RuntimeError):
 
 
 # ---------------------------------------------------------------------------- suites
-BUILTIN_SUITES = files("helios_serve") / "suites"
-
-
 def suite_directory(settings: Settings) -> Path:
     """Where a deployment's own suites are kept."""
     return Path(settings.data_dir) / "state" / "eval-suites"
@@ -121,28 +118,15 @@ def read_suite(path: Path | str) -> dict[str, Any]:
     return document
 
 
-def _suite_documents(directory: Path | None) -> list[dict[str, Any]]:
-    texts = [p.read_text() for p in sorted(BUILTIN_SUITES.iterdir(), key=lambda p: p.name) if p.name.endswith(".json")]
-    if directory is not None and Path(directory).is_dir():
-        texts += [p.read_text() for p in sorted(Path(directory).glob("*.json"))]
-    documents = []
-    for text in texts:
-        document = json.loads(text)
-        validate_suite(document)
-        documents.append(document)
-    return documents
+def list_suites(directory: Path | None) -> list[dict[str, Any]]:
+    """The suites saved in ``directory`` (none when it does not exist), by id and version."""
+    if directory is None or not Path(directory).is_dir():
+        return []
+    return sorted((read_suite(path) for path in sorted(Path(directory).glob("*.json"))),
+                  key=lambda d: (d["id"], d["version"]))
 
 
-def list_suites(directory: Path | None = None) -> list[dict[str, Any]]:
-    """The built-in suites and those in ``directory``, by id and version; a built-in one
-    wins over a saved one with the same id and version."""
-    suites: dict[tuple[str, str], dict[str, Any]] = {}
-    for document in _suite_documents(directory):
-        suites.setdefault((document["id"], document["version"]), document)
-    return sorted(suites.values(), key=lambda d: (d["id"], d["version"]))
-
-
-def load_suite(suite_id: str = "tpcds", version: str | None = None, *,
+def load_suite(suite_id: str, version: str | None = None, *,
                directory: Path | None = None) -> dict[str, Any]:
     """The suite ``suite_id`` at ``version``, or its last version; LookupError when there is none."""
     matches = [d for d in list_suites(directory)

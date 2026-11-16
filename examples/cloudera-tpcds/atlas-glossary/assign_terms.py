@@ -9,7 +9,10 @@ Usage:
   python assign_terms.py tpcds_glossary_full.csv          # or tpcds_glossary_seed.csv
 Optional: DB=tpcds  COLUMN_TYPES="hive_column,iceberg_column"
 """
-import csv, os, sys, requests
+import csv
+import os
+import sys
+import requests
 
 BASE  = os.environ["ATLAS_BASE"].rstrip("/")
 AUTH  = (os.environ["ATLAS_USER"], os.environ["ATLAS_PASS"])
@@ -17,7 +20,9 @@ DB    = os.environ.get("DB", "tpcds")
 TYPES = os.environ.get("COLUMN_TYPES", "hive_column,iceberg_column").split(",")
 csv_path = sys.argv[1] if len(sys.argv) > 1 else "tpcds_glossary_full.csv"
 HERE = os.path.dirname(os.path.abspath(__file__))
-S = requests.Session(); S.auth = AUTH; S.verify = True
+S = requests.Session()
+S.auth = AUTH
+S.verify = True
 
 # --- 1. import glossary
 with open(csv_path, "rb") as f:
@@ -59,12 +64,18 @@ for term, cols in by_term.items():
     payload = []
     for tb, col in cols:
         guid, typ = find_column(tb, col)
-        if not guid:       missing.append(f"{tb}.{col}")
-        elif guid in already: skipped += 1
-        else:              payload.append({"guid": guid, "typeName": typ})
+        if not guid:
+            missing.append(f"{tb}.{col}")
+        elif guid in already:
+            skipped += 1
+        else:
+            payload.append({"guid": guid, "typeName": typ})
     if payload:
         r = S.post(f"{BASE}/glossary/terms/{guid_of[term]}/assignedEntities", json=payload)
-        if r.status_code in (200, 204): done += len(payload)
-        else: print(f"assign failed for '{term}': {r.status_code} {r.text[:200]}")
+        if r.status_code in (200, 204):
+            done += len(payload)
+        else:
+            print(f"assign failed for '{term}': {r.status_code} {r.text[:200]}")
 print(f"assigned {done} columns ({skipped} already assigned); {len(missing)} columns not found in Atlas")
-for m in missing[:20]: print("  missing:", m)
+for m in missing[:20]:
+    print("  missing:", m)

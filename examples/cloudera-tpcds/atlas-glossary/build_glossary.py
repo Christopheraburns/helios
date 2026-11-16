@@ -12,7 +12,8 @@ formula is stated it is the dsdgen pricing relationship; the two flagged as
 "verify" should be checked against dsdgen's pricing.c before being promoted to
 a governed metric.
 """
-import csv, os
+import csv
+import os
 
 GLOSSARY = "TPCDS Retail"
 OUT = os.path.dirname(os.path.abspath(__file__))
@@ -338,7 +339,8 @@ def ref(field):
 
 def write(path, terms):
     with open(path, "w", newline="") as f:
-        w = csv.writer(f); w.writerow(HDR)
+        w = csv.writer(f)
+        w.writerow(HDR)
         keep = {t["name"] for t in terms}
         for t in terms:
             # only keep relationships whose target is also in this file
@@ -351,7 +353,8 @@ write(os.path.join(OUT, "tpcds_glossary_full.csv"), T)
 write(os.path.join(OUT, "tpcds_glossary_seed.csv"), [t for t in T if t["tier"] == "seed"])
 
 with open(os.path.join(OUT, "tpcds_term_columns.csv"), "w", newline="") as f:
-    w = csv.writer(f); w.writerow(["term","table","column","tier"])
+    w = csv.writer(f)
+    w.writerow(["term","table","column","tier"])
     for t in T:
         for c in t["cols"]:
             tb, col = c.split(".")

@@ -13,7 +13,7 @@ PACKAGE = Path(__file__).resolve().parents[1]
 def test_the_package_reports_its_version():
     project = tomllib.loads((PACKAGE / "pyproject.toml").read_text())["project"]
     assert helios_model.__version__ == project["version"]
-    assert project["dependencies"] == ["helios-cortex"]
+    assert project["dependencies"] == ["helios-cortex>=0.2.0"]     # not PyPI's older 0.1.0 (9.4)
 
 
 def test_importing_it_loads_no_app_code_and_no_other_helios_package():

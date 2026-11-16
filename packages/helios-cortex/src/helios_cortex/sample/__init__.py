@@ -11,7 +11,8 @@ store's rate) so the metrics mean what they say.
 ``create(config)`` writes a starter ``helios.toml`` there with a project-local
 ``data_dir``, builds the warehouse its default connection names, and registers and
 publishes the model, as ``helios source add``, ``helios model add`` and ``helios publish``
-would have.
+would have. Beside it, ``sample-suite.json`` is an evaluation suite of questions the star
+can answer, for ``helios eval sample-suite.json`` (helios-serve).
 """
 from __future__ import annotations
 
@@ -27,6 +28,7 @@ from typing import Any
 
 MODEL_ID = "tpcds"
 DATA_SOURCE_ID = "warehouse"
+SUITE_FILE = "sample-suite.json"
 SEED = 9001
 STORE_SALES_ROWS = 60_000
 FIRST_DAY, LAST_DAY = date(1998, 1, 1), date(2002, 12, 31)
@@ -46,6 +48,7 @@ class Sample:
     tables: dict[str, int]                  # rows per table
     model_id: str
     revision_id: str
+    suite: Path                             # an evaluation suite for the sample
 
 
 def model_document() -> dict[str, Any]:
@@ -61,6 +64,11 @@ def table_columns() -> dict[str, list[tuple[str, str]]]:
     return {table: [(name, kind) for name, kind in columns] for table, columns in spec["tables"].items()}
 
 
+def suite_document() -> dict[str, Any]:
+    """The sample's evaluation suite: questions the star can answer, with their reference SQL."""
+    return json.loads(files(__package__).joinpath("tpcds_star.suite.json").read_text())
+
+
 def create(config: Path, *, force: bool = False) -> Sample:
     """Write ``config`` (a starter helios.toml for the sample), build the DuckDB warehouse
     its default connection names, and register and publish the TPC-DS model. Refuses to
@@ -69,7 +77,7 @@ def create(config: Path, *, force: bool = False) -> Sample:
     from helios_cortex.settings import Settings
 
     config = Path(config)
-    for existing in (config, config.parent / "warehouse.duckdb"):   # the warehouse the starter file names
+    for existing in (config, config.parent / "warehouse.duckdb", config.parent / SUITE_FILE):
         if existing.exists() and not force:
             raise SampleError(f"{existing} already exists; pass --force to replace it")
     config.parent.mkdir(parents=True, exist_ok=True)
@@ -85,12 +93,15 @@ def create(config: Path, *, force: bool = False) -> Sample:
         warehouse.unlink()
     tables = build_warehouse(warehouse)
     revision_id = publish(settings)
-    return Sample(config, warehouse, tables, MODEL_ID, revision_id)
+    suite = config.parent / SUITE_FILE
+    suite.write_text(json.dumps(suite_document(), indent=1) + "\n")
+    return Sample(config, warehouse, tables, MODEL_ID, revision_id, suite)
 
 
 SAMPLE_HEADER = """\
 # A sample project (helios init --sample): the TPC-DS store-sales star in
-# warehouse.duckdb, and its semantic model, published as "tpcds", in helios-data/.
+# warehouse.duckdb, its semantic model, published as "tpcds", in helios-data/, and
+# sample-suite.json, questions for `helios eval sample-suite.json`.
 
 """
 

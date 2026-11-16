@@ -43,10 +43,10 @@ def test_the_facade_answers_from_the_sample(settings, warehouse):
                                                       "value": "1999-01-01"}])
 
 
-def test_the_builtin_suite_scores_an_answer_from_the_sample(settings):
+def test_the_sample_suite_scores_an_answer_from_the_sample(sample, settings):
     pytest.importorskip("httpx", reason="the evaluation's LLM client needs helios-serve[eval]")
     from helios_cortex.llm import ToolCall, ToolTurn
-    from helios_serve import load_suite, run_evaluation
+    from helios_serve import read_suite, run_evaluation
 
     class Scripted:
         """Searches, then runs the metric the question names, then answers."""
@@ -63,7 +63,7 @@ def test_the_builtin_suite_scores_an_answer_from_the_sample(settings):
             return ToolTurn("", tuple(ToolCall(f"c{i}", name, args)
                                       for i, (name, args) in enumerate(self.rounds.pop(0))), "tool_use", 10, 5)
 
-    suite = load_suite("tpcds")
+    suite = read_suite(sample.suite)               # what helios init --sample wrote
     suite = {**suite, "questions": [q for q in suite["questions"] if q["id"] == "Q01"]}
     helios = Helios.from_settings(settings)
     report = run_evaluation(suite, helios.stores, {"right": Scripted("store_sales_revenue"),

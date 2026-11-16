@@ -113,19 +113,23 @@ Path metrics (tool calls, invalid and redundant calls, recovery, grounding, toke
 are aggregated per LLM variant. It needs an LLM client: `pip install "helios-serve[eval]"`.
 
 ```sh
-helios eval --list                                  # the built-in tpcds suite and your own
-helios eval tpcds --candidate-model claude-opus-5-5 # compare the configured model with another
-helios eval --suite-file my-suite.json --json       # the full report
+helios eval sample-suite.json                                   # a suite file: helios init --sample writes this one
+helios eval sample-suite.json --candidate-model claude-opus-5-5 # compare the configured model with another
+helios eval --list                                              # the suites saved in this deployment
+helios eval my-suite --json                                     # a saved suite by id; the full report
 ```
 
 ```python
-from helios_serve.evaluation import load_suite, run_evaluation
+from helios_serve.evaluation import read_suite, run_evaluation
 
-report = run_evaluation(load_suite("tpcds"), stores, {"baseline": llm, "candidate": other}, caller=alice)
+report = run_evaluation(read_suite("sample-suite.json"), stores, {"baseline": llm, "candidate": other},
+                        caller=alice)
 report.metrics["candidate"]["answer_accuracy"]
 ```
 
-Your own suites live in `<data_dir>/state/eval-suites` (`save_suite`). Without `--as`,
+No suite ships in the package. A deployment keeps its own in `<data_dir>/state/eval-suites`
+(`save_suite`, then `load_suite(id)`); the repository's `examples/eval/tpcds-v1.json` has 20
+questions for a full TPC-DS warehouse. Without `--as`,
 `helios eval` is one user running with the configured credentials, so it allows queries
 on a service-identity connection (`single_user_policy()`); with `--as USER` the
 warehouse enforces that user's access, as for any caller.

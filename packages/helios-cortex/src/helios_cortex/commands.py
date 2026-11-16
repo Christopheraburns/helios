@@ -24,7 +24,7 @@ STARTER_CONFIG = '''\
 
 # The warehouse Helios harvests and queries. A data source names a connection
 # (`helios source add warehouse --connection default`). Engines come from plugins:
-# duckdb and sqlalchemy (`pip install 'helios-cortex[sqlalchemy]'`) and trino
+# duckdb and sqlalchemy (any database with a SQLAlchemy driver; Postgres is `[postgres]`) and trino
 # (`[trino]`) here, impala in helios-cloudera.
 [connections.default]
 engine = "duckdb"
@@ -77,6 +77,7 @@ class InitCommand:
         context.echo(f"wrote {created.config}")
         context.echo(f"built {created.warehouse}: " + ", ".join(f"{t} ({n:,} rows)" for t, n in created.tables.items()))
         context.echo(f"published model {created.model_id} (revision {created.revision_id[:12]})")
+        context.echo(f"wrote {created.suite.name}: questions to evaluate an LLM with (helios eval {created.suite.name})")
         context.echo("next: query it with the Helios facade (helios-semantic) or give it to your agent "
                      "with `helios mcp --print-config claude-code` (helios-mcp)")
         return 0

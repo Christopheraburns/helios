@@ -12,27 +12,30 @@ import helios_semantic
 
 PACKAGES = Path(__file__).resolve().parents[2]
 PROJECT = tomllib.loads((PACKAGES / "helios-semantic" / "pyproject.toml").read_text())["project"]
+BOUND = ">=0.2.0"   # every Helios requirement: 0.1.0 of helios-cortex and helios-model on PyPI is older code (9.4)
 
 
 def test_the_package_reports_its_version_and_installs_the_libraries():
     assert helios_semantic.__version__ == PROJECT["version"]
-    assert PROJECT["dependencies"] == ["helios-cortex", "helios-model", "helios-serve"]
+    assert PROJECT["dependencies"] == [f"helios-{p}{BOUND}" for p in ("cortex", "model", "serve")]
 
 
 def test_each_extra_names_an_extra_its_package_declares():
     extras = PROJECT["optional-dependencies"]
     for name, requirements in extras.items():
         for requirement in requirements:
-            package, _, wanted = re.fullmatch(r"([a-z-]+)(\[([a-z0-9,]+)\])?", requirement).groups()
+            package, _, wanted, bound = re.fullmatch(r"([a-z-]+)(\[([a-z0-9,]+)\])?(>=[0-9.]+)?",
+                                                     requirement).groups()
             if package == "helios-semantic":
                 assert name == "all" and set(wanted.split(",")) == set(extras) - {"all"}
                 continue
-            assert (PACKAGES / package).is_dir(), requirement
+            assert (PACKAGES / package).is_dir() and bound == BOUND, requirement
             if wanted:
                 declared = tomllib.loads((PACKAGES / package / "pyproject.toml").read_text())["project"]
                 assert set(wanted.split(",")) <= set(declared["optional-dependencies"]), requirement
-    # The extras from 3.2, with the object stores Phase 4 added; [unstructured] waits for helios-crawl.
-    assert set(extras) == {"cloudera", "llm", "postgres", "trino", "s3", "azure", "gcs", "ozone", "ontology", "all"}
+    # The extras from 3.2, the object stores Phase 4 added, and helios-mcp (9.4); [unstructured] waits for helios-crawl.
+    assert set(extras) == {"cloudera", "llm", "mcp", "postgres", "trino", "s3", "azure", "gcs", "ozone", "ontology",
+                           "all"}
 
 
 def test_the_helios_command_comes_with_it():

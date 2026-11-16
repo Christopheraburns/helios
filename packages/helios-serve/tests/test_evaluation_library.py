@@ -62,26 +62,34 @@ def wrong():
 
 
 # ---------------------------------------------------------------------------- suites
-def test_the_builtin_suite_ships_in_the_package_and_saved_suites_join_it(tmp_path):
-    [builtin] = evaluation.list_suites()
-    assert (builtin["id"], builtin["version"], len(builtin["questions"])) == ("tpcds", "1.0.0", 20)
+def test_no_suite_ships_and_a_deployments_saved_suites_are_found_by_id(tmp_path):
+    """Suites are data, not code (9.3): the package has none; a deployment saves its own."""
+    from importlib.resources import files
+
+    assert not files("helios_serve").joinpath("suites").is_dir()
+    assert evaluation.list_suites(None) == evaluation.list_suites(tmp_path / "nowhere") == []
     evaluation.save_suite(SUITE, tmp_path)
+    second = {**SUITE, "version": "1.1.0"}
+    evaluation.save_suite(second, tmp_path)
     assert (tmp_path / "shop-1.0.0.json").is_file()
-    assert evaluation.load_suite("shop", directory=tmp_path) == SUITE
-    assert [s["id"] for s in evaluation.list_suites(tmp_path)] == ["shop", "tpcds"]
-    evaluation.save_suite({**builtin, "questions": builtin["questions"][:1]}, tmp_path)
-    assert len(evaluation.load_suite("tpcds", "1.0.0", directory=tmp_path)["questions"]) == 20   # built-in wins
+    assert [(s["id"], s["version"]) for s in evaluation.list_suites(tmp_path)] == [("shop", "1.0.0"), ("shop", "1.1.0")]
+    assert evaluation.load_suite("shop", directory=tmp_path) == second                 # the latest
+    assert evaluation.load_suite("shop", "1.0.0", directory=tmp_path) == SUITE
     with pytest.raises(LookupError):
         evaluation.load_suite("shop", "2.0.0", directory=tmp_path)
 
 
-def test_the_builtin_suite_grounds_every_question_in_the_repositorys_tpcds_model():
+def test_the_example_tpcds_suite_grounds_every_question_in_the_repositorys_tpcds_model():
+    """examples/eval/tpcds-v1.json, for the full TPC-DS warehouse (examples/cloudera-tpcds)."""
     from pathlib import Path
 
     from helios_cortex.ossie import SemanticModel
 
-    model = SemanticModel.load(str(Path(__file__).resolve().parents[3] / "models/published/tpcds.ossie.yaml"))
-    for question in evaluation.load_suite("tpcds")["questions"]:
+    repo = Path(__file__).resolve().parents[3]
+    suite = evaluation.read_suite(repo / "examples/eval/tpcds-v1.json")
+    assert (suite["id"], suite["version"], len(suite["questions"])) == ("tpcds", "1.0.0", 20)
+    model = SemanticModel.load(str(repo / "models/published/tpcds.ossie.yaml"))
+    for question in suite["questions"]:
         for name in question["grounding"]:
             assert name in model.metrics or model.field(name), (question["id"], name)
 
@@ -264,7 +272,7 @@ def helios(*argv):
 
 def test_helios_eval_lists_runs_and_compares_suites(configured):
     status, out, _ = helios("--config", str(configured), "eval", "--list")
-    assert status == 0 and "shop  1.0.0  1 questions  (model shop)" in out and "tpcds  1.0.0" in out
+    assert status == 0 and out == "shop  1.0.0  1 questions  (model shop)\n"            # only the saved one
 
     status, out, err = helios("--config", str(configured), "eval", "shop", "--candidate-model", "worse")
     assert status == 0, err

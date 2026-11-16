@@ -1,0 +1,140 @@
+{
+ "id": "tpcds-sample",
+ "version": "1.0.0",
+ "model_id": "tpcds",
+ "description": "Questions the TPC-DS store-sales star of helios init --sample can answer.",
+ "questions": [
+  {
+   "id": "Q01",
+   "question": "What is total store sales revenue?",
+   "reference_sql": "SELECT SUM(ss_net_paid) AS store_sales_revenue FROM tpcds.store_sales",
+   "minimum_tools": [
+    "search_semantics",
+    "run_query"
+   ],
+   "grounding": [
+    "store_sales_revenue"
+   ]
+  },
+  {
+   "id": "Q02",
+   "question": "How many units did the stores sell in total?",
+   "reference_sql": "SELECT SUM(ss_quantity) AS store_sales_quantity FROM tpcds.store_sales",
+   "minimum_tools": [
+    "search_semantics",
+    "run_query"
+   ],
+   "grounding": [
+    "store_sales_quantity"
+   ]
+  },
+  {
+   "id": "Q03",
+   "question": "What is total store sales profit?",
+   "reference_sql": "SELECT SUM(ss_net_profit) AS store_sales_profit FROM tpcds.store_sales",
+   "minimum_tools": [
+    "search_semantics",
+    "run_query"
+   ],
+   "grounding": [
+    "store_sales_profit"
+   ]
+  },
+  {
+   "id": "Q04",
+   "question": "What is the store sales profit margin?",
+   "reference_sql": "SELECT SUM(ss_net_profit) / SUM(ss_net_paid) AS store_sales_profit_margin FROM tpcds.store_sales",
+   "minimum_tools": [
+    "search_semantics",
+    "run_query"
+   ],
+   "grounding": [
+    "store_sales_profit_margin"
+   ]
+  },
+  {
+   "id": "Q05",
+   "question": "Show store sales revenue by state.",
+   "reference_sql": "SELECT s_state, SUM(ss_net_paid) AS store_sales_revenue FROM tpcds.store_sales JOIN tpcds.store ON ss_store_sk = s_store_sk GROUP BY s_state",
+   "minimum_tools": [
+    "search_semantics",
+    "describe",
+    "run_query"
+   ],
+   "grounding": [
+    "store_sales_revenue",
+    "tpcds.store.s_state"
+   ]
+  },
+  {
+   "id": "Q06",
+   "question": "What was store sales revenue in each year?",
+   "reference_sql": "SELECT d_year, SUM(ss_net_paid) AS store_sales_revenue FROM tpcds.store_sales JOIN tpcds.date_dim ON ss_sold_date_sk = d_date_sk GROUP BY d_year",
+   "minimum_tools": [
+    "search_semantics",
+    "describe",
+    "run_query"
+   ],
+   "grounding": [
+    "store_sales_revenue",
+    "tpcds.date_dim.d_year"
+   ]
+  },
+  {
+   "id": "Q07",
+   "question": "Which item categories earn the most store sales profit?",
+   "reference_sql": "SELECT i_category, SUM(ss_net_profit) AS store_sales_profit FROM tpcds.store_sales JOIN tpcds.item ON ss_item_sk = i_item_sk GROUP BY i_category",
+   "minimum_tools": [
+    "search_semantics",
+    "describe",
+    "run_query"
+   ],
+   "grounding": [
+    "store_sales_profit",
+    "tpcds.item.i_category"
+   ]
+  },
+  {
+   "id": "Q08",
+   "question": "What is the store sales profit margin of each item category?",
+   "reference_sql": "SELECT i_category, SUM(ss_net_profit) / SUM(ss_net_paid) AS store_sales_profit_margin FROM tpcds.store_sales JOIN tpcds.item ON ss_item_sk = i_item_sk GROUP BY i_category",
+   "minimum_tools": [
+    "search_semantics",
+    "describe",
+    "run_query"
+   ],
+   "grounding": [
+    "store_sales_profit_margin",
+    "tpcds.item.i_category"
+   ]
+  },
+  {
+   "id": "Q09",
+   "question": "Show store sales revenue by the upper bound of the customer household's income band.",
+   "reference_sql": "SELECT ib_upper_bound, SUM(ss_net_paid) AS store_sales_revenue FROM tpcds.store_sales JOIN tpcds.household_demographics ON ss_hdemo_sk = hd_demo_sk JOIN tpcds.income_band ON hd_income_band_sk = ib_income_band_sk GROUP BY ib_upper_bound",
+   "minimum_tools": [
+    "search_semantics",
+    "describe",
+    "run_query"
+   ],
+   "grounding": [
+    "store_sales_revenue",
+    "tpcds.income_band.ib_upper_bound"
+   ]
+  },
+  {
+   "id": "Q10",
+   "question": "How much did customers save with coupons, by gender?",
+   "reference_sql": "SELECT cd_gender, SUM(ss_coupon_amt) AS store_sales_coupon_amount FROM tpcds.store_sales JOIN tpcds.customer_demographics ON ss_cdemo_sk = cd_demo_sk GROUP BY cd_gender",
+   "minimum_tools": [
+    "search_semantics",
+    "describe",
+    "run_query"
+   ],
+   "grounding": [
+    "store_sales_coupon_amount",
+    "tpcds.customer_demographics.cd_gender"
+   ]
+  }
+ ]
+}

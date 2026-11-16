@@ -18,7 +18,7 @@ _EXPORTS = {
     **{name: "tools" for name in ("list_models", "describe_model", "search_semantics", "describe",
                                   "compile_query", "run_query", "query_values", "explain_lineage",
                                   "QueryFilter")},
-    **{name: "evaluation" for name in ("run_evaluation", "answer_question", "list_suites", "load_suite",
+    **{name: "evaluation" for name in ("run_evaluation", "answer_question", "list_suites", "load_suite", "read_suite", "save_suite",
                                        "EvaluationReport", "EvaluationError")},
     "health": "checks", "HealthComponent": "checks", "aggregate_status": "checks",
     **{name: "registry" for name in ("Effect", "Registry", "Tool", "tool", "load_registry", "input_schema")},

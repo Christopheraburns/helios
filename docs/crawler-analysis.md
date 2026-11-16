@@ -2,7 +2,7 @@
 
 This document describes, step by step, how the first Helios crawler turns a document into index rows: which asset types it reads, which checks it applies and in what order, what each check produces, and what a user can configure. Version 1 uses **no language model**. Every decision is a rule, a dictionary lookup, a pattern or a structured join, so it is repeatable, explainable and measurable. Where a language model would later help, and how it would be measured, is described at the end.
 
-Related: [crawler-burndown.md](crawler-burndown.md) (tasks CR-2 to CR-10), [ontology/README.md](../ontology/README.md), [ontology-burndown.md](ontology-burndown.md).
+Related: [crawler-burndown.md](crawler-burndown.md) (tasks CR-2 to CR-10), [ontology/README.md](../ontology/README.md).
 
 **Status (2026-10-01):** design agreed (decisions in section 8); implementation is CR-0e and CR-2 onward.
 

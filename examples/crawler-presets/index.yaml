@@ -1,5 +1,5 @@
-# Shipped crawler settings presets. Each is <name>.yaml in this directory: a
-# complete settings document a user can load, edit and save as a version.
+# Example crawler settings presets. Each is <name>.yaml in this directory: a complete
+# settings document to load (load_preset), edit and save as a version.
 presets:
   retail-returns:
     title: Retail returns
@@ -8,6 +8,3 @@ presets:
       reports. Identifier patterns for RMA, case and ticket numbers, the PDF
       report's labels, and cue phrases for damage, return reason and refunds.
 
-# Before settings schema 2 one set of rules was built into the crawler. A stored
-# schema 1 document is read as this preset with the document's sections on top.
-schema_1_defaults: retail-returns

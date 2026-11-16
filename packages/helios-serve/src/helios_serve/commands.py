@@ -20,8 +20,8 @@ class EvalCommand:
     help = "ask an evaluation suite's questions of the LLM through the Helios tools and score the answers"
 
     def configure(self, parser: argparse.ArgumentParser) -> None:
-        parser.add_argument("suite", nargs="?", default="tpcds",
-                            help="a suite id, built in or saved in <data_dir>/state/eval-suites (default: tpcds)")
+        parser.add_argument("suite", nargs="?",
+                            help="a suite file (.json), or the id of a suite saved in <data_dir>/state/eval-suites")
         parser.add_argument("--version", dest="suite_version", metavar="VERSION",
                             help="the suite version (default: the latest)")
         parser.add_argument("--suite-file", metavar="FILE", help="read the suite from FILE instead")
@@ -47,9 +47,14 @@ class EvalCommand:
                 context.echo(f"{suite['id']}  {suite['version']}  {len(suite['questions'])} questions"
                              + (f"  (model {suite['model_id']})" if suite.get("model_id") else ""))
             return 0
+        if not (args.suite or args.suite_file):
+            raise CommandError("name a suite: a suite file, or the id of a saved one (helios eval --list); "
+                               "helios init --sample writes sample-suite.json")
         try:
-            suite = (evaluation.read_suite(args.suite_file) if args.suite_file
-                     else evaluation.load_suite(args.suite, args.suite_version, directory=directory))
+            if args.suite_file or args.suite.endswith(".json"):
+                suite = evaluation.read_suite(args.suite_file or args.suite)
+            else:
+                suite = evaluation.load_suite(args.suite, args.suite_version, directory=directory)
         except (LookupError, evaluation.EvaluationError) as exc:
             raise CommandError(str(exc.args[0]) if exc.args else str(exc)) from exc
         if args.question:

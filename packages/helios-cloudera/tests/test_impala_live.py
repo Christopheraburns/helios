@@ -2,7 +2,7 @@
 as test_trino_live.py is the Trino engine's (burndown 8.5; CI's nightly cloudera-live job).
 
 Runs when HELIOS_TEST_IMPALA names an Impala virtual warehouse (a host, or the JDBC URL
-Cloudera shows) holding the TPC-DS database `tpcds` that setup/ builds, with a workload
+Cloudera shows) holding the TPC-DS database `tpcds` (examples/cloudera-tpcds), with a workload
 user that can read it:
 
     HELIOS_TEST_IMPALA='jdbc:impala://<vw-host>:443/default;transportMode=http;httpPath=cliservice'

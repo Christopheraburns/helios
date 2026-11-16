@@ -4,22 +4,42 @@ build-backend = "hatchling.build"
 
 [project]
 name = "helios-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Helios tools over MCP on stdio, for one developer's local agent (Claude Code, Cursor, goose, Mistral Vibe)"
 readme = "README.md"
 authors = [{name = "Helios Team"}]
 license = "Apache-2.0"
 requires-python = ">=3.11"
+keywords = ["mcp", "model context protocol", "semantic layer", "text-to-sql", "agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Typing :: Typed",
+]
 # helios-serve's tools and the MCP SDK. Local and single-user: no HTTP, no
 # authentication, no deployment (decision 8); shared deployments use Daedalus.
 dependencies = [
-    "helios-serve",
+    "helios-serve>=0.2.0",
     "jsonschema>=4.23.0",   # checks each call's arguments against the tool's input schema
     "mcp>=2.2.0,<3",
     "pyyaml>=6.0.0",        # goose's configuration snippet
 ]
 
 # helios mcp: serve the tools over stdio.
+
+[project.urls]
+Homepage = "https://github.com/christopheraburns/helios"
+Documentation = "https://github.com/christopheraburns/helios/tree/main/packages/helios-mcp#readme"
+Repository = "https://github.com/christopheraburns/helios"
+Issues = "https://github.com/christopheraburns/helios/issues"
+
 [project.entry-points."helios.commands"]
 mcp = "helios_mcp.commands:McpCommand"
 

@@ -16,7 +16,7 @@ helios/
 │   ├── helios-mcp/         stdio MCP         src/helios_mcp/, tests/
 │   └── helios-cloudera/    Cloudera plugins  src/helios_cloudera/, tests/
 ├── tests/integration/      tests that cross packages
-├── examples/viewer/        a read-only page for the graphs (not a package)
+├── examples/               not packages: the viewer, evaluation suites, crawler presets, TPC-DS on Cloudera
 └── apps/
     ├── helios/crawler/     the document crawler and its tests (apps/helios/tests), until helios-crawl (Phase 10)
     ├── helios-ds-generation/
@@ -76,6 +76,7 @@ Pass `--refresh`: uv caches wheels by version, so a rebuilt wheel with an unchan
 |---|---|
 | `package` (one per package) | in the workspace: ruff, mypy and the package's tests; then from wheels, beside only the Helios packages it declares: its tests again and `helios --help`, and once more with its extra where it has one (helios-serve with `helios-cortex[llm]`, helios-semantic with `[all]`) |
 | `integration` | import-linter, ruff on the rest, `tests/integration` (with the viewer's smoke test) and the crawler's tests |
+| `quickstart` | the README's quickstart blocks (marked `<!-- quickstart -->`) run verbatim by `scripts/run_quickstart.py` in a fresh virtual environment, within five minutes; until 9.5 publishes the packages, this checkout's wheels are installed first |
 | `trino`, `storage` | the Trino engine against a real coordinator; the registry on Postgres and artifacts on S3 (moto) |
 | `cloudera-live` | nightly (and on demand): helios-cloudera's Impala engine against a real warehouse holding TPC-DS, from the `HELIOS_TEST_IMPALA*` secrets (it fails if they are missing). Like `trino` for the Trino engine, it is one plugin's live test; Helios itself is tested on DuckDB, and a new warehouse plugin adds its own live job |
 | `publish` | on a `helios-<package>/vX.Y.Z` tag, once the package and integration jobs pass: checks the version against the package's `pyproject.toml`, builds that package and uploads it to the internal index |
@@ -92,6 +93,12 @@ git tag helios-serve/v0.2.0 && git push origin helios-serve/v0.2.0
 
 A tag whose version doesn't match the package's `pyproject.toml`, or that names no package, fails the `publish` job and uploads nothing.
 
+What a release must keep true (`tests/integration/test_integration_release_metadata.py` checks it, and each `package` job runs `twine check --strict`):
+
+- **The names** are `helios-cortex`, `helios-model`, `helios-serve`, `helios-semantic`, `helios-mcp` and `helios-cloudera` (helios-crawl later). `helios-semantic` is the one people install; every other package is one of its dependencies or reachable through an extra, and `[all]` names every extra.
+- **Every Helios dependency has a lower bound** (`helios-cortex>=0.2.0`). PyPI already has `helios-cortex` and `helios-model` 0.1.0, built from older code, so an unbounded requirement could install them. When a package starts relying on something new in another, raise the bound to that release.
+- **Each package has a `README.md`** (its PyPI page), keywords, classifiers and `py.typed`.
+
 ## Adding a package
 
 1. Create `packages/helios-<name>/` with `pyproject.toml` (hatchling, `src/` layout), `README.md` and `tests/`. The workspace picks it up through `members = ["packages/*"]`.
@@ -103,5 +110,5 @@ A tag whose version doesn't match the package's `pyproject.toml`, or that names 
 
 - **Library code** goes in a package; anything Cloudera-specific goes in helios-cloudera. importing helios-cortex reads no environment variables and touches no files (tested); only building `Settings` does, and its stable surface is listed in [CONTRACTS.md](packages/helios-cortex/CONTRACTS.md).
 - **Tests** go in their package's `tests/`. Only a test that needs several packages together goes in `tests/integration`.
-- **Data** isn't Python and isn't installed: the published TPC-DS model (`models/`), the ontology (`ontology/`), the sample warehouse scripts (`setup/`) and the Atlas glossary (`Atlas_Glossary/`).
+- **Data** isn't Python and isn't installed: the published TPC-DS model (`models/`), the ontology (`ontology/`), and the examples (`examples/`: the viewer, evaluation suites, crawler presets, and the TPC-DS warehouse and Atlas glossary on Cloudera).
 - **Runtime state** goes under each deployment's `data_dir`, never in the repository.

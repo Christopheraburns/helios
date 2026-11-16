@@ -49,7 +49,7 @@ def test_catalog_reads_forward_the_caller_to_query():
 
 
 def test_sqlalchemy_introspection_accepts_a_caller(tmp_path):
-    pytest.importorskip("sqlalchemy", reason="needs helios-cortex[sqlalchemy]")
+    pytest.importorskip("sqlalchemy", reason="needs SQLAlchemy (a helios-cortex dependency)")
     from helios_cortex.engines.sqlalchemy_engine import SqlAlchemyEngine
 
     engine = SqlAlchemyEngine(f"sqlite:///{tmp_path / 'shop.db'}")

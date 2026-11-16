@@ -4,11 +4,25 @@ build-backend = "hatchling.build"
 
 [project]
 name = "helios-cortex"
-version = "0.1.0"
+version = "0.2.0"
 description = "Helios core: shared semantic query and data governance layer"
+readme = "README.md"
 authors = [{name = "Helios Team"}]
 license = "Apache-2.0"
 requires-python = ">=3.11"
+keywords = ["semantic layer", "semantic model", "ossie", "sql", "compiler", "duckdb", "trino"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Typing :: Typed",
+]
 # The base install: the compiler, semantic model, DuckDB, and the model registry on
 # SQLite (SQLAlchemy and Alembic; the database itself is the standard library).
 # Everything else is an extra; tests/test_optional_dependencies.py keeps it so.
@@ -23,6 +37,12 @@ dependencies = [
     "sqlalchemy>=2.0", # the model registry (SQLite by default) and the sqlalchemy engine
     "alembic>=1.13", # registry schema migrations
 ]
+
+[project.urls]
+Homepage = "https://github.com/christopheraburns/helios"
+Documentation = "https://github.com/christopheraburns/helios/tree/main/packages/helios-cortex#readme"
+Repository = "https://github.com/christopheraburns/helios"
+Issues = "https://github.com/christopheraburns/helios/issues"
 
 [project.optional-dependencies]
 # LLM providers (helios_cortex.llm), used to propose models.

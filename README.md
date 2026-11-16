@@ -11,6 +11,44 @@ Helios is not an application. A host installs the libraries and decides how they
 - one developer's coding agent through `helios mcp`;
 - a shared, governed deployment through Daedalus, which serves the same tools to many users.
 
+## Quickstart
+
+On a laptop with Python 3.11 or newer, in a fresh virtual environment (`python -m venv .venv && source .venv/bin/activate`), from install to a first answer takes a few minutes. Until the packages are on PyPI, install them from a checkout instead of the `pip` line (see [Installing](#installing)).
+
+<!-- quickstart: CI runs this block verbatim -->
+```sh
+pip install helios-semantic
+helios init --sample
+```
+
+`helios init --sample` writes a `helios.toml` and builds a small TPC-DS warehouse beside it: `store_sales` and the six tables it joins to, in DuckDB. It also publishes the warehouse's semantic model: datasets, fields, the relationships between them, and metrics such as revenue and profit margin. Now ask it something, in Python:
+
+<!-- quickstart: CI runs this block verbatim -->
+```python
+from helios_semantic import Helios, HeliosError
+
+helios = Helios.from_settings()                      # reads ./helios.toml
+
+# What can be asked: the model's metrics, fields and datasets, found by meaning.
+for match in helios.search("store sales profit", limit=3):
+    print(match["kind"], match["name"])
+
+# Revenue and margin by state in 2002, from the published model: no SQL written.
+result = helios.query(["store_sales_revenue", "store_sales_profit_margin"], ["tpcds.store.s_state"],
+                      filters=[{"column": "tpcds.date_dim.d_year", "op": "=", "value": 2002}])
+for row in result.records():
+    print(row)
+print(result.sql)                                    # the SQL Helios compiled from the model
+
+# Only what the model defines can be asked for.
+try:
+    helios.query(["store_sales_profitt"])
+except HeliosError as error:
+    print(error.code, "-", error.message)
+```
+
+That's a governed query. The metrics, joins and filter types come from a model a person reviewed; Helios compiled the SQL, and the warehouse ran it. A name the model doesn't define is refused, with a hint to search. Next: build a model of your own warehouse ([Using it](#using-it)), give the sample to your coding agent (`pip install helios-mcp`, then `helios mcp --print-config claude-code`), or look at it in the [viewer](examples/viewer/README.md).
+
 ---
 
 ## Why
@@ -60,7 +98,7 @@ pip install ./packages/helios-cortex ./packages/helios-model ./packages/helios-s
 pip install ./packages/helios-cloudera ./packages/helios-mcp     # as needed
 ```
 
-The extras are `cloudera`, `llm`, `postgres`, `trino`, `s3`, `azure`, `gcs`, `ozone`, `ontology` and `all`; see [helios-semantic's README](packages/helios-semantic/README.md).
+The extras are `cloudera`, `llm`, `mcp`, `postgres`, `trino`, `s3`, `azure`, `gcs`, `ozone`, `ontology` and `all`; see [helios-semantic's README](packages/helios-semantic/README.md).
 
 ## Using it
 
@@ -74,13 +112,7 @@ engine = "duckdb"
 path = "warehouse.duckdb"
 ```
 
-To try it without a warehouse of your own, `helios init --sample` writes a `helios.toml`, builds the TPC-DS store-sales star in `warehouse.duckdb` beside it (`store_sales` and the six tables it joins to: 60,000 sales lines over 1998–2002, the same every time), and registers and publishes its semantic model as `tpcds`:
-
-```sh
-helios init --sample
-```
-
-On your own warehouse, build a model, then publish it:
+`helios init --sample` (the [Quickstart](#quickstart)) builds a sample instead: the TPC-DS store-sales star in `warehouse.duckdb`, 60,000 sales lines over 1998–2002, the same every time, with its model published as `tpcds`. On your own warehouse, build a model, then publish it:
 
 ```sh
 helios init
@@ -112,49 +144,14 @@ Under [`ontology/`](ontology/), a LinkML ontology describes the domain: its conc
 ## Sample environment
 
 Helios is developed against TPC-DS:
-- **Locally:** a small DuckDB star, which the integration tests use (see [tests/integration](tests/integration/README.md)).
-- **On Cloudera:** a full TPC-DS warehouse in a Cloudera public cloud environment. The platform services are an SDX data lake (Hive Metastore, Atlas, Ranger, Knox), an Impala Virtual Warehouse, Cloudera AI Workbench, Cloudera AI Inference and S3 storage.
+- **Locally:** the store-sales star that `helios init --sample` builds in DuckDB, which the integration tests use (see [tests/integration](tests/integration/README.md)).
+- **On Cloudera:** the full 24-table warehouse in Impala, with a reference business glossary in Atlas. [`examples/cloudera-tpcds`](examples/cloudera-tpcds/README.md) has the scripts that build both and how to run them.
 
 The repository's published TPC-DS model is [`models/published/tpcds.ossie.yaml`](models/published/tpcds.ossie.yaml).
 
-**Data:** TPC-DS at scale factor 1 (about 1 GB, 24 tables). It is generated with DuckDB's `tpcds` extension, landed as Parquet in the data lake bucket, staged as external tables, and converted to Iceberg tables in the Impala database `tpcds`.
-
-```
-setup/start.py       generate TPC-DS Parquet with DuckDB (run in a Workbench session)
-setup/gen_ddl.py     emit stage.sql and iceberg.sql from the generated table directories
-setup/stage.sql      CREATE EXTERNAL TABLE ... LIKE PARQUET for each table (database tpcds_stage)
-setup/iceberg.sql    CREATE TABLE ... STORED AS ICEBERG AS SELECT ... (database tpcds), COMPUTE STATS
-```
-
-A handful of TPC-DS benchmark queries (Impala dialect, from `cloudera/impala-tpcds-kit`) are run against the warehouse, so that Impala's query history holds realistic aggregation patterns for discovery to mine. The kit's literal filter values were generated for a 10 TB scale factor and may need adjusting at SF1.
-
-**Business glossary:** an Atlas glossary named `TPCDS Retail`. It has 138 terms (entities, measures with dsdgen pricing formulas, dimension attributes and derived KPIs), linked to 393 columns. It is the reference: what Helios should approximate from a cold start.
-
-```
-Atlas_Glossary/build_glossary.py        generates the glossary CSVs from a term catalogue in code
-Atlas_Glossary/assign_terms.py          imports a glossary CSV into Atlas and links terms to columns
-Atlas_Glossary/tpcds_glossary_full.csv  all 138 terms, Atlas bulk-import format
-Atlas_Glossary/tpcds_glossary_seed.csv  32 core terms: the "cold start" glossary for discovery experiments
-Atlas_Glossary/tpcds_term_columns.csv   term → table.column assignments
-```
-
-```bash
-export ATLAS_BASE="https://<datalake-host>/<datalake-name>/cdp-proxy-api/atlas/api/atlas/v2"
-export ATLAS_USER=<workload-username>
-export ATLAS_PASS='<workload-password>'
-python3 assign_terms.py tpcds_glossary_full.csv                # import + assign
-python3 assign_terms.py tpcds_glossary_full.csv --skip-import  # glossary already loaded; only assign
-```
-
-Two things to know about Atlas glossary import here:
-- The REST import returns `409` if any term already exists; it doesn't update in place. To change definitions, delete the glossary and reload it.
-- The `Synonyms` column is a term-to-term relationship rather than free text, so synonyms are folded into each term's long description.
-
-The full glossary is what a well-governed warehouse would have, so loading it before a discovery run hands Helios the answer key. For evaluation, load the seed glossary under its own name and keep the full one hidden.
-
 ## Evaluation
 
-`helios eval` runs a suite of questions through the tools with an LLM. It scores each answer against reference SQL, and reports accuracy, tool-call efficiency, recovery from errors and grounding. Comparing two variants shows whether a model change helped. The built-in suite is TPC-DS (`helios_serve/suites/tpcds-v1.json`, 20 questions); see [helios-serve's README](packages/helios-serve/README.md).
+`helios eval` runs a suite of questions through the tools with an LLM. It scores each answer against reference SQL, and reports accuracy, tool-call efficiency, recovery from errors and grounding. Comparing two variants shows whether a model change helped. Suites are data, not part of a package: `helios init --sample` writes `sample-suite.json` (ten questions the sample can answer, so `helios eval sample-suite.json` runs on it), and [`examples/eval/tpcds-v1.json`](examples/eval/tpcds-v1.json) has 20 questions for the full TPC-DS warehouse ([`examples/cloudera-tpcds`](examples/cloudera-tpcds/README.md)). See [helios-serve's README](packages/helios-serve/README.md).
 
 ## Repository layout
 
@@ -162,15 +159,13 @@ The full glossary is what a well-governed warehouse would have, so loading it be
 helios/
 ├── packages/           the libraries (each its own pyproject.toml, src/ and tests/)
 ├── tests/integration/  tests that cross packages (the facade on the DuckDB sample, identity end to end)
-├── examples/viewer/    a read-only page for the semantic model, a query's path and the ontology
+├── examples/           the viewer, evaluation suites, crawler presets, and TPC-DS on Cloudera
 ├── apps/
 │   ├── helios/crawler/        the document crawler, until it becomes helios-crawl (Phase 10)
 │   ├── helios-ds-generation/  the Helios-DS synthetic data generator (outside the workspace)
 │   └── helios-ds-evaluation/  its evaluation harness (outside the workspace)
 ├── models/published/   the published TPC-DS model
 ├── ontology/           the LinkML ontology: core, packs, customer extensions, mappings
-├── setup/              scripts that build the TPC-DS sample environment
-├── Atlas_Glossary/     the TPC-DS glossary generator and Atlas loader
 ├── scripts/            development checks (compile a request, Impala connectivity, LinkML)
 └── docs/               design notes and burndowns
 ```
