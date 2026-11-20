@@ -38,6 +38,7 @@ harvest = "helios_model.commands:HarvestCommand"
 profile = "helios_model.commands:ProfileCommand"
 propose = "helios_model.commands:ProposeCommand"
 publish = "helios_model.commands:PublishCommand"
+proposal = "helios_model.commands:ProposalCommand"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/helios_model"]

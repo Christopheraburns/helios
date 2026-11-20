@@ -37,6 +37,7 @@ from helios_cortex.runs import RunStore
 from helios_cortex.settings import Settings
 
 from helios_model import publication as publishing
+from helios_model import review as review_store
 from helios_model.harvest import TableHarvester
 from helios_model.profile import TableProfiler
 from helios_model.proposals import Proposals
@@ -143,26 +144,60 @@ class _Stage:
 
 class Catalog(_Stage):
     """Harvests a data source into a new run. ``Catalog(settings)`` keeps runs where the
-    settings say (``RunStore.from_settings``); pass ``runs=`` to choose."""
+    settings say (``RunStore.from_settings``); pass ``runs=`` to choose, and ``registry=``
+    for where a model's table selection is read (``SqlRegistry.from_settings`` by default)."""
+
+    def __init__(self, settings: Settings, *, runs: RunStore | None = None,
+                 registry: ModelRegistry | None = None):
+        super().__init__(settings, runs=runs)
+        self._registry = registry
+
+    def _model_selection(self, model_id: str, source_id: str) -> list[str] | None:
+        """The tables a registered model selected from a source, or None (none selected, or no
+        such model): harvest every table then."""
+        registry = self._registry
+        if registry is None:
+            from helios_cortex.registry import SqlRegistry
+
+            registry = SqlRegistry.from_settings(self.settings)
+        model = registry.model(model_id)
+        if model is None:
+            return None
+        for reference in model.data_sources:
+            if reference.data_source_id == source_id and reference.selected_assets:
+                return list(reference.selected_assets)
+        return None
 
     def harvest(self, source: DataSource, caller: Caller | None, *, databases: Sequence[str], model_id: str,
                 glossaries: Sequence[str] | None = None, query_dir: str | None = None,
-                catalog: str | None = None, run_id: str | None = None) -> Harvest:
+                catalog: str | None = None, run_id: str | None = None,
+                tables: Sequence[str] | None = None) -> Harvest:
         """Harvest ``databases`` of ``source`` as ``caller`` for model ``model_id``.
 
         The engine is the connection ``source.connection_ref`` names; the glossary comes
         from the catalog ``catalog`` names (the default catalog when None, none when the
         settings have no catalogs). ``databases`` is required: Helios never guesses what
-        to harvest. ``run_id`` defaults to a new one; an existing run is never replaced."""
+        to harvest. ``tables`` (``database.table``) limits the harvest to those; when None,
+        the tables the registered model selected from ``source`` (``helios model add
+        --table``) are used, and every table when it selected none. A named table that is
+        not found is an error. ``run_id`` defaults to a new one; an existing run is never
+        replaced."""
         databases = [d for d in databases if d]
         if not databases:
             raise ValueError("name at least one database to harvest")
         run_id = run_id or new_run_id()
         if self.runs.load(run_id, "harvest") is not None:
             raise DiscoveryError(f"run {run_id!r} already has a harvest; start a new run")
+        selected = list(tables) if tables else self._model_selection(model_id, source.id)
         engine = self._engine(source.connection_ref)
         harvester = TableHarvester(engine, catalog_for(self.settings.catalog(catalog)))
-        document = harvester.run(list(databases), list(glossaries) if glossaries else None, query_dir, caller=caller)
+        document = harvester.run(list(databases), list(glossaries) if glossaries else None, query_dir,
+                                 tables=selected, caller=caller)
+        if selected:
+            found = {f"{t['database']}.{t['table']}".lower() for t in document["tables"]}
+            missing = sorted(name for name in selected if name.lower() not in found)
+            if missing:
+                raise DiscoveryError(f"not found (or not visible) in {', '.join(databases)}: {', '.join(missing)}")
         document.update({"model_id": model_id, "data_source_id": source.id,
                          "connection_ref": source.connection_ref, "harvested_by": _username(caller)})
         self.runs.write(run_id, "harvest", document)
@@ -250,6 +285,40 @@ class Proposer(_Stage):
         if not model_id:
             raise DiscoveryError(f"run {run_id!r} names no model")
         return Proposals(proposal, run_id=run_id, model_id=model_id, review=self.runs.load(run_id, "review"))
+
+    def import_review(self, run_id: str, review: Mapping[str, Any], caller: Caller | None) -> Proposals:
+        """Replace a run's decisions with ``review`` (a ``review.json`` kept elsewhere, such as in
+        version control) and return the proposals with them. Refuses a review written for
+        another run, an unknown section or decision, and a decision on an element the run
+        doesn't have."""
+        proposals = self.load(run_id)
+        other = review.get("run_id")
+        if other and other != run_id:
+            raise DiscoveryError(f"the review is for run {other!r}, not {run_id!r}")
+        proposals.clear()
+        for section, entries in review.items():
+            if section in ("run_id", "reviewed_at", "reviewed_by"):
+                continue
+            if section not in review_store.SECTIONS:
+                raise DiscoveryError(f"the review has an unknown section {section!r}")
+            for element_id, entry in (entries or {}).items():
+                decision = (entry or {}).get("decision")
+                try:
+                    if decision == "accept":
+                        proposals.accept((section, element_id), note=entry.get("note") or "")
+                    elif decision == "reject":
+                        proposals.reject((section, element_id), note=entry.get("note") or "")
+                    elif decision == "edit":
+                        proposals.edit((section, element_id), entry.get("overrides") or {}, note=entry.get("note") or "")
+                    else:
+                        raise DiscoveryError(f"{section} {element_id!r}: unknown decision {decision!r}")
+                except KeyError as exc:
+                    raise DiscoveryError(f"the review decides {section} {element_id!r}, which run {run_id!r} "
+                                         "doesn't have") from exc
+                except ValueError as exc:
+                    raise DiscoveryError(f"{section} {element_id!r}: {exc}") from exc
+        self.save_review(proposals, caller)
+        return proposals
 
     def save_review(self, proposals: Proposals, caller: Caller | None, *, at: datetime | None = None) -> None:
         """Keep the decisions on ``proposals`` in their run, as reviewed by ``caller`` at

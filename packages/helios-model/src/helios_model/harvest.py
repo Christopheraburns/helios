@@ -35,11 +35,16 @@ class TableHarvester:
             LOGGER.warning("could not count rows in %s.%s", db, table, exc_info=True)
             return None
 
-    def harvest_tables(self, databases: list[str], *, caller: Caller | None = None) -> list[dict]:
-        """Every table in ``databases`` that ``caller`` may see (the service identity's view without one)."""
+    def harvest_tables(self, databases: list[str], *, tables: list[str] | None = None,
+                       caller: Caller | None = None) -> list[dict]:
+        """Every table in ``databases`` that ``caller`` may see (the service identity's view without one),
+        or only ``tables`` (``database.table``, matched without regard to case) when given."""
+        wanted = {name.lower() for name in tables} if tables else None
         out = []
         for db in databases:
             for t in self.engine.tables(db, caller=caller):
+                if wanted is not None and f"{db}.{t}".lower() not in wanted:
+                    continue
                 cols = self.engine.columns(db, t, caller=caller)
                 out.append({"database": db, "table": t, "columns": cols,
                             "row_count": self.row_count(db, t, caller=caller)})
@@ -144,22 +149,25 @@ class TableHarvester:
 
     # ------------------------------------------------------------ all together
     def run(self, databases: list[str], glossaries: list[str] | None = None, query_dir: str | None = None,
-            *, caller: Caller | None = None) -> dict:
+            *, tables: list[str] | None = None, caller: Caller | None = None) -> dict:
         """Tables, columns, row counts and the query log as ``caller`` (the engine's identity
-        mode decides how); the glossary is read with the catalog's own credentials."""
-        tables = self.harvest_tables(databases, caller=caller)
+        mode decides how); the glossary is read with the catalog's own credentials. ``tables``
+        (``database.table``) limits the harvest to those; None harvests every table."""
+        selected = list(tables) if tables else None
+        harvested = self.harvest_tables(databases, tables=selected, caller=caller)
         glossary_terms = self.harvest_glossary(glossaries)
-        queries = self.harvest_queries(tables, query_dir, caller=caller)
+        queries = self.harvest_queries(harvested, query_dir, caller=caller)
         LOGGER.info(
             "harvested %d tables, %d glossary terms and %d queries from %s",
-            len(tables), len(glossary_terms), len(queries.get("statements", [])), ", ".join(databases),
+            len(harvested), len(glossary_terms), len(queries.get("statements", [])), ", ".join(databases),
         )
         return {
             "harvested_at": datetime.now(timezone.utc).isoformat(),
             "engine": self.engine.name,
             "catalog_capabilities": sorted(capabilities(self.catalog)),
             "databases": databases,
-            "tables": tables,
+            "selected_tables": selected,
+            "tables": harvested,
             "glossary_terms": glossary_terms,
             "queries": queries,
         }

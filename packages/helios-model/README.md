@@ -36,8 +36,8 @@ model that is not in the registry.
 | Module | What it provides |
 |---|---|
 | `helios_model.commands` | The `helios` subcommands above, over the facades |
-| `helios_model.discovery` | The facades `Catalog`, `Profiler`, `Proposer`, `Publisher`, and their results `Harvest`, `Profile`, `Publication` (exported from `helios_model`) |
-| `helios_model.proposals` | `Proposals`: the typed draft (`ProposedDataset`, `ProposedField`, `ProposedRelationship`, `ProposedMetric`, `ProposedTerm`, each with a confidence, a rationale and its decision) and the reviewer's accept, edit and reject |
+| `helios_model.discovery` | The facades `Catalog` (`harvest(..., tables=)`), `Profiler`, `Proposer` (`load`, `save_review`, `import_review` for a review kept elsewhere), `Publisher`, and their results `Harvest`, `Profile`, `Publication` (exported from `helios_model`) |
+| `helios_model.proposals` | `Proposals`: the typed draft (`ProposedDataset`, `ProposedField`, `ProposedRelationship`, `ProposedMetric`, `ProposedTerm`, each with a confidence, a rationale and its decision), the reviewer's accept, edit and reject, and `to_markdown()` for review outside a UI |
 | `helios_model.harvest` | `TableHarvester`: tables, columns and row counts from the engine, a glossary from any catalog that has one, and aggregation queries from the engine's log or a folder of `.sql` files |
 | `helios_model.profile` | `TableProfiler`: column statistics, primary-key candidates, and foreign keys verified against the data |
 | `helios_model.propose` | `ModelProposer`: an LLM's descriptions, roles, glossary terms, relationship decisions and metrics, each with a confidence and a rationale |
@@ -48,7 +48,7 @@ model that is not in the registry.
 
 ## From the command line
 
-helios-model adds `harvest`, `profile`, `propose` and `publish` to the `helios` command
+helios-model adds `harvest`, `profile`, `propose`, `proposal show` and `publish` to the `helios` command
 (helios-cortex adds `init`, `source`, `model` and `registry`):
 
 ```sh
@@ -60,6 +60,22 @@ helios profile                                      # each stage works on the la
 helios propose                                      # needs an [llm]
 helios publish --min-confidence 0.8                 # accept what is that sure, then publish
 ```
+
+`harvest --table DB.TABLE` (repeat) harvests only those tables; without it, a model
+registered with `helios model add --table` harvests the tables it selected, and every
+table otherwise. A named table that isn't there is an error.
+
+**Reviewing outside a UI**, for example with the model kept in version control:
+
+```sh
+helios proposal show --out PROPOSAL.md              # every element: id, confidence, decision, rationale
+# record decisions in review.json, keyed by those ids: {"datasets": {"sales.orders": {"decision": "accept"}}, ...}
+helios publish --review review.json                 # the file's decisions replace the run's, then publish
+helios model export sales --out sales.ossie.yaml    # the published model (its active revision), to ship
+```
+
+`proposal show --format json` gives the same as JSON. `publish --review` refuses a
+review written for another run and a decision on an element the run doesn't have.
 
 Each prints the run id and a summary on stdout and its progress on stderr. They run as
 the connection's service identity unless `--as USER` names a caller (for `impersonate`

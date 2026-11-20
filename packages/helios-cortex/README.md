@@ -25,7 +25,9 @@ What it holds:
   for published model revisions (a directory, or S3, Azure, GCS or Ozone).
 - **The ontology:** LinkML layers parsed into a versioned graph, with mappings to model
   elements.
-- **The `helios` command:** its subcommands come from the installed packages.
+- **The `helios` command:** its subcommands come from the installed packages. This one
+  adds `init`, `source` and `model` (`add`, `list`, and `export`, which writes a model's
+  published Ossie document so a host can ship it), and `registry`.
 - **The plugin system:** `helios.engines`, `helios.catalogs`, `helios.profiles`,
   `helios.commands` and `helios.tools` entry points.
 

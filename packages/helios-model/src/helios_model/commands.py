@@ -1,12 +1,14 @@
-"""helios-model's subcommands of ``helios``: ``harvest``, ``profile``, ``propose`` and
-``publish``, over the facades in ``helios_model.discovery``.
+"""helios-model's subcommands of ``helios``: ``harvest``, ``profile``, ``propose``,
+``proposal show`` and ``publish``, over the facades in ``helios_model.discovery``.
 
     helios source add warehouse --connection default
     helios model add sales --name Sales --source warehouse
     helios harvest --source warehouse --database sales --model sales
     helios profile                                  # the latest run
     helios propose
+    helios proposal show --out PROPOSAL.md          # every element, for review outside a UI
     helios publish --min-confidence 0.8             # accept what is that sure, then publish
+    helios publish --review review.json             # or publish the decisions kept in a file
 
 Each prints what it made on stdout (the run id first, so scripts can read it) and its
 progress on stderr. A stage without ``--run`` works on the latest run.
@@ -33,6 +35,16 @@ def _run_id(args: argparse.Namespace, context: CommandContext) -> str:
     return latest
 
 
+def _read_review(path: str) -> dict:
+    import json
+
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError) as exc:
+        raise CommandError(f"cannot read the review {path}: {exc}") from exc
+
+
 def _discovery_errors():
     from helios_model.discovery import DiscoveryError, ModelNotRegistered
     from helios_model.publication import PublicationValidationError
@@ -52,6 +64,9 @@ class HarvestCommand:
                             help="only this catalog glossary (repeat; default: all)")
         parser.add_argument("--query-dir", metavar="DIR", help="a folder of .sql files to treat as query history")
         parser.add_argument("--catalog", metavar="NAME", help="the [catalogs.NAME] for the glossary (default: default)")
+        parser.add_argument("--table", action="append", metavar="DB.TABLE",
+                            help="harvest only this table (repeat; default: the model's selected tables, "
+                                 "else every table)")
         parser.add_argument("--run-id", metavar="RUN_ID", help="the new run's id (default: the time, to the second)")
         add_caller_argument(parser, "harvest")
 
@@ -65,7 +80,8 @@ class HarvestCommand:
         try:
             harvest = Catalog(context.settings).harvest(
                 source, context.caller(args.caller), databases=args.database, model_id=args.model,
-                glossaries=args.glossary, query_dir=args.query_dir, catalog=args.catalog, run_id=args.run_id)
+                glossaries=args.glossary, query_dir=args.query_dir, catalog=args.catalog, run_id=args.run_id,
+                tables=args.table)
         except _discovery_errors() as exc:
             raise CommandError(str(exc)) from exc
         context.echo(harvest.run_id)
@@ -130,6 +146,9 @@ class PublishCommand:
                             help="accept every element still pending (not the LLM's rejections) before publishing")
         accept.add_argument("--min-confidence", type=float, metavar="C",
                             help="accept pending elements with at least this confidence (0-1) before publishing")
+        parser.add_argument("--review", metavar="FILE",
+                            help="a review.json kept elsewhere (for example in version control): its decisions "
+                                 "replace the run's before publishing")
         parser.add_argument("--as", dest="caller", metavar="USER", help="record USER as the publisher (and reviewer)")
 
     def run(self, args: argparse.Namespace, context: CommandContext) -> int:
@@ -140,6 +159,9 @@ class PublishCommand:
         context.echo(run_id)
         try:
             proposer = Proposer(context.settings)
+            if args.review:
+                proposer.import_review(run_id, _read_review(args.review), caller)
+                context.echo(f"decisions from {args.review}")
             proposals = proposer.load(run_id)
             if args.accept_pending or args.min_confidence is not None:
                 accepted = proposals.accept_all(args.min_confidence or 0.0)
@@ -153,4 +175,41 @@ class PublishCommand:
         context.echo(f"published model {publication.model_id} revision {publication.revision_id}: "
                      f"{manifest['datasets']} datasets, {manifest['relationships']} relationships, "
                      f"{manifest['metrics']} metrics -> {manifest['path']}")
+        return 0
+
+
+class ProposalCommand:
+    help = "show a run's proposal for review: every element with its confidence, decision and rationale"
+
+    def configure(self, parser: argparse.ArgumentParser) -> None:
+        actions = parser.add_subparsers(dest="action", required=True)
+        show = actions.add_parser("show", help="print the proposal (Markdown or JSON)")
+        _run_argument(show)
+        show.add_argument("--format", choices=("markdown", "json"), default="markdown")
+        show.add_argument("--out", metavar="FILE", help="write it to FILE instead of stdout")
+
+    def run(self, args: argparse.Namespace, context: CommandContext) -> int:
+        import dataclasses
+        import json
+
+        from helios_model.discovery import Proposer
+
+        run_id = _run_id(args, context)
+        try:
+            proposals = Proposer(context.settings).load(run_id)
+        except _discovery_errors() as exc:
+            raise CommandError(str(exc)) from exc
+        if args.format == "markdown":
+            text = proposals.to_markdown()
+        else:
+            text = json.dumps({"run_id": run_id, "model_id": proposals.model_id,
+                               "elements": [{f.name: getattr(p, f.name) for f in dataclasses.fields(p)
+                                             if f.name not in ("element", "overrides", "fields")}
+                                            for p in proposals]}, indent=1, default=str)
+        if args.out:
+            with open(args.out, "w") as f:
+                f.write(text + "\n")
+            context.echo(f"wrote run {run_id}'s proposal to {args.out}")
+        else:
+            context.echo(text)
         return 0

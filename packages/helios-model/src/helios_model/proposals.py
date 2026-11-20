@@ -224,6 +224,48 @@ class Proposals:
                 return element
         raise KeyError(f"no {section} element {element_id!r} in run {self.run_id}")
 
+    def to_markdown(self) -> str:
+        """The proposal as Markdown for a person to review outside a UI: one table per section,
+        one row per element, keyed by the id its decision takes in ``review.json``."""
+        def cell(value: Any, limit: int = 200) -> str:
+            text = " ".join(str(value or "").split())
+            text = text if len(text) <= limit else text[:limit - 1] + "…"
+            return text.replace("|", "\\|")
+
+        def what(p: Proposal) -> str:
+            if isinstance(p, ProposedDataset):
+                key = f" (key: {', '.join(p.primary_key)})" if p.primary_key else ""
+                return f"{p.kind}{key}: {p.description}"
+            if isinstance(p, ProposedField):
+                ref = f" -> {p.refers_to}" if p.refers_to else ""
+                return f"{p.role}, {p.type or '?'}{ref}: {p.description}"
+            if isinstance(p, ProposedRelationship):
+                ratio = f", {p.match_ratio:.0%} match" if p.match_ratio is not None else ""
+                return f"{p.source or ''}{ratio}"
+            if isinstance(p, ProposedMetric):
+                return f"`{p.expression}`: {p.description}"
+            if isinstance(p, ProposedTerm):
+                return f"{p.definition} ({', '.join(p.columns)})" if p.columns else p.definition
+            return ""
+
+        counts = self.summary()
+        lines = [f"# Proposed model `{self.model_id}` (run {self.run_id})", "",
+                 "Each element's id is its key in `review.json`; decide each as `accept`, `edit` (with "
+                 "`overrides`) or `reject`. Anything not decided is left out when publishing.", ""]
+        for title, section, items in (("Datasets", "datasets", self.datasets), ("Fields", "fields", self.fields),
+                                      ("Relationships", "relationships", self.relationships),
+                                      ("Metrics", "metrics", self.metrics),
+                                      ("Glossary terms", "glossary_terms", self.glossary_terms)):
+            if not items:
+                continue
+            c = counts.get(section, {})
+            lines += [f"## {title} ({len(items)}: {c.get('pending', 0)} pending)", "",
+                      "| id | label | confidence | decision | proposal | rationale |", "|---|---|---|---|---|---|"]
+            lines += [f"| `{cell(p.id, 120)}` | {cell(p.label, 60)} | {p.confidence:.2f} | {p.decision} | "
+                      f"{cell(what(p))} | {cell(p.rationale)} |" for p in items]
+            lines.append("")
+        return "\n".join(lines)
+
     def pending(self) -> tuple[Proposal, ...]:
         """The elements still waiting for a decision."""
         return tuple(e for e in self if e.decision == PENDING)

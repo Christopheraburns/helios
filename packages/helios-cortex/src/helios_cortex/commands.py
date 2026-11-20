@@ -152,7 +152,7 @@ class SourceCommand:
 
 
 class ModelCommand:
-    help = "register a model (what to build from which data sources), or list them"
+    help = "register a model (what to build from which data sources), list them, or export a published one"
 
     def configure(self, parser: argparse.ArgumentParser) -> None:
         actions = parser.add_subparsers(dest="action", metavar="ACTION", required=True)
@@ -166,10 +166,28 @@ class ModelCommand:
         add.add_argument("--description", default="")
         add.add_argument("--as", dest="caller", metavar="USER", help="record USER as its creator")
         actions.add_parser("list", help="list the registered models")
+        export = actions.add_parser("export", help="write a model's published Ossie document (its active revision)")
+        export.add_argument("id", help="the model's id")
+        export.add_argument("--format", choices=("yaml", "json"), default="yaml")
+        export.add_argument("--out", metavar="FILE", help="write it to FILE instead of stdout")
 
     def run(self, args: argparse.Namespace, context: CommandContext) -> int:
         from helios_cortex.domain import DataSourceReference, Model
 
+        if args.action == "export":
+            from helios_cortex.artifacts import ArtifactStore
+
+            try:
+                document = ArtifactStore.from_settings(context.settings).read_published_ossie(args.id, args.format)
+            except FileNotFoundError as exc:
+                raise CommandError(f"{exc}; publish it first (`helios publish`)") from exc
+            if args.out:
+                with open(args.out, "w") as f:
+                    f.write(document if document.endswith("\n") else document + "\n")
+                context.echo(f"wrote model {args.id}'s published model to {args.out}")
+            else:
+                context.echo(document.rstrip("\n"))
+            return 0
         registry = _registry(context)
         if args.action == "list":
             for registered in registry.models():

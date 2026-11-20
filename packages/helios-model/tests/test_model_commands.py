@@ -53,7 +53,7 @@ def project(tmp_path, monkeypatch):
 
 
 def test_helios_model_registers_its_commands():
-    assert {"harvest", "profile", "propose", "publish"} <= set(plugins.names(plugins.COMMANDS))
+    assert {"harvest", "profile", "propose", "proposal", "publish"} <= set(plugins.names(plugins.COMMANDS))
 
 
 def test_harvest_to_publish_from_the_command_line(project):
@@ -108,3 +108,54 @@ def test_publishing_an_unregistered_model_is_refused(project):
     assert helios("propose")[0] == 0
     status, _, err = helios("publish", "--accept-pending")
     assert status == 1 and "model 'hr' is not in the registry" in err
+
+
+def test_review_kept_in_a_file_from_the_command_line(project):
+    """A host that keeps its model in version control: harvest named tables, show the
+    proposal for review, publish the decisions recorded in a file."""
+    import json
+
+    run = "20261120T120000Z"
+    status, out, _ = helios("harvest", "--source", "warehouse", "--database", "shop", "--model", "sales",
+                            "--table", "shop.orders", "--table", "shop.customers", "--run-id", run)
+    assert status == 0 and "harvested 2 tables" in out
+    assert helios("profile")[0] == 0 and helios("propose")[0] == 0
+
+    status, out, _ = helios("proposal", "show", "--out", "PROPOSAL.md")
+    assert status == 0 and "PROPOSAL.md" in out
+    md = (project / "PROPOSAL.md").read_text()
+    assert f"run {run}" in md and "| `shop.orders` | Orders | 0.90 | pending |" in md
+    assert "`SUM(o_amount)`" in md and "## Relationships (1: " in md
+    status, out, _ = helios("proposal", "show", "--format", "json")
+    elements = json.loads(out)["elements"]
+    assert {e["section"] for e in elements} == {"datasets", "fields", "relationships", "metrics"}
+
+    review = {"run_id": run, "datasets": {"shop.orders": {"decision": "accept"},
+                                          "shop.customers": {"decision": "edit", "overrides": {"name": "Buyers"}}},
+              "fields": {"shop.orders.o_amount": {"decision": "accept"}},
+              "metrics": {"shop.orders::Revenue": {"decision": "accept", "note": "checked"}}}
+    (project / "review.json").write_text(json.dumps(review))
+    status, out, _ = helios("publish", "--review", "review.json", "--as", "carol")
+    assert status == 0, out
+    assert "decisions from review.json" in out and "published model sales revision " in out
+    runs = RunStore.from_settings(Settings.from_file(project / "helios.toml"))
+    kept = runs.load(run, "review")
+    assert kept["reviewed_by"] == "carol" and kept["datasets"]["shop.customers"]["overrides"] == {"name": "Buyers"}
+
+    # The published model, exported for shipping with the host.
+    status, out, _ = helios("model", "export", "sales", "--out", "model.yaml")
+    assert status == 0 and "model.yaml" in out
+    exported = (project / "model.yaml").read_text()
+    assert "Buyers" in exported and "Revenue" in exported
+    status, out, _ = helios("model", "export", "sales", "--format", "json")
+    assert json.loads(out)["name"] == "sales"
+    status, _, err = helios("model", "export", "nothing")
+    assert status == 1 and "publish it first" in err
+
+    # A review for another run, or of an element the run doesn't have, is refused.
+    (project / "other.json").write_text(json.dumps({"run_id": "20200101T000000Z", "datasets": {}}))
+    status, _, err = helios("publish", "--review", "other.json")
+    assert status == 1 and "is for run '20200101T000000Z'" in err
+    (project / "bad.json").write_text(json.dumps({"datasets": {"shop.returns": {"decision": "accept"}}}))
+    status, _, err = helios("publish", "--review", "bad.json")
+    assert status == 1 and "shop.returns" in err and "doesn't have" in err
