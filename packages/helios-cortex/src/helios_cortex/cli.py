@@ -171,4 +171,10 @@ def main(argv: Sequence[str] | None = None, *, out: TextIO | None = None, stderr
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # ``python -m helios_cortex.cli`` runs this file as ``__main__``, a second copy of the
+    # module: its CommandError is not the one the commands raise (they import
+    # helios_cortex.cli), so main's except would miss it and print a traceback. Run the
+    # imported module's main instead.
+    from helios_cortex.cli import main as _main
+
+    sys.exit(_main())
