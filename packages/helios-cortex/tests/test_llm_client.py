@@ -106,3 +106,17 @@ def test_greedy_sampling_sends_top_p_1_on_openai_compatible_apis(monkeypatch):
     captured = answering(monkeypatch, {"choices": [{"message": {"content": "{}"}}], "usage": {}})
     LLMClient("openai", "m", "k", "https://example.test/v1", temperature=0.7).complete("s", "u")
     assert captured["json"]["temperature"] == 0.7 and "top_p" not in captured["json"]
+
+
+def test_a_reasoning_models_thinking_is_left_out_of_the_answer(monkeypatch):
+    """Mistral's reasoning models answer with a list of chunks: thinking, then text."""
+    content = [{"type": "thinking", "thinking": [{"type": "text", "text": "Let me look at the columns."}]},
+               {"type": "text", "text": '{"name": "Aircraft positions", '},
+               {"type": "text", "text": '"kind": "fact"}'}]
+    answering(monkeypatch, {"choices": [{"message": {"content": content}}], "usage": {}})
+    client = LLMClient("mistral", "mistral-large-latest", "k", "https://api.mistral.ai/v1")
+    assert client.complete_json("s", "u") == {"name": "Aircraft positions", "kind": "fact"}
+
+    answering(monkeypatch, {"choices": [{"finish_reason": "stop", "message": {"content": content}}], "usage": {}})
+    turn = client.tool_turn("s", [{"role": "user", "content": "u"}], [SEARCH])
+    assert turn.text == '{"name": "Aircraft positions", "kind": "fact"}'

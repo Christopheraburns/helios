@@ -161,7 +161,7 @@ class LLMClient:
         body = r.json()
         usage = body.get("usage") or {}
         return (
-            body["choices"][0]["message"]["content"],
+            _message_text(body["choices"][0]["message"].get("content")),
             int(usage.get("prompt_tokens") or 0),
             int(usage.get("completion_tokens") or 0),
         )
@@ -395,7 +395,7 @@ class LLMClient:
             )
         usage = body.get("usage") or {}
         return ToolTurn(
-            message.get("content") or "",
+            _message_text(message.get("content")),
             tuple(calls),
             choice.get("finish_reason", ""),
             int(usage.get("prompt_tokens") or 0),
@@ -515,6 +515,24 @@ class LLMClient:
 
     def ping(self) -> bool:
         return isinstance(self.complete_json("You are a JSON echo service.", 'Return {"ok": true}'), dict)
+
+
+def _message_text(content: Any) -> str:
+    """The answer in an OpenAI-compatible message's ``content``: a string, or a list of
+    chunks. Reasoning models (Mistral Large 4, Medium 3.5; seen 2026-11-20) send a list
+    whose "thinking" chunks carry the model's reasoning and "text" chunks the answer;
+    only the answer is kept."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for chunk in content:
+            if isinstance(chunk, str):
+                parts.append(chunk)
+            elif isinstance(chunk, dict) and chunk.get("type") == "text":
+                parts.append(str(chunk.get("text") or ""))
+        return "".join(parts)
+    return ""
 
 
 def _parse_json(text: str) -> Any:
