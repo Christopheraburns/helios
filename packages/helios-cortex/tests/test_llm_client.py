@@ -5,7 +5,7 @@ import pytest
 
 httpx = pytest.importorskip("httpx", reason="the LLM client needs helios-cortex[llm]")
 
-from helios_cortex.llm import LLMClient, LLMTimeoutError, ToolCall, llm_from_settings  # noqa: E402
+from helios_cortex.llm import LLMClient, LLMError, LLMTimeoutError, ToolCall, llm_from_settings  # noqa: E402
 from helios_cortex.settings import Settings  # noqa: E402
 
 SEARCH = {"name": "search_semantics", "description": "Search",
@@ -120,3 +120,41 @@ def test_a_reasoning_models_thinking_is_left_out_of_the_answer(monkeypatch):
     answering(monkeypatch, {"choices": [{"finish_reason": "stop", "message": {"content": content}}], "usage": {}})
     turn = client.tool_turn("s", [{"role": "user", "content": "u"}], [SEARCH])
     assert turn.text == '{"name": "Aircraft positions", "kind": "fact"}'
+
+
+def test_reasoning_effort_and_max_tokens_from_the_settings(monkeypatch):
+    for name in ("LLM_PROVIDER", "ANTHROPIC_API_KEY", "MISTRAL_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    settings = Settings(llm={"provider": "mistral", "api_key": "k", "model": "mistral-large-latest",
+                             "max_tokens": 16000, "reasoning_effort": "low"})
+    client = llm_from_settings(settings.llm)
+    captured = answering(monkeypatch, {"choices": [{"message": {"content": "{}"}}], "usage": {}})
+    client.complete("s", "u")
+    assert (captured["json"]["max_tokens"], captured["json"]["reasoning_effort"]) == (16000, "low")
+    # Without a setting, nothing is sent: the model's default applies.
+    captured = answering(monkeypatch, {"choices": [{"message": {"content": "{}"}}], "usage": {}})
+    LLMClient("mistral", "m", "k", "https://api.mistral.ai/v1").complete("s", "u")
+    assert "reasoning_effort" not in captured["json"]
+    with pytest.raises(ValueError):
+        Settings(llm={"provider": "mistral", "max_tokens": 0})
+
+
+def test_a_reply_cut_off_at_max_tokens_says_so_in_one_line(monkeypatch):
+    """A reasoning model that spends the whole budget thinking answers with no text."""
+    thinking_only = [{"type": "thinking", "thinking": [{"type": "text", "text": "Hmm..."}]}]
+    answering(monkeypatch, {"choices": [{"finish_reason": "length", "message": {"content": thinking_only}}],
+                            "usage": {}})
+    client = LLMClient("mistral", "mistral-large-latest", "k", "https://api.mistral.ai/v1")
+    with pytest.raises(LLMError, match="cut off at max_tokens 4000.*lower reasoning_effort.*raise \\[llm\\] max_tokens"):
+        client.complete_json("s", "u")
+    assert client.calls == 1          # not asked again: it would be cut off again
+
+
+def test_a_reply_with_no_json_twice_is_an_llm_error(monkeypatch):
+    answering(monkeypatch, {"choices": [{"finish_reason": "stop", "message": {"content": "I cannot help."}}],
+                            "usage": {}})
+    client = LLMClient("mistral", "m", "k", "https://api.mistral.ai/v1")
+    with pytest.raises(LLMError, match="no JSON object in its reply, twice: I cannot help.") as raised:
+        client.complete_json("s", "u")
+    assert client.calls == 2
+    assert isinstance(raised.value, ValueError)       # what complete_json raised before

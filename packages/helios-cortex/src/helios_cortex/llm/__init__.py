@@ -1,6 +1,7 @@
 from .client import (
     LLMClient,
     LLMError,
+    LLMReplyError,
     LLMTimeoutError,
     ToolCall,
     ToolTurn,
@@ -10,6 +11,7 @@ from .client import (
 __all__ = [
     "LLMClient",
     "LLMError",
+    "LLMReplyError",
     "LLMTimeoutError",
     "ToolCall",
     "ToolTurn",

@@ -42,6 +42,11 @@ class LLMTimeoutError(LLMError):
     pass
 
 
+class LLMReplyError(LLMError, ValueError):
+    """A reply that can't be used: cut off at max_tokens, or no JSON where JSON was asked
+    for. A ValueError too, which ``complete_json`` raised before."""
+
+
 @dataclass(frozen=True)
 class ToolCall:
     id: str
@@ -64,13 +69,16 @@ class ToolTurn:
 
 class LLMClient:
     def __init__(self, provider: str, model: str, api_key: str | None, base_url: str | None = None,
-                 max_tokens: int = 4000, temperature: float = 0.0, timeout: float | None = None):
+                 max_tokens: int = 4000, temperature: float = 0.0, timeout: float | None = None,
+                 reasoning_effort: str | None = None):
         if timeout is None:
             timeout = DEFAULT_TIMEOUT_SECONDS
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("the LLM timeout must be a positive number of seconds")
         self.provider, self.model, self.api_key, self.base_url = provider, model, api_key, base_url
         self.max_tokens, self.temperature, self.timeout = max_tokens, temperature, timeout
+        self.reasoning_effort = reasoning_effort
+        self.last_stop_reason: str | None = None    # the last completion's finish reason, when it gave one
         self.calls = 0
         self.input_chars = 0
 
@@ -127,13 +135,16 @@ class LLMClient:
     def _anthropic(self, system: str, user: str) -> str:
         return self._anthropic_usage(system, user)[0]
 
-    def _openai_sampling(self) -> dict[str, float]:
+    def _openai_sampling(self) -> dict[str, Any]:
         """Sampling for OpenAI-compatible endpoints. Temperature 0 (greedy) is sent with
         ``top_p`` 1: some servers otherwise apply their own default top_p and refuse the pair
-        (Mistral: "top_p must be 1 when using greedy sampling", seen 2026-11-20)."""
-        if self.temperature == 0:
-            return {"temperature": 0.0, "top_p": 1.0}
-        return {"temperature": self.temperature}
+        (Mistral: "top_p must be 1 when using greedy sampling", seen 2026-11-20). The
+        reasoning effort is sent when one is set."""
+        sampling: dict[str, Any] = (
+            {"temperature": 0.0, "top_p": 1.0} if self.temperature == 0 else {"temperature": self.temperature})
+        if self.reasoning_effort:
+            sampling["reasoning_effort"] = self.reasoning_effort
+        return sampling
 
     def _openai(self, system: str, user: str) -> str:
         return self._openai_usage(system, user)[0]
@@ -147,6 +158,7 @@ class LLMClient:
         r.raise_for_status()
         body = r.json()
         usage = body.get("usage") or {}
+        self.last_stop_reason = body.get("stop_reason")
         text = "".join(b.get("text", "") for b in body.get("content", []) if b.get("type") == "text")
         return text, int(usage.get("input_tokens") or 0), int(usage.get("output_tokens") or 0)
 
@@ -160,6 +172,7 @@ class LLMClient:
         r.raise_for_status()
         body = r.json()
         usage = body.get("usage") or {}
+        self.last_stop_reason = body["choices"][0].get("finish_reason")
         return (
             _message_text(body["choices"][0]["message"].get("content")),
             int(usage.get("prompt_tokens") or 0),
@@ -505,13 +518,29 @@ class LLMClient:
 
     # ------------------------------------------------------------ JSON completion
     def complete_json(self, system: str, user: str) -> Any:
+        """The reply as JSON, asking once more if it isn't. LLMError when it still isn't, or
+        when the reply was cut off at ``max_tokens`` (asking again would be cut off too)."""
         system_json = system + "\n\nRespond with a single JSON object and nothing else: no prose, no markdown fences."
+        self.last_stop_reason = None
         text = self.complete(system_json, user)
         try:
             return _parse_json(text)
         except ValueError:
-            text = self.complete(system_json, user + "\n\nYour previous reply was not valid JSON. Return only the JSON object.")
+            self._refuse_if_cut_off(text)
+        self.last_stop_reason = None
+        text = self.complete(system_json, user + "\n\nYour previous reply was not valid JSON. Return only the JSON object.")
+        try:
             return _parse_json(text)
+        except ValueError:
+            self._refuse_if_cut_off(text)
+            reply = " ".join(text.split())[:200] or "(empty)"
+            raise LLMReplyError(f"{self.provider} {self.model}: no JSON object in its reply, twice: {reply}") from None
+
+    def _refuse_if_cut_off(self, text: str) -> None:
+        if self.last_stop_reason in ("length", "max_tokens"):
+            hint = " (a reasoning model spends them thinking: lower reasoning_effort)" if not text.strip() else ""
+            raise LLMReplyError(f"{self.provider} {self.model}: the reply was cut off at max_tokens {self.max_tokens}"
+                           f"{hint}; raise [llm] max_tokens")
 
     def ping(self) -> bool:
         return isinstance(self.complete_json("You are a JSON echo service.", 'Return {"ok": true}'), dict)
@@ -558,4 +587,5 @@ def llm_from_settings(llm: LLMSettings) -> LLMClient | None:
         return None
     if llm.provider == "openai" and not llm.base_url:
         return None
-    return LLMClient(llm.provider, llm.model or "", key, llm.base_url, timeout=llm.timeout_seconds)
+    return LLMClient(llm.provider, llm.model or "", key, llm.base_url, timeout=llm.timeout_seconds,
+                     max_tokens=llm.max_tokens, reasoning_effort=llm.reasoning_effort)

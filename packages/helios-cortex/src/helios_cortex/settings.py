@@ -124,12 +124,24 @@ class LLMSettings(_Section):
     api_key: SecretStr | None = None
     base_url: str | None = None
     timeout_seconds: float = 30.0
+    max_tokens: int = 4000
+    # OpenAI-compatible reasoning models (Mistral Large 4, o-series): how much the model
+    # thinks before answering (low, medium, high; what a model accepts varies). None sends
+    # nothing, so the model's default applies. Thinking counts against max_tokens.
+    reasoning_effort: str | None = None
 
     @field_validator("timeout_seconds")
     @classmethod
     def _positive(cls, value: float) -> float:
         if not math.isfinite(value) or value <= 0:
             raise ValueError("timeout_seconds must be a positive number")
+        return value
+
+    @field_validator("max_tokens")
+    @classmethod
+    def _tokens(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("max_tokens must be a positive number")
         return value
 
     @model_validator(mode="after")
