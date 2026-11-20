@@ -159,3 +159,18 @@ def test_review_kept_in_a_file_from_the_command_line(project):
     (project / "bad.json").write_text(json.dumps({"datasets": {"shop.returns": {"decision": "accept"}}}))
     status, _, err = helios("publish", "--review", "bad.json")
     assert status == 1 and "shop.returns" in err and "doesn't have" in err
+
+
+def test_an_llm_error_is_reported_in_one_line(project, monkeypatch):
+    llm = pytest.importorskip("helios_cortex.llm", reason="needs helios-cortex[llm]")
+
+    class Refusing:
+        def complete_json(self, system, user):
+            raise llm.LLMError('mistral 400: {"message":"top_p must be 1 when using greedy sampling."}')
+
+    monkeypatch.setattr(discovery.Proposer, "_client", lambda self: Refusing())
+    assert helios("harvest", "--source", "warehouse", "--database", "shop", "--model", "sales")[0] == 0
+    assert helios("profile")[0] == 0
+    status, _, err = helios("propose")
+    assert status == 1 and "Traceback" not in err
+    assert err.strip().splitlines()[-1].startswith("helios: error: mistral 400")     # after the progress lines

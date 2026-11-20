@@ -127,6 +127,14 @@ class LLMClient:
     def _anthropic(self, system: str, user: str) -> str:
         return self._anthropic_usage(system, user)[0]
 
+    def _openai_sampling(self) -> dict[str, float]:
+        """Sampling for OpenAI-compatible endpoints. Temperature 0 (greedy) is sent with
+        ``top_p`` 1: some servers otherwise apply their own default top_p and refuse the pair
+        (Mistral: "top_p must be 1 when using greedy sampling", seen 2026-11-20)."""
+        if self.temperature == 0:
+            return {"temperature": 0.0, "top_p": 1.0}
+        return {"temperature": self.temperature}
+
     def _openai(self, system: str, user: str) -> str:
         return self._openai_usage(system, user)[0]
 
@@ -147,7 +155,7 @@ class LLMClient:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         r = httpx.post(f"{(self.base_url or '').rstrip('/')}/chat/completions", timeout=self._http_timeout(), headers=headers,
-                       json={"model": self.model, "max_tokens": self.max_tokens, "temperature": self.temperature,
+                       json={"model": self.model, "max_tokens": self.max_tokens, **self._openai_sampling(),
                              "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]})
         r.raise_for_status()
         body = r.json()
@@ -345,7 +353,7 @@ class LLMClient:
             json={
                 "model": self.model,
                 "max_tokens": self.max_tokens,
-                "temperature": self.temperature,
+                **self._openai_sampling(),
                 "messages": openai_messages,
                 "tools": [
                     {

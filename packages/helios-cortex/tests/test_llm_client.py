@@ -88,3 +88,21 @@ def test_a_provider_that_does_not_answer_in_time_is_a_timeout(monkeypatch):
     client = LLMClient("openai", "slow-model", "secret", "https://provider.example/v1", timeout=0.25)
     with pytest.raises(LLMTimeoutError, match=r"provider timed out \(response limit: 0.25 seconds\)"):
         client.tool_turn("Use the tools.", [], [])
+
+
+def test_greedy_sampling_sends_top_p_1_on_openai_compatible_apis(monkeypatch):
+    """Mistral refuses temperature 0 unless top_p is 1 ("top_p must be 1 when using greedy
+    sampling"); a set temperature is sent as it is, without top_p."""
+    captured = answering(monkeypatch, {"choices": [{"message": {"content": "{}"}}], "usage": {}})
+    LLMClient("mistral", "mistral-large-latest", "k", "https://api.mistral.ai/v1").complete("s", "u")
+    assert (captured["json"]["temperature"], captured["json"]["top_p"]) == (0.0, 1.0)
+
+    captured = answering(monkeypatch, {"choices": [{"finish_reason": "stop", "message": {"content": "ok"}}],
+                                       "usage": {}})
+    LLMClient("mistral", "m", "k", "https://api.mistral.ai/v1").tool_turn("s", [{"role": "user", "content": "u"}],
+                                                                         [SEARCH])
+    assert captured["json"]["top_p"] == 1.0
+
+    captured = answering(monkeypatch, {"choices": [{"message": {"content": "{}"}}], "usage": {}})
+    LLMClient("openai", "m", "k", "https://example.test/v1", temperature=0.7).complete("s", "u")
+    assert captured["json"]["temperature"] == 0.7 and "top_p" not in captured["json"]

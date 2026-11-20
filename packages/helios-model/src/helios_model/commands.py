@@ -45,6 +45,16 @@ def _read_review(path: str) -> dict:
         raise CommandError(f"cannot read the review {path}: {exc}") from exc
 
 
+def _llm_errors() -> tuple:
+    """The LLM's own errors (a refused request, a timeout), reported in one line like the
+    rest. Empty when the [llm] extra isn't installed: then there is no LLM to fail."""
+    try:
+        from helios_cortex.llm import LLMError
+    except ImportError:
+        return ()
+    return (LLMError,)
+
+
 def _discovery_errors():
     from helios_model.discovery import DiscoveryError, ModelNotRegistered
     from helios_model.publication import PublicationValidationError
@@ -127,7 +137,7 @@ class ProposeCommand:
         run_id = _run_id(args, context)
         try:
             proposals = Proposer(context.settings).propose(run_id, tables=args.table)
-        except _discovery_errors() as exc:
+        except _discovery_errors() + _llm_errors() as exc:
             raise CommandError(str(exc)) from exc
         context.echo(run_id)
         context.echo(f"proposed {len(proposals.datasets)} datasets, {len(proposals.relationships)} relationships, "
