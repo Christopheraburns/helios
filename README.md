@@ -141,6 +141,8 @@ Or let a coding agent ask them: `helios mcp --print-config claude-code` prints t
 
 Under [`ontology/`](ontology/), a LinkML ontology describes the domain: its concepts, how they relate, and its synonyms and hierarchies. It comes in layers: a core, industry packs such as retail, and customer extensions. Mappings tie the ontology's classes to datasets and fields in an Ossie model. `helios_cortex.ontology` parses the layers into a versioned graph (the `ontology` extra).
 
+**Planned: an operational ontology.** Object types bound to Ossie datasets, entities with declared identity, links, interfaces, actions as the only write path, policies and streams, so users create an ontology of their data and applications and agents read and change it through one governed model. The design is [docs/ontology-plan.md](docs/ontology-plan.md) (identity: [docs/ontology-identity.md](docs/ontology-identity.md)); progress, [docs/ontology-burndown.md](docs/ontology-burndown.md). Domain-neutral: its first host is Horus, an intelligence application, and a manufacturing test pack keeps the core from becoming Horus-shaped.
+
 ## Sample environment
 
 Helios is developed against TPC-DS:
