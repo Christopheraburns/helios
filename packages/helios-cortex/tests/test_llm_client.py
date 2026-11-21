@@ -126,11 +126,11 @@ def test_reasoning_effort_and_max_tokens_from_the_settings(monkeypatch):
     for name in ("LLM_PROVIDER", "ANTHROPIC_API_KEY", "MISTRAL_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     settings = Settings(llm={"provider": "mistral", "api_key": "k", "model": "mistral-large-latest",
-                             "max_tokens": 16000, "reasoning_effort": "low"})
+                             "max_tokens": 12000, "reasoning_effort": "low"})
     client = llm_from_settings(settings.llm)
     captured = answering(monkeypatch, {"choices": [{"message": {"content": "{}"}}], "usage": {}})
     client.complete("s", "u")
-    assert (captured["json"]["max_tokens"], captured["json"]["reasoning_effort"]) == (16000, "low")
+    assert (captured["json"]["max_tokens"], captured["json"]["reasoning_effort"]) == (12000, "low")
     # Without a setting, nothing is sent: the model's default applies.
     captured = answering(monkeypatch, {"choices": [{"message": {"content": "{}"}}], "usage": {}})
     LLMClient("mistral", "m", "k", "https://api.mistral.ai/v1").complete("s", "u")
@@ -145,7 +145,7 @@ def test_a_reply_cut_off_at_max_tokens_says_so_in_one_line(monkeypatch):
     answering(monkeypatch, {"choices": [{"finish_reason": "length", "message": {"content": thinking_only}}],
                             "usage": {}})
     client = LLMClient("mistral", "mistral-large-latest", "k", "https://api.mistral.ai/v1")
-    with pytest.raises(LLMError, match="cut off at max_tokens 4000.*lower reasoning_effort.*raise \\[llm\\] max_tokens"):
+    with pytest.raises(LLMError, match="cut off at max_tokens 16000.*lower reasoning_effort.*raise \\[llm\\] max_tokens"):
         client.complete_json("s", "u")
     assert client.calls == 1          # not asked again: it would be cut off again
 

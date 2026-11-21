@@ -124,7 +124,7 @@ class LLMSettings(_Section):
     api_key: SecretStr | None = None
     base_url: str | None = None
     timeout_seconds: float = 30.0
-    max_tokens: int = 4000
+    max_tokens: int = 16000   # a cap, not a cost: reasoning models spend part of it thinking (H.14)
     # OpenAI-compatible reasoning models (Mistral Large 4, o-series): how much the model
     # thinks before answering (low, medium, high; what a model accepts varies). None sends
     # nothing, so the model's default applies. Thinking counts against max_tokens.

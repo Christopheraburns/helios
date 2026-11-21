@@ -69,7 +69,7 @@ class ToolTurn:
 
 class LLMClient:
     def __init__(self, provider: str, model: str, api_key: str | None, base_url: str | None = None,
-                 max_tokens: int = 4000, temperature: float = 0.0, timeout: float | None = None,
+                 max_tokens: int = 16000, temperature: float = 0.0, timeout: float | None = None,
                  reasoning_effort: str | None = None):
         if timeout is None:
             timeout = DEFAULT_TIMEOUT_SECONDS
